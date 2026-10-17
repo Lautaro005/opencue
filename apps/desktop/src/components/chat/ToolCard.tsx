@@ -33,6 +33,8 @@ function describe(name: string, args: Record<string, unknown> | undefined, t: (k
       return { icon: <FileText size={14} />, title: t("chat.tools.write_file"), detail: String(a.path ?? "") };
     case "list_files":
       return { icon: <FolderOpen size={14} />, title: t("chat.tools.list_files"), detail: String(a.path ?? "") };
+    case "share_file":
+      return { icon: <FolderOpen size={14} />, title: t("chat.tools.share_file"), detail: String(a.path ?? "") };
     case "read_emails":
       return { icon: <Inbox size={14} />, title: t("chat.tools.read_emails"), detail: "" };
     case "search_inbox":

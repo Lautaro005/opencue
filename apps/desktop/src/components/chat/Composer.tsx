@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, AtSign, Loader2, Mic, Paperclip, Plus, Square } from "lucide-react";
+import { ArrowUp, AtSign, FileText, Loader2, Mic, Paperclip, Plus, Square, X } from "lucide-react";
 import type { Agent } from "../../lib/types";
-import { cx } from "../../lib/format";
+import { cx, formatBytes } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
 import { useClickOutside } from "../ui";
 import { useStore } from "../../lib/store";
@@ -20,7 +20,7 @@ export function Composer({
   name: string;
   members: Agent[] | null;
   busy: boolean;
-  onSend: (text: string) => void;
+  onSend: (text: string, files?: File[]) => void;
   onStop: () => void;
 }) {
   const { t } = useTranslation();
@@ -31,8 +31,21 @@ export function Composer({
   const plusRef = useRef<HTMLDivElement>(null);
   useClickOutside(plusRef, () => setPlus(false), plus);
   const [voice, setVoice] = useState<"idle" | "recording" | "transcribing">("idle");
+  const [files, setFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => cancelRecording(), [threadId]);
+  useEffect(() => setFiles([]), [threadId]);
+
+  const addFiles = (list: FileList | File[] | null) => {
+    if (!list) return;
+    const picked = Array.from(list);
+    const tooBig = picked.find((f) => f.size > 25 * 1024 * 1024);
+    if (tooBig) useStore.getState().showToast(t("chat.fileTooBig", { name: tooBig.name }));
+    setFiles((cur) => [...cur, ...picked.filter((f) => f.size <= 25 * 1024 * 1024)].slice(0, 10));
+    ref.current?.focus();
+  };
 
   const toggleVoice = async () => {
     const toast = useStore.getState().showToast;
@@ -75,9 +88,10 @@ export function Composer({
 
   const submit = () => {
     const v = text.trim();
-    if (!v) return;
-    onSend(v);
+    if (!v && files.length === 0) return;
+    onSend(v, files);
     setText("");
+    setFiles([]);
     setMention(null);
   };
 
@@ -104,7 +118,22 @@ export function Composer({
   };
 
   return (
-    <div className="px-6 pb-5">
+    <div
+      className="px-6 pb-5"
+      onDragOver={(e) => {
+        if (e.dataTransfer.types.includes("Files")) {
+          e.preventDefault();
+          setDragging(true);
+        }
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragging(false);
+        addFiles(e.dataTransfer.files);
+      }}
+    >
+      <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
       <div className="relative mx-auto max-w-[820px]">
         {mention && candidates.length > 0 && (
           <div className="animate-pop absolute bottom-full left-10 z-20 mb-2 w-60 rounded-xl border border-line bg-elevated p-1 shadow-pop">
@@ -123,7 +152,27 @@ export function Composer({
           </div>
         )}
 
-        <div className="flex items-end gap-1.5 rounded-[22px] border border-line bg-bg py-1.5 pr-1.5 pl-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] focus-within:border-line-strong">
+        <div
+          className={cx(
+            "rounded-[22px] border bg-bg py-1.5 pr-1.5 pl-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] focus-within:border-line-strong",
+            dragging ? "border-accent ring-2 ring-accent/20" : "border-line",
+          )}
+        >
+          {files.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 px-1.5 pt-1 pb-1.5">
+              {files.map((f, i) => (
+                <span key={i} className="flex max-w-[220px] items-center gap-1.5 rounded-lg bg-hover py-1 pr-1 pl-2 text-[12px]">
+                  <FileText size={13} className="shrink-0 text-muted" />
+                  <span className="truncate">{f.name}</span>
+                  <span className="shrink-0 text-faint">{formatBytes(f.size)}</span>
+                  <button aria-label={t("common.remove")} onClick={() => setFiles((cur) => cur.filter((_, j) => j !== i))} className="rounded p-0.5 text-muted hover:bg-active hover:text-ink">
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+        <div className="flex items-end gap-1.5">
           <div className="relative" ref={plusRef}>
             <button
               aria-label={t("chat.add")}
@@ -147,10 +196,15 @@ export function Composer({
                     <AtSign size={14} className="text-muted" /> {a.name}
                   </button>
                 ))}
-                <div className="flex w-full cursor-not-allowed items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-faint">
-                  <Paperclip size={14} /> Files
-                  <span className="ml-auto text-[11px]">{t("common.nextPhase")}</span>
-                </div>
+                <button
+                  onClick={() => {
+                    setPlus(false);
+                    fileInput.current?.click();
+                  }}
+                  className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-hover"
+                >
+                  <Paperclip size={14} className="text-muted" /> {t("chat.files")}
+                </button>
               </div>
             )}
           </div>
@@ -161,6 +215,12 @@ export function Composer({
             value={text}
             placeholder={members ? t("chat.placeholderGroup", { name }) : t("chat.placeholder", { name })}
             onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
+            onPaste={(e) => {
+              if (e.clipboardData.files.length) {
+                e.preventDefault();
+                addFiles(e.clipboardData.files);
+              }
+            }}
             onKeyDown={(e) => {
               if (mention && candidates.length > 0) {
                 if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -198,7 +258,7 @@ export function Composer({
           >
             {voice === "transcribing" ? <Loader2 size={17} className="animate-spin" /> : <Mic size={18} />}
           </button>
-          {busy && !text.trim() ? (
+          {busy && !text.trim() && files.length === 0 ? (
             <button
               aria-label={t("chat.stop")}
               title={t("chat.stop")}
@@ -212,12 +272,13 @@ export function Composer({
               aria-label={t("chat.send")}
               title={t("chat.send")}
               onClick={submit}
-              disabled={!text.trim()}
+              disabled={!text.trim() && files.length === 0}
               className="flex size-8 items-center justify-center rounded-full bg-accent text-white transition-opacity hover:bg-accent-hover disabled:opacity-30"
             >
               <ArrowUp size={18} strokeWidth={2.4} />
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>

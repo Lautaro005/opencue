@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { api, openUrl } from "../../lib/api";
+import { api, checkForUpdate, openUrl } from "../../lib/api";
 import type { AppInfo, MemoryEntry, UsageRow } from "../../lib/types";
 import { compact } from "../../lib/format";
 import { LANGUAGES, setLanguage } from "../../i18n";
@@ -222,6 +222,67 @@ export function InternetSection() {
   );
 }
 
+function UpdateRow() {
+  const { t } = useTranslation();
+  const update = useStore((s) => s.update);
+  const autoUpdate = useStore((s) => s.settings.auto_update !== "false");
+  const setSetting = useStore((s) => s.setSetting);
+  const [state, setState] = useState<{ kind: "idle" | "checking" | "latest" | "installing" | "error"; text?: string; pct?: number }>({ kind: "idle" });
+
+  const check = async () => {
+    setState({ kind: "checking" });
+    try {
+      const found = await checkForUpdate();
+      useStore.setState({ update: found });
+      setState({ kind: found ? "idle" : "latest" });
+    } catch (e) {
+      setState({ kind: "error", text: String(e) });
+    }
+  };
+
+  const install = async () => {
+    if (!update) return;
+    setState({ kind: "installing", pct: 0 });
+    try {
+      await update.install((pct) => setState({ kind: "installing", pct }));
+    } catch (e) {
+      setState({ kind: "error", text: String(e) });
+    }
+  };
+
+  return (
+    <>
+      <CardRow
+        label={t("update.title")}
+        hint={
+          state.kind === "error"
+            ? state.text
+            : update
+              ? t("update.available", { version: update.version })
+              : state.kind === "latest"
+                ? t("update.latest")
+                : state.kind === "installing"
+                  ? t("update.installing", { pct: state.pct ?? 0 })
+                  : t("update.hint")
+        }
+      >
+        {update ? (
+          <Button size="sm" variant="primary" onClick={() => void install()} disabled={state.kind === "installing"}>
+            {t("update.install")}
+          </Button>
+        ) : (
+          <Button size="sm" onClick={() => void check()} disabled={state.kind === "checking"}>
+            {state.kind === "checking" ? t("update.checking") : t("update.check")}
+          </Button>
+        )}
+      </CardRow>
+      <CardRow label={t("update.auto")}>
+        <Toggle checked={autoUpdate} onChange={(v) => void setSetting("auto_update", v ? "true" : "false")} />
+      </CardRow>
+    </>
+  );
+}
+
 export function AboutSection() {
   const { t } = useTranslation();
   const [info, setInfo] = useState<AppInfo | null>(null);
@@ -239,6 +300,7 @@ export function AboutSection() {
         <CardRow label={t("settings.about.version")}>
           <span className="font-mono text-[12.5px] text-muted">{info?.version}</span>
         </CardRow>
+        <UpdateRow />
         <CardRow label={t("settings.about.dataDir")}>
           <span className="selectable max-w-[320px] truncate font-mono text-[12px] text-muted">{info?.data_dir}</span>
         </CardRow>

@@ -117,8 +117,86 @@ impl Composio {
             .collect())
     }
 
-    /// Run an action. Returns its `data` as pretty JSON.
-    pub async fn execute(&self, slug: &str, arguments: Value) -> anyhow::Result<String> {
+    async fn post(&self, path: &str, body: Value) -> anyhow::Result<(reqwest::StatusCode, Value)> {
+        let res = self
+            .http
+            .post(format!("{BASE}{path}"))
+            .header("x-api-key", &self.api_key)
+            .json(&body)
+            .send()
+            .await?;
+        let status = res.status();
+        if status == reqwest::StatusCode::NOT_FOUND {
+            return Ok((status, Value::Null));
+        }
+        Ok((status, Self::json(res).await?))
+    }
+
+    /// Start connecting an app (e.g. "gmail"): finds or creates a Composio-managed auth config for
+    /// the toolkit and returns the page where the user signs in.
+    pub async fn connect(&self, toolkit: &str) -> anyhow::Result<String> {
+        let toolkit = toolkit.trim().to_lowercase();
+        anyhow::ensure!(!toolkit.is_empty(), "enter an app, e.g. gmail");
+        let configs = self
+            .get("/auth_configs", &[("toolkit_slug", toolkit.clone())])
+            .await?;
+        let existing = configs
+            .get("items")
+            .and_then(Value::as_array)
+            .and_then(|items| items.first())
+            .map(|c| str_at(c, "/id"))
+            .filter(|id| !id.is_empty());
+        let auth_config = match existing {
+            Some(id) => id,
+            None => {
+                let (_, body) = self
+                    .post(
+                        "/auth_configs",
+                        json!({
+                            "toolkit": { "slug": toolkit },
+                            "auth_config": { "type": "use_composio_managed_auth" }
+                        }),
+                    )
+                    .await?;
+                let id = body
+                    .pointer("/auth_config/id")
+                    .or_else(|| body.get("id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                anyhow::ensure!(!id.is_empty(), "Composio has no managed sign-in for {toolkit}; set it up in the Composio dashboard");
+                id
+            }
+        };
+        let (status, body) = self
+            .post(
+                "/connected_accounts/link",
+                json!({ "auth_config_id": auth_config, "user_id": self.user_id }),
+            )
+            .await?;
+        let body = if status == reqwest::StatusCode::NOT_FOUND {
+            self.post(
+                "/connected_accounts",
+                json!({ "auth_config": { "id": auth_config }, "connection": { "user_id": self.user_id } }),
+            )
+            .await?
+            .1
+        } else {
+            body
+        };
+        body.get("redirect_url")
+            .or_else(|| body.pointer("/connectionData/val/redirectUrl"))
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "{toolkit} doesn't need a sign-in page; check it in the Composio dashboard"
+                )
+            })
+    }
+
+    /// Run an action and return its raw `data`.
+    pub async fn execute_value(&self, slug: &str, arguments: Value) -> anyhow::Result<Value> {
         let res = self
             .http
             .post(format!("{BASE}/tools/execute/{}", slug.trim()))
@@ -135,8 +213,13 @@ impl Composio {
                     .unwrap_or("the action failed")
             );
         }
+        Ok(body.get("data").cloned().unwrap_or(Value::Null))
+    }
+
+    /// Run an action. Returns its `data` as pretty JSON.
+    pub async fn execute(&self, slug: &str, arguments: Value) -> anyhow::Result<String> {
         Ok(serde_json::to_string_pretty(
-            body.get("data").unwrap_or(&Value::Null),
+            &self.execute_value(slug, arguments).await?,
         )?)
     }
 }

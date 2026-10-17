@@ -4,17 +4,27 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>OpenCue — personal AI agents on your desktop</title>
-  <meta name="description" content="OpenCue is a free desktop app for Linux and Windows where you create personal AI agents with their own memory, email, computer, automations and group chats. Bring your own model.">
+  <meta name="description" content="OpenCue is a free desktop app for macOS, Linux and Windows where you create personal AI agents with their own memory, email, computer, files, automations and group chats. Bring your own model.">
   <meta property="og:title" content="OpenCue">
   <meta property="og:description" content="Personal AI agents on your desktop. Free, local-first, bring your own model.">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#161618" media="(prefers-color-scheme: dark)">
   <link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+  <link rel="alternate" type="text/plain" href="llms.txt" title="llms.txt">
   <link rel="stylesheet" href="assets/style.css">
+  <script type="importmap">
+    { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    } }
+  </script>
 </head>
 <body>
   <header class="nav">
     <div class="wrap">
       <a class="brand" href="./"><span data-avatar="bubble googly #2f86eb 26"></span>OpenCue</a>
       <nav class="nav-links">
+        <a href="#install" class="hide-sm">Download</a>
         <a href="docs/">Docs</a>
         <a href="changelog/" class="hide-sm">Changelog</a>
         <a href="privacy/" class="hide-sm">Privacy</a>
@@ -26,23 +36,34 @@
   </header>
 
   <main>
-    <div class="wrap hero">
-      <span class="logo" data-avatar="bubble googly #2f86eb 72"></span>
-      <h1>Your own AI agents, living on your desktop.</h1>
-      <p class="lead">Create agents with their own instructions, memory, inbox and computer. Put them in group chats, give them apps and let automations wake them up. Free, local-first, and you bring the model.</p>
-      <div class="actions">
-        <a class="btn primary" href="https://github.com/Lautaro005/opencue/releases/latest">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
-          Download for Linux &amp; Windows
-        </a>
-        <a class="btn" href="docs/">Read the docs</a>
+    <div class="hero-stage">
+      <div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+      <canvas id="hero-canvas" aria-hidden="true"></canvas>
+      <div class="wrap hero">
+        <a class="pill" href="changelog/#v0.3.0"><span class="pill-dot"></span>New in 0.3 · files, macOS, one-line install <span aria-hidden="true">→</span></a>
+        <span class="logo" data-avatar="bubble googly #2f86eb 72"></span>
+        <h1>Your own AI agents, <span class="grad">living on your desktop.</span></h1>
+        <p class="lead">Create agents with their own instructions, memory, inbox and computer. Share files, put them in group chats and let automations wake them up. Free, local-first, and you bring the model.</p>
+        <div class="actions">
+          <a class="btn primary" id="download-btn" href="#install">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg>
+            <span id="download-label">Download OpenCue</span>
+          </a>
+          <a class="btn" href="docs/">Read the docs</a>
+        </div>
+        <div class="oneliner" id="hero-oneliner">
+          <code id="hero-cmd">curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh</code>
+          <button class="copy" data-copy="#hero-cmd" aria-label="Copy command">Copy</button>
+        </div>
+        <p class="small-note" id="download-note">macOS · Linux · Windows — then run <code>opencue</code></p>
       </div>
-      <p class="small-note">AppImage · .deb · .rpm · MSI · NSIS — macOS builds from source</p>
+    </div>
 
+    <div class="wrap">
       <div class="window" aria-label="OpenCue app preview">
         <div class="side">
           <div class="dots"><i></i><i></i><i></i></div>
-          <div class="thread active"><span data-avatar="square googly #8e8e93 34"></span><div class="meta"><b>Assistant <span>2:05 PM</span></b><small>Sent the reminders to all four courts.</small></div></div>
+          <div class="thread active"><span data-avatar="square googly #8e8e93 34"></span><div class="meta"><b>Assistant <span>2:05 PM</span></b><small>Here's the hearings sheet.</small></div></div>
           <div class="thread"><span data-avatar="drop wink #f6ad2b 34"></span><div class="meta"><b>Reminders <span>1:33 PM</span></b><small>Three deadlines this week.</small></div></div>
           <div class="thread"><span data-avatar="star googly #f7c32f 34"></span><div class="meta"><b>AI Research <span>10:28 AM</span></b><small>I'd test this idea before writing…</small></div></div>
           <div class="thread"><span data-avatar="bubble curious #2f86eb 34"></span><div class="meta"><b>Dev Helper <span>10:27 AM</span></b><small>Today's notes are in your projects folder.</small></div></div>
@@ -53,11 +74,12 @@
           <div class="chat-head"><span data-avatar="square googly #8e8e93 26"></span>Assistant</div>
           <div class="msgs">
             <div class="bubble ag">I emailed Court 9 about the October 9 hearing, 1:00–1:30 PM, asking whether you and your two colleagues can attend.</div>
-            <div class="bubble me">send a reminder to the last 4 you emailed</div>
-            <div class="tool">✉️ <b>Checked the inbox</b> last 4 sent</div>
-            <div class="bubble ag">Done — reminders went to courts 15, 2, 1 and 9. I told Court 15 the hearing is today.</div>
+            <div class="file-card me"><span class="file-ico">CSV</span><span><b>courts.csv</b><small>2 KB</small></span></div>
+            <div class="bubble me">send a reminder to every court in this sheet</div>
+            <div class="tool">✉️ <b>Sent 4 emails</b> courts 15, 2, 1 and 9</div>
             <div class="event">✉️ Received an email ›</div>
-            <div class="bubble ag">Court 9 replied: the October 9 hearing is cancelled.</div>
+            <div class="bubble ag">Court 9 replied: the October 9 hearing is cancelled. I updated the sheet.</div>
+            <div class="file-card"><span class="file-ico">XLSX</span><span><b>hearings.xlsx</b><small>14 KB</small></span></div>
           </div>
           <div class="composer"><span>Message Assistant</span><span></span></div>
         </div>
@@ -67,19 +89,20 @@
     <section>
       <div class="wrap">
         <div class="section-title">
+          <span class="kicker">Agents</span>
           <h2>Everything an agent needs to get work done</h2>
           <p>Each agent is a little coworker with a face, a job and the tools to do it.</p>
         </div>
         <div class="grid">
           <div class="card"><span class="av" data-avatar="square googly #8e8e93 40"></span><h3>Instructions &amp; memory</h3><p>Tell each agent who it is. It remembers facts about you in plain Markdown files you can read and edit, plus a shared memory for all agents.</p></div>
           <div class="card"><span class="av" data-avatar="cloud happy #5ec2f2 40"></span><h3>Group chats</h3><p>Put agents in a group, @mention who should answer and let them hand work to each other — with a turn limit so they don't run forever.</p></div>
+          <div class="card"><span class="av" data-avatar="ghost surprised #c084fc 40"></span><h3>Files, both ways</h3><p>Drop files into any chat. Agents see pictures, read documents from their workspace and send back reports and spreadsheets.</p></div>
           <div class="card"><span class="av" data-avatar="drop wink #f6ad2b 40"></span><h3>Automations</h3><p>Wake an agent on a schedule, when new email arrives, from a local webhook or when someone writes in a group.</p></div>
           <div class="card"><span class="av" data-avatar="heart dots #f04848 40"></span><h3>Its own inbox</h3><p>Connect any IMAP/SMTP account or Gmail through Composio. Agents read, search and send — sending waits for your OK.</p></div>
-          <div class="card"><span class="av" data-avatar="bot smile #34b27b 40"></span><h3>A computer of its own</h3><p>Run commands in a Docker container, a SPACE microVM, WSL or — with your approval — your own machine. Watch the terminal live.</p></div>
-          <div class="card"><span class="av" data-avatar="hexagon stern #ff7a45 40"></span><h3>Apps &amp; MCP</h3><p>Plug in any MCP server, local or by URL, import your mcp.json, or connect 1000+ apps through Composio.</p></div>
+          <div class="card"><span class="av" data-avatar="bot smile #34b27b 40"></span><h3>A computer of its own</h3><p>Docker with an optional desktop you can watch, SPACE microVMs, WSL or — with your approval — your own machine.</p></div>
+          <div class="card"><span class="av" data-avatar="hexagon stern #ff7a45 40"></span><h3>Apps &amp; MCP</h3><p>Plug in any MCP server, import your mcp.json, or connect Gmail, Slack, Notion and 1000+ apps through Composio from inside the app.</p></div>
           <div class="card"><span class="av" data-avatar="star googly #f7c32f 40"></span><h3>Skills</h3><p>Reusable know-how in the Claude Code SKILL.md format. Write them, import them from a URL, or let agents save their own.</p></div>
           <div class="card"><span class="av" data-avatar="flower sleepy #a78bfa 40"></span><h3>Voice</h3><p>Press the mic and talk. ElevenLabs turns your voice into text and reads the reply back in the voice you pick.</p></div>
-          <div class="card"><span class="av" data-avatar="bubble curious #2f86eb 40"></span><h3>Free web access</h3><p>Built-in search (DuckDuckGo, Wikipedia, optional SearXNG) and page reading — no search API keys, cached locally.</p></div>
         </div>
       </div>
     </section>
@@ -87,8 +110,9 @@
     <section class="soft">
       <div class="wrap">
         <div class="section-title">
+          <span class="kicker">Models</span>
           <h2>Bring your own model</h2>
-          <p>Use API keys, local models, or the official ChatGPT/Codex and Claude CLIs you're already signed in to.</p>
+          <p>Use API keys, local models, or the Codex and Claude Code CLIs you're already signed in to — now with OpenCue's tools through MCP.</p>
         </div>
         <div class="providers">
           <span class="chip">OpenAI</span><span class="chip">Anthropic</span><span class="chip">xAI Grok</span><span class="chip">OpenRouter</span><span class="chip">Ollama</span><span class="chip">Ollama Cloud</span><span class="chip">LM Studio</span><span class="chip">CheapestInference</span><span class="chip">Codex CLI</span><span class="chip">Claude Code CLI</span><span class="chip">Any OpenAI-compatible API</span>
@@ -96,27 +120,67 @@
       </div>
     </section>
 
-    <section>
+    <section id="install">
       <div class="wrap">
         <div class="section-title">
+          <span class="kicker">Install</span>
+          <h2>One line, then <code class="big">opencue</code></h2>
+          <p>Installs for your user — no admin rights — and keeps itself up to date with signed updates.</p>
+        </div>
+        <div class="install">
+          <div class="tabs" role="tablist" aria-label="Operating system">
+            <button role="tab" data-os="mac" aria-selected="false">macOS</button>
+            <button role="tab" data-os="windows" aria-selected="false">Windows</button>
+            <button role="tab" data-os="linux" aria-selected="false">Linux</button>
+          </div>
+          <div class="tab-panel" data-panel="mac">
+            <p class="step"><span>1</span>Open Terminal and run:</p>
+            <div class="term"><code id="cmd-mac">curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh</code><button class="copy" data-copy="#cmd-mac">Copy</button></div>
+            <p class="step"><span>2</span>Start it from Applications or type <code>opencue</code>.</p>
+            <p class="alt">Or download the <a data-asset="dmg" href="https://github.com/Lautaro005/opencue/releases/latest">.dmg</a> (Apple silicon and Intel). It isn't notarized yet, so the first time macOS blocks it: open <b>System Settings → Privacy &amp; Security</b> and choose <b>Open Anyway</b>. The terminal install doesn't need this.</p>
+          </div>
+          <div class="tab-panel" data-panel="windows" hidden>
+            <p class="step"><span>1</span>Open PowerShell and run:</p>
+            <div class="term"><code id="cmd-win">irm https://lautaro005.github.io/opencue/install.ps1 | iex</code><button class="copy" data-copy="#cmd-win">Copy</button></div>
+            <p class="step"><span>2</span>Start it from the Start menu or type <code>opencue</code>.</p>
+            <p class="alt">Or download the <a data-asset="exe" href="https://github.com/Lautaro005/opencue/releases/latest">installer (.exe)</a> or <a data-asset="msi" href="https://github.com/Lautaro005/opencue/releases/latest">.msi</a>. SmartScreen may warn about an unknown publisher: choose <b>More info → Run anyway</b>.</p>
+          </div>
+          <div class="tab-panel" data-panel="linux" hidden>
+            <p class="step"><span>1</span>Open a terminal and run:</p>
+            <div class="term"><code id="cmd-linux">curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh</code><button class="copy" data-copy="#cmd-linux">Copy</button></div>
+            <p class="step"><span>2</span>Start it from your app menu or type <code>opencue</code>.</p>
+            <p class="alt">Or download the <a data-asset="appimage" href="https://github.com/Lautaro005/opencue/releases/latest">AppImage</a>, <a data-asset="deb" href="https://github.com/Lautaro005/opencue/releases/latest">.deb</a> or <a data-asset="rpm" href="https://github.com/Lautaro005/opencue/releases/latest">.rpm</a> (x86-64). Needs WebKitGTK 4.1, which current distributions ship.</p>
+          </div>
+          <p class="install-foot" id="release-line">Latest release on <a href="https://github.com/Lautaro005/opencue/releases/latest">GitHub</a> · <a href="docs/#install">all install options</a></p>
+        </div>
+      </div>
+    </section>
+
+    <section class="soft">
+      <div class="wrap">
+        <div class="section-title">
+          <span class="kicker">Privacy</span>
           <h2>Local-first, on purpose</h2>
-          <p>No account, no telemetry. Your chats, memory and settings stay on your computer; keys live in the system keychain.</p>
+          <p>No account, no telemetry. Your chats, files, memory and settings stay on your computer; keys live in the system keychain.</p>
         </div>
         <div class="grid">
           <div class="card"><h3>Ask before acting</h3><p>Emails, commands on your machine, deletions and data-changing tools wait for your approval unless you make an agent autonomous.</p></div>
-          <div class="card"><h3>Plain files</h3><p>Instructions, memory and skills are Markdown. Everything else is one SQLite database in your data folder.</p></div>
+          <div class="card"><h3>Plain files</h3><p>Instructions, memory and skills are Markdown. Shared files are regular files. Everything else is one SQLite database in your data folder.</p></div>
           <div class="card"><h3>Source available</h3><p>The code is on GitHub under Apache-2.0 with the Commons Clause: free to use, modify and share — just not to sell.</p></div>
         </div>
       </div>
     </section>
 
-    <section class="soft cta">
+    <section class="cta">
       <div class="wrap">
-        <h2>Meet your agents.</h2>
-        <p>Linux and Windows. Free forever.</p>
-        <div class="actions">
-          <a class="btn primary" href="https://github.com/Lautaro005/opencue/releases/latest">Download OpenCue</a>
-          <a class="btn" href="https://github.com/Lautaro005/opencue">View on GitHub</a>
+        <div class="cta-card">
+          <div class="cta-faces"><span data-avatar="drop wink #f6ad2b 44"></span><span data-avatar="bubble googly #2f86eb 52"></span><span data-avatar="heart dots #f04848 44"></span></div>
+          <h2>Meet your agents.</h2>
+          <p>macOS, Linux and Windows. Free forever.</p>
+          <div class="actions">
+            <a class="btn primary light" href="#install">Get OpenCue</a>
+            <a class="btn ghost" href="https://github.com/Lautaro005/opencue">View on GitHub</a>
+          </div>
         </div>
       </div>
     </section>
@@ -129,11 +193,14 @@
         <a href="docs/">Docs</a>
         <a href="changelog/">Changelog</a>
         <a href="privacy/">Privacy</a>
+        <a href="llms.txt">llms.txt</a>
         <a href="https://github.com/Lautaro005/opencue/security/policy">Security</a>
         <a href="https://github.com/Lautaro005/opencue">GitHub</a>
       </nav>
     </div>
   </footer>
   <script src="assets/avatars.js"></script>
+  <script src="assets/download.js"></script>
+  <script type="module" src="assets/hero.js"></script>
 </body>
 </html>

@@ -9,6 +9,7 @@ import { ComputerPanel } from "./components/panel/ComputerPanel";
 import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
+import { checkForUpdate } from "./lib/api";
 
 export default function App() {
   const ready = useStore((s) => s.ready);
@@ -20,7 +21,13 @@ export default function App() {
   const toast = useStore((s) => s.toast);
 
   useEffect(() => {
-    init().catch((e) => useStore.getState().showToast(String(e)));
+    init()
+      .then(() => {
+        // Look for a signed update on GitHub once per launch, unless turned off.
+        if (useStore.getState().settings.auto_update === "false") return;
+        setTimeout(() => void checkForUpdate().then((update) => useStore.setState({ update })).catch(() => {}), 4000);
+      })
+      .catch((e) => useStore.getState().showToast(String(e)));
   }, [init]);
 
   useEffect(() => {

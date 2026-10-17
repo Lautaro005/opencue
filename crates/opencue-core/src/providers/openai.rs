@@ -53,6 +53,16 @@ pub(crate) fn to_openai_messages(req: &ChatRequest) -> Vec<Value> {
     }
     for m in &req.messages {
         match m.role {
+            ChatRole::User if !m.images.is_empty() => {
+                let mut parts = vec![json!({ "type": "text", "text": m.content })];
+                for img in &m.images {
+                    parts.push(json!({
+                        "type": "image_url",
+                        "image_url": { "url": format!("data:{};base64,{}", img.mime, img.data) }
+                    }));
+                }
+                out.push(json!({ "role": "user", "content": parts }));
+            }
             ChatRole::User => out.push(json!({ "role": "user", "content": m.content })),
             ChatRole::Assistant => {
                 let mut msg = json!({ "role": "assistant", "content": m.content });

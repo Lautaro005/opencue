@@ -6,7 +6,9 @@ pub mod computer;
 pub mod db;
 pub mod email;
 pub mod events;
+pub mod files;
 pub mod mcp;
+pub mod mcp_server;
 pub mod memory;
 pub mod models;
 pub mod paths;
@@ -56,11 +58,23 @@ pub struct Core {
 
 impl Core {
     pub async fn open(paths: Paths) -> anyhow::Result<Arc<Self>> {
+        Self::open_with(paths, true).await
+    }
+
+    /// Open the data folder while another OpenCue process may own it (e.g. `mcp-serve` started
+    /// by a CLI agent): runs nothing in the background and leaves in-flight messages alone.
+    pub async fn open_secondary(paths: Paths) -> anyhow::Result<Arc<Self>> {
+        Self::open_with(paths, false).await
+    }
+
+    async fn open_with(paths: Paths, primary: bool) -> anyhow::Result<Arc<Self>> {
         let db = db::open(&paths.database()).await?;
-        // Anything left "streaming" by a crash is finished now.
-        sqlx::query("UPDATE messages SET status = 'stopped' WHERE status IN ('streaming', 'running', 'awaiting_approval')")
-            .execute(&db)
-            .await?;
+        if primary {
+            // Anything left "streaming" by a crash is finished now.
+            sqlx::query("UPDATE messages SET status = 'stopped' WHERE status IN ('streaming', 'running', 'awaiting_approval')")
+                .execute(&db)
+                .await?;
+        }
         let store = Store {
             db: db.clone(),
             paths: paths.clone(),

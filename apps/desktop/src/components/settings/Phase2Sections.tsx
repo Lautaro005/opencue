@@ -15,6 +15,22 @@ export function ComposioCard() {
   const [key, setKey] = useState("");
   const [user, setUser] = useState("");
   const [busy, setBusy] = useState(false);
+  const [toolkit, setToolkit] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const showToast = useStore((s) => s.showToast);
+
+  const connect = async (slug: string) => {
+    setConnecting(true);
+    try {
+      await openUrl(await api.composioConnect(slug));
+      showToast(t("settings.composio.connectOpened"));
+      setToolkit("");
+    } catch (e) {
+      showToast(String(e));
+    } finally {
+      setConnecting(false);
+    }
+  };
 
   useEffect(() => {
     void api.composioStatus().then((s) => {
@@ -69,6 +85,27 @@ export function ComposioCard() {
                 </Badge>
               ))
             )}
+          </div>
+        )}
+        {status?.configured && (
+          <div className="space-y-2 border-t border-line pt-3">
+            <span className="block text-[12.5px] font-medium text-muted">{t("settings.composio.connect")}</span>
+            <div className="flex flex-wrap gap-1.5">
+              {["gmail", "googlecalendar", "slack", "notion", "github", "googledrive"].map((slug) => (
+                <button key={slug} disabled={connecting} onClick={() => void connect(slug)} className="rounded-full border border-line px-2.5 py-0.5 text-[12px] text-muted hover:bg-hover hover:text-ink disabled:opacity-50">
+                  + {slug}
+                </button>
+              ))}
+            </div>
+            <div className="flex gap-2">
+              <Input value={toolkit} onChange={(e) => setToolkit(e.target.value)} placeholder={t("settings.composio.otherApp")} onKeyDown={(e) => e.key === "Enter" && toolkit.trim() && void connect(toolkit)} />
+              <Button size="sm" onClick={() => void connect(toolkit)} disabled={connecting || !toolkit.trim()}>
+                {t("settings.composio.connectButton")}
+              </Button>
+              <Button size="sm" onClick={() => void api.composioStatus().then(setStatus)}>
+                {t("settings.composio.refresh")}
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -215,6 +252,20 @@ export function ComputersSection() {
         <CardRow label={t("settings.computers.image")}>
           <Input className="w-56" value={s.docker_image} placeholder="ubuntu:24.04" onChange={(e) => setS({ ...s, docker_image: e.target.value })} onBlur={() => void save(s)} />
         </CardRow>
+        <CardRow label={t("settings.computers.desktop")} hint={t("settings.computers.desktopHint")}>
+          <Toggle checked={s.docker_desktop} onChange={(v) => void save({ ...s, docker_desktop: v })} />
+        </CardRow>
+        {s.docker_desktop && (
+          <div className="grid grid-cols-[1fr_96px] gap-2 px-4 pb-3.5">
+            <Field label={t("settings.computers.desktopImage")}>
+              <Input value={s.desktop_image} onChange={(e) => setS({ ...s, desktop_image: e.target.value })} onBlur={() => void save(s)} />
+            </Field>
+            <Field label={t("settings.computers.desktopPort")}>
+              <Input value={s.desktop_port} onChange={(e) => setS({ ...s, desktop_port: Number(e.target.value) || 0 })} onBlur={() => void save(s)} />
+            </Field>
+            <p className="col-span-2 text-[11.5px] text-muted">{t("settings.computers.desktopNote")}</p>
+          </div>
+        )}
       </Card>
       <Card
         title="SPACE"

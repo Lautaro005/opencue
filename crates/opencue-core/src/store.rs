@@ -47,6 +47,10 @@ fn message_from_row(r: &sqlx::sqlite::SqliteRow) -> Message {
         input_tokens: r.get("input_tokens"),
         output_tokens: r.get("output_tokens"),
         created_at: r.get("created_at"),
+        attachments: r
+            .get::<Option<String>, _>("attachments")
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default(),
     }
 }
 
@@ -385,8 +389,8 @@ impl Store {
 
     pub async fn insert_message(&self, m: &Message) -> anyhow::Result<()> {
         sqlx::query(
-            "INSERT INTO messages (id, thread_id, role, agent_id, content, tool_calls, tool_call_id, tool_name, status, input_tokens, output_tokens, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO messages (id, thread_id, role, agent_id, content, tool_calls, tool_call_id, tool_name, status, input_tokens, output_tokens, created_at, attachments)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&m.id)
         .bind(&m.thread_id)
@@ -400,6 +404,11 @@ impl Store {
         .bind(m.input_tokens)
         .bind(m.output_tokens)
         .bind(&m.created_at)
+        .bind(
+            (!m.attachments.is_empty())
+                .then(|| serde_json::to_string(&m.attachments))
+                .transpose()?,
+        )
         .execute(&self.db)
         .await?;
         Ok(())
@@ -428,6 +437,43 @@ impl Store {
         .fetch_all(&self.db)
         .await?;
         Ok(rows.iter().map(message_from_row).collect())
+    }
+
+    /// Every file shared in a thread, newest first, with the message that carried it.
+    pub async fn thread_files(
+        &self,
+        thread_id: &str,
+    ) -> anyhow::Result<Vec<(Attachment, Message)>> {
+        let rows = sqlx::query(
+            "SELECT * FROM messages WHERE thread_id = ? AND attachments IS NOT NULL ORDER BY created_at DESC, rowid DESC",
+        )
+        .bind(thread_id)
+        .fetch_all(&self.db)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(message_from_row)
+            .flat_map(|m| {
+                m.attachments
+                    .clone()
+                    .into_iter()
+                    .map(move |a| (a, m.clone()))
+            })
+            .collect())
+    }
+
+    pub async fn find_attachment(&self, id: &str) -> anyhow::Result<Attachment> {
+        let pattern = format!("%\"id\":\"{}\"%", id.replace(['%', '_', '"'], ""));
+        let row = sqlx::query("SELECT * FROM messages WHERE attachments LIKE ? LIMIT 1")
+            .bind(pattern)
+            .fetch_optional(&self.db)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("file not found"))?;
+        message_from_row(&row)
+            .attachments
+            .into_iter()
+            .find(|a| a.id == id)
+            .ok_or_else(|| anyhow::anyhow!("file not found"))
     }
 
     pub async fn clear_messages(&self, thread_id: &str) -> anyhow::Result<()> {

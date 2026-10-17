@@ -69,6 +69,19 @@ impl Paths {
         self.root.join("skills")
     }
 
+    /// Files shared in chats: `files/<attachment id>/<name>`.
+    pub fn files_dir(&self) -> PathBuf {
+        self.root.join("files")
+    }
+
+    pub fn attachment_file(&self, id: &str, name: &str) -> PathBuf {
+        self.files_dir().join(id).join(name)
+    }
+
+    pub fn agent_workspace(&self, agent_id: &str) -> PathBuf {
+        self.agent_dir(agent_id).join("workspace")
+    }
+
     pub fn secrets_fallback_file(&self) -> PathBuf {
         self.root.join("secrets.json")
     }

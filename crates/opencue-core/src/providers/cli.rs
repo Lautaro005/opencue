@@ -25,6 +25,19 @@ impl CliProvider {
         Self { kind }
     }
 
+    /// How the CLI starts OpenCue's MCP server for an agent: this same executable with
+    /// `mcp-serve --agent <id>` (both the desktop app and `opencue-cli` understand it).
+    fn mcp_server(agent_id: &str) -> Option<(String, Vec<String>)> {
+        // Inside an AppImage the binary lives on a temporary mount; the AppImage itself is stable.
+        let exe = std::env::var_os("APPIMAGE")
+            .map(std::path::PathBuf::from)
+            .or_else(|| std::env::current_exe().ok())?;
+        Some((
+            exe.to_string_lossy().to_string(),
+            vec!["mcp-serve".into(), "--agent".into(), agent_id.to_string()],
+        ))
+    }
+
     fn binary(&self) -> &'static str {
         match self.kind {
             CliKind::Claude => "claude",
@@ -103,6 +116,15 @@ impl LlmProvider for CliProvider {
                 if !req.model.is_empty() && req.model != "default" {
                     cmd.arg("--model").arg(&req.model);
                 }
+                if let Some((exe, args)) = req.agent_id.as_deref().and_then(Self::mcp_server) {
+                    let config = serde_json::json!({
+                        "mcpServers": { "opencue": { "command": exe, "args": args } }
+                    });
+                    cmd.arg("--mcp-config")
+                        .arg(config.to_string())
+                        .arg("--allowedTools")
+                        .arg("mcp__opencue");
+                }
                 transcript(&req, false)
             }
             CliKind::Codex => {
@@ -115,6 +137,13 @@ impl LlmProvider for CliProvider {
                 .arg(&last_message_file);
                 if !req.model.is_empty() && req.model != "default" {
                     cmd.arg("-m").arg(&req.model);
+                }
+                if let Some((exe, args)) = req.agent_id.as_deref().and_then(Self::mcp_server) {
+                    // `-c key=value` takes TOML values; JSON strings and arrays are valid TOML.
+                    cmd.arg("-c")
+                        .arg(format!("mcp_servers.opencue.command={}", Value::from(exe)))
+                        .arg("-c")
+                        .arg(format!("mcp_servers.opencue.args={}", Value::from(args)));
                 }
                 cmd.arg("-");
                 transcript(&req, true)

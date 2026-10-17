@@ -1,65 +1,101 @@
 <p align="center">
-  <img src="assets/logo.svg" width="88" alt="OpenCue logo">
+  <a href="https://lautaro005.github.io/opencue/"><img src="assets/banner.svg" width="100%" alt="OpenCue's agents: a drop, a star, a square, a blue bubble, a heart, a robot and a flower, each with a little face"></a>
 </p>
 
 <h1 align="center">OpenCue</h1>
 
 <p align="center">
-  Personal AI agents on your desktop — for <b>Linux and Windows</b>.<br>
+  <b>Your own AI agents, living on your desktop.</b><br>
+  Agents with a face, memory, an inbox, a computer and files — in chats and group chats.<br>
+  Free, local-first, bring your own model. For <b>macOS, Linux and Windows</b>.
+</p>
+
+<p align="center">
+  <a href="https://github.com/Lautaro005/opencue/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/Lautaro005/opencue?color=2f86eb&label=release"></a>
+  <a href="https://github.com/Lautaro005/opencue/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/Lautaro005/opencue/actions/workflows/ci.yml/badge.svg"></a>
+  <img alt="Platforms" src="https://img.shields.io/badge/macOS%20%C2%B7%20Linux%20%C2%B7%20Windows-1d1d1f">
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/badge/license-Apache--2.0%20%2B%20Commons%20Clause-8b5cf6"></a>
+</p>
+
+<p align="center">
   <a href="https://lautaro005.github.io/opencue/">Website</a> ·
   <a href="https://lautaro005.github.io/opencue/docs/">Docs</a> ·
   <a href="https://github.com/Lautaro005/opencue/releases/latest">Download</a> ·
-  <a href="CHANGELOG.md">Changelog</a>
+  <a href="https://lautaro005.github.io/opencue/changelog/">Changelog</a> ·
+  <a href="https://lautaro005.github.io/opencue/privacy/">Privacy</a>
 </p>
 
-Inspired by [Cue](https://cue.im): every agent has its own face, instructions, memory, inbox, computer and automations,
-and agents work together in group chats. Core in Rust, GUI in Tauri 2 + React. Local-first: chats, memory and settings
-stay on your computer; secrets go to the system keychain. Bring your own model.
-
-> Status: **0.2.0 (Phase 2)** — see the [Roadmap](#roadmap).
-
-## Features
-
-| | |
-|---|---|
-| **Agents** | Drawn avatars (10 faces × 12 shapes × colors), per-agent model, instructions (`INSTRUCTIONS.md`) |
-| **Memory** | Per agent + shared (`MEMORY.md`, `GLOBAL.md`); `remember` / `recall` / `forget`; optional auto-learning |
-| **Chat** | Streaming, Markdown, visible tool calls with approvals, stop, voice input |
-| **Group chats** | `@mentions`, model-routed replies, `send_to_agent`, automatic-turn limit |
-| **Automations** | Schedules (cron), new email, local webhooks, group messages — run while the app is open or in the tray |
-| **Email** | Per agent: IMAP/SMTP (servers auto-detected for common providers) or Gmail via Composio; read, search, send |
-| **Computers** | Docker container per agent, SPACE microVMs (Linux/remote), WSL, or this computer; live terminal + file browser |
-| **Apps** | MCP servers (stdio and Streamable HTTP, `mcp.json` import) and Composio (1000+ apps) |
-| **Skills** | Claude Code–compatible `SKILL.md`: write, import from URL, or let agents save their own |
-| **Voice** | ElevenLabs: Scribe speech-to-text from the mic, replies read aloud, voice per agent |
-| **Internet** | Free search (DuckDuckGo, Wikipedia, optional SearXNG) and page → Markdown fetch, cached locally |
-| **Providers** | OpenAI, Anthropic, xAI (Grok), OpenRouter, CheapestInference, Ollama (local/cloud), LM Studio, any OpenAI-compatible API; ChatGPT/Codex and Claude via their official CLIs |
-| **Safety** | "Ask first" approvals for email, host commands, deletions and data-changing tools; or fully autonomous |
-| **App** | Tray icon, English / Español, light / dark / system theme, `opencue-cli` companion |
-
-Not planned: phone numbers, payments/wallet, QR "scan & create".
-
-### Why "backend CLI" instead of OAuth for ChatGPT / Claude
-
-OpenAI and Anthropic don't offer third-party OAuth for consumer subscriptions, and reusing their CLI tokens in another app
-is against their terms. OpenCue instead runs **your installed, logged-in** `codex` or `claude` binary as a subprocess, so
-your subscription is used through the official client and OpenCue never touches the tokens. Trade-off: those agents reply
-with text only — OpenCue's tools (memory, web, email, computer, MCP) need an API-key provider. Grok uses an API key.
+---
 
 ## Install
 
-Download the latest installer from [Releases](https://github.com/Lautaro005/opencue/releases/latest):
+**macOS / Linux**
 
-- **Linux**: `.AppImage`, `.deb` or `.rpm`
-- **Windows**: `.msi` or `-setup.exe` (per-user, no admin)
+```bash
+curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh
+```
 
-Then open **Settings → Models**, add a provider (or start Ollama / LM Studio), and create your first agent with **+**.
-The [docs](https://lautaro005.github.io/opencue/docs/) cover email, automations, computers (including
-[SPACE setup](docs/space-setup.md)), Composio, skills and voice.
+**Windows** (PowerShell)
+
+```powershell
+irm https://lautaro005.github.io/opencue/install.ps1 | iex
+```
+
+Then start it with **`opencue`**. Installs for your user, no admin rights, and updates itself with signed releases.
+Prefer an installer? Grab the `.dmg`, `.AppImage`, `.deb`, `.rpm`, `.exe` or `.msi` from
+[Releases](https://github.com/Lautaro005/opencue/releases/latest).
+
+First run: **Settings → Models** → add a provider (or start Ollama / LM Studio) → **+ → Create agent**.
+
+> [!NOTE]
+> The apps aren't notarized or code-signed by Apple or Microsoft yet. A downloaded `.dmg` needs **System Settings →
+> Privacy & Security → Open Anyway** the first time (the terminal install doesn't); Windows SmartScreen may ask you to
+> confirm.
+
+## What agents can do
+
+<table>
+  <tr>
+    <td width="50%" valign="top"><b>🧠 Remember</b><br>Instructions and memory in plain Markdown (<code>INSTRUCTIONS.md</code>, <code>MEMORY.md</code>), a shared memory for all agents, optional auto-learning.</td>
+    <td width="50%" valign="top"><b>👥 Work together</b><br>Group chats with <code>@mentions</code>, model-routed replies, hand-offs with <code>send_to_agent</code> and a turn limit.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>📎 Share files</b><br>Drop files into any chat. Agents see pictures, read documents from their workspace and send reports back with <code>share_file</code>.</td>
+    <td valign="top"><b>⏰ Wake up on their own</b><br>Automations on a schedule, new email (IMAP or Gmail), local webhooks or group messages — described in plain words.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>✉️ Own an inbox</b><br>IMAP/SMTP with auto-detected servers, or Gmail via Composio. Read, search and send — sending asks first.</td>
+    <td valign="top"><b>🖥️ Use a computer</b><br>A Docker container (with an optional desktop you can watch), a SPACE microVM, WSL, or your machine with approval.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>🧩 Use your apps</b><br>MCP servers (stdio and HTTP, <code>mcp.json</code> import) and 1000+ apps through Composio, connected from inside OpenCue.</td>
+    <td valign="top"><b>✨ Learn skills</b><br>Claude Code–compatible <code>SKILL.md</code>: write them, import them from a URL, or let agents save their own.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>🎙️ Talk</b><br>ElevenLabs: speak into the mic, hear replies in the voice you pick per agent.</td>
+    <td valign="top"><b>🌐 Browse</b><br>Free web search (DuckDuckGo, Wikipedia, optional SearXNG) and page → Markdown, cached locally.</td>
+  </tr>
+</table>
+
+**Bring your own model:** OpenAI, Anthropic, xAI (Grok), OpenRouter, CheapestInference, Ollama (local and cloud),
+LM Studio, any OpenAI-compatible API — or the **Codex** and **Claude Code** CLIs you're already signed in to.
+
+**Safe by default:** in *Ask first* mode, sending email, commands on your machine, deletions and data-changing tools wait
+for your OK. No account, no telemetry; secrets live in the system keychain.
+
+Not planned: phone numbers, payments/wallet, QR "scan & create".
+
+### ChatGPT and Claude subscriptions, the allowed way
+
+OpenAI and Anthropic don't offer third-party sign-in for consumer subscriptions, and reusing their tokens elsewhere breaks
+their terms. OpenCue runs **your installed, logged-in** `codex` or `claude` binary instead, so your subscription stays in
+the official client and OpenCue never sees the tokens. Those agents still get OpenCue's tools — memory, web, skills,
+computer, files, email, Composio — through a local MCP server (`opencue mcp-serve --agent <id>`).
 
 ## Develop
 
-Requirements: Rust (stable), Node 22+, and on Linux `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`.
+Requirements: Rust (stable), Node 22+; on Linux `libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev`; on
+macOS the Xcode command-line tools.
 
 ```bash
 cd apps/desktop
@@ -73,49 +109,63 @@ cargo test --workspace   # core tests, incl. an end-to-end agent loop against a 
 cargo run -p opencue-cli -- --help
 ```
 
-macOS builds work for development but are not distributed.
+Release builds sign update bundles, so a local `npm run tauri build` needs `TAURI_SIGNING_PRIVATE_KEY`, or add
+`-c '{"bundle":{"createUpdaterArtifacts":false}}'`.
 
-### Layout
+<details>
+<summary><b>Repository layout</b></summary>
 
 ```
-crates/opencue-core     Rust core: agents, providers, runtime, memory, MCP, web, skills, automations,
-                        email, Composio, computers (Docker/SPACE/WSL/host), voice, storage
+crates/opencue-core     Rust core: agents, providers, runtime, memory, files, MCP client and server, web, skills,
+                        automations, email, Composio, computers (Docker/SPACE/WSL/host), voice, storage
 crates/opencue-cli      opencue-cli companion
 apps/desktop            Tauri 2 shell (src-tauri) + React/Tailwind UI (src)
-site/                   website (GitHub Pages): home, /docs, /privacy, /changelog
+site/                   website (GitHub Pages): home, /docs, /privacy, /changelog, install scripts, llms.txt
 docs/                   design doc, SPACE setup guide
-.github/workflows       CI (Linux/Windows/macOS), tagged releases (Linux/Windows), website deploy
+.github/workflows       CI (Linux/Windows/macOS), tagged releases (macOS/Linux/Windows), website deploy
 ```
 
-### Data
+</details>
 
-| | Linux | Windows |
+<details>
+<summary><b>Where data lives</b></summary>
+
+| macOS | Linux | Windows |
 |---|---|---|
-| Data folder | `~/.local/share/opencue` | `%APPDATA%\opencue\data` |
+| `~/Library/Application Support/opencue` | `~/.local/share/opencue` | `%APPDATA%\opencue\data` |
 
 Inside: `opencue.db` (SQLite: agents, groups, messages, providers, MCP servers, automations, email accounts, settings,
-web cache), `agents/<id>/` (`INSTRUCTIONS.md`, `MEMORY.md`, `workspace/`, `space.json`), `memory/GLOBAL.md` and
-`skills/<name>/SKILL.md`. Set `OPENCUE_HOME` to use another folder. API keys, email passwords and tokens live in the OS
-credential store; if none is available (headless Linux) they fall back to `secrets.json` with `0600` permissions.
+web cache), `agents/<id>/` (`INSTRUCTIONS.md`, `MEMORY.md`, `workspace/`, `space.json`), `files/` (shared files),
+`memory/GLOBAL.md` and `skills/<name>/SKILL.md`. Set `OPENCUE_HOME` to use another folder. API keys, email passwords and
+tokens live in the OS credential store; without one (headless Linux) they fall back to `secrets.json` with `0600`
+permissions.
 
-### Releases
+</details>
 
-Push a tag `vX.Y.Z` (matching `version` in `apps/desktop/src-tauri/tauri.conf.json`): GitHub Actions builds the Linux and
-Windows installers plus CLI zips and attaches them to a draft release. Changes to `site/` deploy the website.
+<details>
+<summary><b>Releasing</b></summary>
+
+Bump `version` in `Cargo.toml`, `apps/desktop/package.json` and `apps/desktop/src-tauri/tauri.conf.json`, then push a
+tag `vX.Y.Z`. GitHub Actions builds the macOS (universal), Linux and Windows installers, signs the update bundles with
+the `TAURI_SIGNING_PRIVATE_KEY` secret, publishes `latest.json` for the in-app updater and attaches the CLI zips.
+Changes to `site/` deploy the website.
+
+</details>
 
 ## Roadmap
 
-1. **Phase 1 — MVP (0.1)**: GUI, agents, streaming chat, providers, instructions, memory, groups, MCP, web.
-2. **Phase 2 (0.2, this version)**: drawn avatars, automations, email, computers (Docker / SPACE / WSL / host) with
-   terminal + file browser, skills, Composio, ElevenLabs voice, website.
-3. **Phase 3**: file sharing in chats and groups, OpenCue tools for CLI-backed agents (via MCP), noVNC desktop view,
-   auto-update, signed installers.
+- [x] **0.1 — MVP**: GUI, agents, streaming chat, providers, instructions, memory, groups, MCP, web.
+- [x] **0.2**: drawn avatars, automations, email, computers with terminal and file browser, skills, Composio, voice,
+  website.
+- [x] **0.3**: files in chats and groups, OpenCue tools for CLI agents (MCP), Docker desktop view, auto-update, macOS
+  builds, one-line install.
+- [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases
 
 - A paralegal agent with its own inbox that emails courts, tracks replies and reminds you of hearings.
 - A reminders agent that checks your boards every Monday at 9:00 and tells you what is due.
-- A dev agent with a Docker computer that runs scripts and keeps notes in its workspace.
+- A dev agent with a Docker computer and desktop that runs scripts, opens apps and sends you the results as files.
 - A group chat where a planner hands tasks to a researcher and a writer.
 
 ## License
@@ -129,3 +179,5 @@ rather than OSI open source.
 
 Report vulnerabilities privately — see [SECURITY.md](SECURITY.md). What leaves your computer is described in the
 [privacy policy](https://lautaro005.github.io/opencue/privacy/).
+
+<p align="center"><sub>Inspired by <a href="https://cue.im">Cue</a>. Made with Rust, Tauri and a lot of googly eyes.</sub></p>

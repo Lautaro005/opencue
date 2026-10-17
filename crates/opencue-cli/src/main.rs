@@ -36,6 +36,11 @@ enum Cmd {
     Search { query: Vec<String> },
     /// Print the data directory
     Where,
+    /// Serve an agent's OpenCue tools over MCP stdio (used by `claude` / `codex` CLI agents)
+    McpServe {
+        #[arg(long)]
+        agent: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -163,10 +168,15 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let cli = Cli::parse();
+    if let Cmd::McpServe { agent } = &cli.cmd {
+        let core = Core::open_secondary(opencue_core::paths::Paths::resolve()?).await?;
+        return opencue_core::mcp_server::serve_stdio(core, agent).await;
+    }
     let core = Core::open_default().await?;
 
     match cli.cmd {
         Cmd::Where => println!("{}", core.paths().root().display()),
+        Cmd::McpServe { .. } => unreachable!("handled above"),
         Cmd::Agents(AgentsCmd::List) => {
             for a in core.store.list_agents().await? {
                 println!(

@@ -14,6 +14,7 @@ export interface AgentSettings {
   skills: boolean;
   composio: boolean;
   voice_id: string | null;
+  cli_tools: boolean;
 }
 
 export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space";
@@ -85,6 +86,27 @@ export interface Message {
   status: string; // done | streaming | running | awaiting_approval | denied | error | stopped
   input_tokens: number;
   output_tokens: number;
+  created_at: string;
+  attachments?: Attachment[];
+}
+
+export interface Attachment {
+  id: string;
+  name: string;
+  mime: string;
+  size: number;
+}
+
+/** A file the user is about to send (base64 bytes). */
+export interface NewAttachment {
+  name: string;
+  data: string;
+}
+
+export interface SharedFile {
+  attachment: Attachment;
+  message_id: string;
+  agent_id: string | null;
   created_at: string;
 }
 
@@ -256,6 +278,9 @@ export interface ComposioStatus {
 
 export interface ComputerSettings {
   docker_image: string;
+  docker_desktop: boolean;
+  desktop_image: string;
+  desktop_port: number;
   space_url: string;
   space_template: string;
   has_space_token: boolean;

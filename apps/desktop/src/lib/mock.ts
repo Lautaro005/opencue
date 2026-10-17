@@ -20,6 +20,14 @@ const defaults = {
   skills: true,
   composio: false,
   voice_id: null,
+  cli_tools: true,
+};
+
+/** Files "uploaded" in the preview, kept as data URLs. */
+const blobs: Record<string, { name: string; mime: string; url: string }> = {};
+const mimeOf = (name: string) => {
+  const ext = name.split(".").pop()?.toLowerCase() ?? "";
+  return ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", pdf: "application/pdf", csv: "text/csv", md: "text/markdown", txt: "text/plain", json: "application/json" } as Record<string, string>)[ext] ?? "application/octet-stream";
 };
 
 const providers: ProviderConfig[] = [
@@ -133,12 +141,12 @@ const automations: Automation[] = [
 const emails: Record<string, EmailAccount> = {
   a2: { agent_id: "a2", kind: "imap", address: "recordatorios@example.com", display_name: "Recordatorios", imap_host: "imap.example.com", imap_port: 993, smtp_host: "smtp.example.com", smtp_port: 465, username: null, last_seen_uid: 0, has_password: true },
 };
-const computer = { docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, wsl_available: false, webhook_port: 7777 };
+const computer = { docker_desktop: false, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, wsl_available: false, webhook_port: 7777 };
 const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.2.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -198,13 +206,34 @@ const handlers: Record<string, (a: Args) => unknown> = {
     emit({ type: "threads_changed" });
   },
   get_messages: ({ threadId }) => messages.filter((m) => m.thread_id === threadId),
-  send_message: ({ threadId, text }) => {
+  send_message: ({ threadId, text, files }) => {
     const m = msg(threadId, "user", text, 0);
+    m.attachments = (files ?? []).map((f: { name: string; data: string }) => {
+      const aid = id();
+      const mime = mimeOf(f.name);
+      blobs[aid] = { name: f.name, mime, url: `data:${mime};base64,${f.data}` };
+      return { id: aid, name: f.name, mime, size: Math.round((f.data.length * 3) / 4) };
+    });
     messages.push(m);
     emit({ type: "message", message: m });
     void simulateReply(threadId, text);
     return m;
   },
+  thread_files: ({ threadId }) =>
+    messages
+      .filter((m) => m.thread_id === threadId && m.attachments?.length)
+      .reverse()
+      .flatMap((m) => m.attachments!.map((attachment) => ({ attachment, message_id: m.id, agent_id: m.agent_id, created_at: m.created_at }))),
+  read_attachment: ({ id }) => blobs[id]?.url ?? "",
+  open_attachment: ({ id }) => void (blobs[id] && window.open(blobs[id].url, "_blank")),
+  reveal_attachment: () => undefined,
+  save_attachment: () => undefined,
+  computer_desktop: () => {
+    if (!computer.docker_desktop) throw new Error("turn on the desktop in Settings → Computers first");
+    return "about:blank";
+  },
+  reset_computer: () => undefined,
+  composio_connect: ({ toolkit }) => `https://app.composio.dev/?connect=${encodeURIComponent(toolkit)}`,
   stop_thread: ({ threadId }) => void busy.delete(threadId),
   clear_thread: ({ threadId }) => {
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].thread_id === threadId) messages.splice(i, 1);

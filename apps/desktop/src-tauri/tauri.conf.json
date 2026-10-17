@@ -1,7 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "OpenCue",
-  "version": "0.2.0",
+  "mainBinaryName": "opencue",
+  "version": "0.3.0",
   "identifier": "im.opencue.app",
   "build": {
     "beforeDevCommand": "npm run dev",
@@ -22,21 +23,60 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; img-src 'self' data: https: http:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; media-src 'self' data: blob:"
+      "csp": "default-src 'self'; img-src 'self' data: blob: https: http:; style-src 'self' 'unsafe-inline'; connect-src 'self' ipc: http://ipc.localhost; media-src 'self' data: blob:; frame-src http://127.0.0.1:* http://localhost:*"
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["appimage", "deb", "rpm", "msi", "nsis"],
+    "targets": [
+      "appimage",
+      "deb",
+      "rpm",
+      "msi",
+      "nsis",
+      "app",
+      "dmg"
+    ],
     "category": "Productivity",
     "shortDescription": "Personal AI agents on your desktop",
-    "longDescription": "OpenCue lets you create personal AI agents with their own instructions, memory, tools and group chats.",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "longDescription": "OpenCue lets you create personal AI agents with their own instructions, memory, computer, email, files, automations and group chats.",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "linux": {
-      "deb": { "depends": [] }
+      "deb": {
+        "depends": []
+      }
     },
     "windows": {
-      "nsis": { "installMode": "currentUser" }
+      "nsis": {
+        "installMode": "currentUser"
+      }
+    },
+    "createUpdaterArtifacts": true,
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "dmg": {
+        "windowSize": {
+          "width": 540,
+          "height": 380
+        }
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDA1N0VCQjI5MzE5QTJCQTYKUldTbUs1b3hLYnQrQmI2dHQyTlRHb3BoOTk0NklXY0hTSkRpMXYxRjQvQU92WkNHMUpKSEQ2UnYK",
+      "endpoints": [
+        "https://github.com/Lautaro005/opencue/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

@@ -210,6 +210,16 @@ pub struct ChatMessage {
     pub tool_calls: Vec<ToolCall>,
     #[serde(default)]
     pub tool_call_id: Option<String>,
+    /// Pictures shared by the user, for models that can see them.
+    #[serde(default)]
+    pub images: Vec<ImageData>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ImageData {
+    pub mime: String,
+    /// Base64-encoded bytes.
+    pub data: String,
 }
 
 impl ChatMessage {
@@ -219,6 +229,14 @@ impl ChatMessage {
             content: text.into(),
             tool_calls: vec![],
             tool_call_id: None,
+            images: vec![],
+        }
+    }
+
+    pub fn user_with_images(text: impl Into<String>, images: Vec<ImageData>) -> Self {
+        Self {
+            images,
+            ..Self::user(text)
         }
     }
 
@@ -228,6 +246,7 @@ impl ChatMessage {
             content: text.into(),
             tool_calls,
             tool_call_id: None,
+            images: vec![],
         }
     }
 
@@ -237,6 +256,7 @@ impl ChatMessage {
             content: text.into(),
             tool_calls: vec![],
             tool_call_id: Some(call_id.into()),
+            images: vec![],
         }
     }
 }
@@ -255,6 +275,8 @@ pub struct ChatRequest {
     pub messages: Vec<ChatMessage>,
     pub tools: Vec<ToolSpec>,
     pub temperature: Option<f32>,
+    /// Set for agent turns, so CLI providers can hand OpenCue's tools to the CLI over MCP.
+    pub agent_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]

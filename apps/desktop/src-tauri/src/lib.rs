@@ -48,7 +48,36 @@ fn allow_microphone(app: &tauri::App) {
 #[cfg(not(target_os = "linux"))]
 fn allow_microphone(_app: &tauri::App) {}
 
+/// `opencue mcp-serve --agent <id>`: serve OpenCue's tools over stdio to a `claude` / `codex` CLI
+/// agent instead of opening the window. Logs go to stderr; stdout carries the protocol.
+fn serve_mcp(agent_id: &str) -> ! {
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_env_filter("warn")
+        .init();
+    let result = tokio::runtime::Runtime::new()
+        .expect("tokio runtime")
+        .block_on(async {
+            let core = Core::open_secondary(opencue_core::paths::Paths::resolve()?).await?;
+            opencue_core::mcp_server::serve_stdio(core, agent_id).await
+        });
+    if let Err(err) = result {
+        eprintln!("opencue mcp-serve: {err:#}");
+        std::process::exit(1);
+    }
+    std::process::exit(0)
+}
+
 pub fn run() {
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(agent_id) = opencue_core::mcp_server::agent_from_args(&args) {
+        serve_mcp(&agent_id);
+    }
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("opencue {}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
@@ -62,6 +91,8 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Open inside the runtime so background tasks (MCP connections) can be spawned.
             let core = tauri::async_runtime::block_on(async {
@@ -153,6 +184,11 @@ pub fn run() {
             commands::remove_group_member,
             commands::get_messages,
             commands::send_message,
+            commands::thread_files,
+            commands::read_attachment,
+            commands::open_attachment,
+            commands::reveal_attachment,
+            commands::save_attachment,
             commands::stop_thread,
             commands::clear_thread,
             commands::resolve_approval,
@@ -194,6 +230,9 @@ pub fn run() {
             commands::computer_list,
             commands::computer_read,
             commands::computer_log,
+            commands::computer_desktop,
+            commands::reset_computer,
+            commands::composio_connect,
             commands::voice_settings,
             commands::save_voice_settings,
             commands::list_voices,

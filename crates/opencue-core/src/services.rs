@@ -40,6 +40,12 @@ pub struct ComposioStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComputerSettings {
     pub docker_image: String,
+    #[serde(default)]
+    pub docker_desktop: bool,
+    #[serde(default)]
+    pub desktop_image: String,
+    #[serde(default)]
+    pub desktop_port: u16,
     pub space_url: String,
     pub space_template: String,
     pub has_space_token: bool,
@@ -273,35 +279,88 @@ impl Core {
         let Some(acc) = self.store.email_account(agent_id).await? else {
             return Ok(());
         };
-        if acc.kind != EmailKind::Imap {
-            return Ok(());
-        }
-        let pw = self
-            .secrets
-            .get(&email_key(agent_id))
-            .ok_or_else(|| anyhow::anyhow!("no email password"))?;
-        let (fresh, max) = email::new_since(&acc, &pw, acc.last_seen_uid).await?;
-        self.store.set_email_seen_uid(agent_id, max).await?;
+        // (from, subject, rendered email) for every new message, oldest first.
+        let fresh: Vec<(String, String, String)> = match acc.kind {
+            EmailKind::Imap => {
+                let pw = self
+                    .secrets
+                    .get(&email_key(agent_id))
+                    .ok_or_else(|| anyhow::anyhow!("no email password"))?;
+                let (fresh, max) = email::new_since(&acc, &pw, acc.last_seen_uid).await?;
+                self.store.set_email_seen_uid(agent_id, max).await?;
+                fresh
+                    .iter()
+                    .rev()
+                    .map(|m| (m.from.clone(), m.subject.clone(), m.render(true)))
+                    .collect()
+            }
+            EmailKind::ComposioGmail => self.new_gmail_messages(agent_id).await?,
+        };
         if fresh.is_empty() {
             return Ok(());
         }
         let automations = self.store.list_automations(Some(agent_id)).await?;
-        for mail in fresh.iter().rev() {
+        for (from, subject, rendered) in &fresh {
             for a in automations.iter().filter(|a| a.enabled) {
                 if let Trigger::Email { filter, .. } = &a.trigger {
                     let f = filter.trim().to_lowercase();
-                    let hay = format!("{} {}", mail.from, mail.subject).to_lowercase();
+                    let hay = format!("{from} {subject}").to_lowercase();
                     if f.is_empty() || hay.contains(&f) {
-                        self.fire(
-                            a.clone(),
-                            Some(format!("Received an email:\n{}", mail.render(true))),
-                        )
-                        .await;
+                        self.fire(a.clone(), Some(format!("Received an email:\n{rendered}")))
+                            .await;
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    /// New Gmail messages through Composio since the last check. The first check only records
+    /// what is already there, so turning an automation on doesn't replay the inbox.
+    async fn new_gmail_messages(
+        &self,
+        agent_id: &str,
+    ) -> anyhow::Result<Vec<(String, String, String)>> {
+        let key = format!("gmail_seen:{agent_id}");
+        let seen: Option<Vec<String>> = self
+            .store
+            .setting(&key)
+            .await?
+            .and_then(|s| serde_json::from_str(&s).ok());
+        let data = self
+            .composio()
+            .await?
+            .execute_value(
+                "GMAIL_FETCH_EMAILS",
+                serde_json::json!({ "max_results": 15, "query": "in:inbox newer_than:2d" }),
+            )
+            .await?;
+        let mails = email::parse_gmail_messages(&data);
+        let mut known = seen.clone().unwrap_or_default();
+        let fresh: Vec<_> = mails
+            .iter()
+            .filter(|m| !known.contains(&m.id))
+            .cloned()
+            .collect();
+        known.extend(fresh.iter().map(|m| m.id.clone()));
+        let start = known.len().saturating_sub(300);
+        self.store
+            .set_setting(&key, &serde_json::to_string(&known[start..])?)
+            .await?;
+        if seen.is_none() {
+            return Ok(vec![]);
+        }
+        Ok(fresh
+            .into_iter()
+            .rev()
+            .map(|m| {
+                let rendered = format!(
+                    "From: {}\nSubject: {}\nDate: {}\n\n{}",
+                    m.from, m.subject, m.date, m.body
+                );
+                (m.from, m.subject, rendered)
+            })
+            .collect())
     }
 
     async fn serve_webhooks(self: &Arc<Self>) -> anyhow::Result<()> {
@@ -497,6 +556,11 @@ impl Core {
         Ok(self.composio_status().await)
     }
 
+    /// Start connecting an app to Composio; returns the sign-in page to open in the browser.
+    pub async fn composio_connect(&self, toolkit: &str) -> anyhow::Result<String> {
+        self.composio().await?.connect(toolkit).await
+    }
+
     // ---------- computers ----------
 
     pub(crate) async fn computer_config(&self) -> ComputerConfig {
@@ -510,6 +574,9 @@ impl Core {
         };
         ComputerConfig {
             docker_image: get("docker_image").await,
+            docker_desktop: get("docker_desktop").await == "true",
+            desktop_image: get("desktop_image").await,
+            desktop_port: get("desktop_port").await.parse().unwrap_or(0),
             space_url: Some(get("space_url").await).filter(|s| !s.is_empty()),
             space_template: get("space_template").await,
             space_token: self.secrets.get(SPACE_KEY),
@@ -519,6 +586,9 @@ impl Core {
     pub async fn computer_settings(&self) -> ComputerSettings {
         let cfg = self.computer_config().await;
         ComputerSettings {
+            docker_desktop: cfg.docker_desktop,
+            desktop_image: cfg.desktop_image().to_string(),
+            desktop_port: cfg.desktop_port(),
             docker_image: cfg.docker_image,
             space_url: cfg.space_url.unwrap_or_default(),
             space_template: cfg.space_template,
@@ -547,10 +617,38 @@ impl Core {
         self.store
             .set_setting("webhook_port", &s.webhook_port.to_string())
             .await?;
+        self.store
+            .set_setting(
+                "docker_desktop",
+                if s.docker_desktop { "true" } else { "false" },
+            )
+            .await?;
+        self.store
+            .set_setting("desktop_image", s.desktop_image.trim())
+            .await?;
+        self.store
+            .set_setting("desktop_port", &s.desktop_port.to_string())
+            .await?;
         if let Some(t) = space_token {
             self.secrets.set(SPACE_KEY, t.trim())?;
         }
         Ok(self.computer_settings().await)
+    }
+
+    /// Address of an agent's web desktop (Docker computers with the desktop turned on).
+    pub async fn computer_desktop(&self, agent_id: &str) -> anyhow::Result<String> {
+        let agent = self.store.get_agent(agent_id).await?;
+        let cfg = self.computer_config().await;
+        self.computer_for(&agent, &cfg).desktop_url().await
+    }
+
+    /// Recreate an agent's Docker container (keeps the workspace), e.g. after turning on the desktop.
+    pub async fn reset_computer(&self, agent_id: &str) -> anyhow::Result<()> {
+        let agent = self.store.get_agent(agent_id).await?;
+        let cfg = self.computer_config().await;
+        self.computer_for(&agent, &cfg).reset().await?;
+        self.log_computer(agent_id, "[computer restarted]\n", false);
+        Ok(())
     }
 
     pub async fn test_space(&self) -> anyhow::Result<usize> {
@@ -563,11 +661,15 @@ impl Core {
             .await
     }
 
-    fn computer_for<'a>(&self, agent: &'a Agent, cfg: &'a ComputerConfig) -> Computer<'a> {
+    pub(crate) fn computer_for<'a>(
+        &self,
+        agent: &'a Agent,
+        cfg: &'a ComputerConfig,
+    ) -> Computer<'a> {
         Computer {
             backend: agent.settings.computer.clone(),
             agent_id: &agent.id,
-            workspace: self.paths().agent_dir(&agent.id).join("workspace"),
+            workspace: self.paths().agent_workspace(&agent.id),
             config: cfg,
             space_state: self.paths().agent_dir(&agent.id).join("space.json"),
         }

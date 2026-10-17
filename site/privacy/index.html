@@ -26,14 +26,15 @@
   <main class="wrap page">
     <div class="page-head">
       <h1>Privacy policy</h1>
-      <p>Effective October 17, 2026</p>
+      <p>Effective October 17, 2026 · updated for OpenCue 0.3</p>
     </div>
     <article class="prose">
       <p>OpenCue is a desktop app that runs on your computer. It has no account system, no servers of its own and no telemetry. This page explains what stays on your computer and what is sent to services <em>you</em> choose to connect.</p>
 
       <h2>What stays on your computer</h2>
       <ul>
-        <li>Your agents, their instructions, memory, skills, chats, automations and settings, in the OpenCue data folder (<code>~/.local/share/opencue</code> on Linux, <code>%APPDATA%\opencue\data</code> on Windows).</li>
+        <li>Your agents, their instructions, memory, skills, chats, automations and settings, in the OpenCue data folder (<code>~/Library/Application Support/opencue</code> on macOS, <code>~/.local/share/opencue</code> on Linux, <code>%APPDATA%\opencue\data</code> on Windows).</li>
+        <li>Files you or your agents share in chats, in that folder's <code>files/</code> directory and as copies in the agents' workspaces.</li>
         <li>Secrets — API keys, email passwords and tokens — in your operating system's credential store. Only when none is available are they saved in a <code>secrets.json</code> file readable by your user alone.</li>
         <li>Files agents create in their workspace folder.</li>
       </ul>
@@ -43,25 +44,28 @@
       <p>OpenCue only talks to the services you configure, when an agent or you use them:</p>
       <table>
         <tr><th>Service</th><th>What is sent</th><th>When</th></tr>
-        <tr><td>Your model provider (OpenAI, Anthropic, xAI, OpenRouter, Ollama Cloud, CheapestInference…)</td><td>The conversation, the agent's instructions and memory, and tool results needed for the reply</td><td>Every time an agent answers</td></tr>
-        <tr><td>Local models (Ollama, LM Studio) or the <code>codex</code> / <code>claude</code> CLIs</td><td>The same, to the program on your machine (the CLIs then talk to their own company under their own terms)</td><td>Every time an agent answers</td></tr>
+        <tr><td>Your model provider (OpenAI, Anthropic, xAI, OpenRouter, Ollama Cloud, CheapestInference…)</td><td>The conversation, the agent's instructions and memory, tool results needed for the reply, and the files you attach: pictures as images and small text files as text (other files only by name, unless the agent reads them with its tools)</td><td>Every time an agent answers</td></tr>
+        <tr><td>Local models (Ollama, LM Studio) or the <code>codex</code> / <code>claude</code> CLIs</td><td>The same, to the program on your machine (the CLIs then talk to their own company under their own terms). CLI agents reach OpenCue's tools through a local MCP server (<code>opencue mcp-serve</code>) that runs on your computer and only talks to the CLI that started it; what those tools return goes to the CLI's provider like any other reply</td><td>Every time an agent answers</td></tr>
         <tr><td>DuckDuckGo, Wikipedia, your SearXNG, and websites</td><td>Search queries and page requests</td><td>When an agent searches or reads the web</td></tr>
         <tr><td>Your email provider (IMAP/SMTP)</td><td>Login and the messages read or sent</td><td>When an agent uses email or an email automation checks the inbox</td></tr>
-        <tr><td>Composio</td><td>Your Composio API key, user ID and the arguments of actions agents run</td><td>When an agent uses connected apps</td></tr>
+        <tr><td>Composio</td><td>Your Composio API key, user ID and the arguments of actions agents run; when you connect an app, Composio's sign-in page opens in your browser and the app's account is linked to Composio, not to OpenCue</td><td>When an agent uses connected apps, Gmail automations check the inbox, or you connect an app</td></tr>
         <tr><td>ElevenLabs</td><td>Your recorded voice and the text of replies to be spoken</td><td>Only while you use the microphone or a reply is read aloud</td></tr>
-        <tr><td>SPACE server, Docker, MCP servers</td><td>Commands, files and tool arguments</td><td>When an agent uses its computer or an app</td></tr>
-        <tr><td>GitHub</td><td>A normal web request</td><td>Only when you click a link to the repository, releases or docs</td></tr>
+        <tr><td>SPACE server, Docker, MCP servers</td><td>Commands, files and tool arguments. Docker downloads the computer and desktop images from their registry (Docker Hub, lscr.io…) the first time</td><td>When an agent uses its computer or an app</td></tr>
+        <tr><td>GitHub</td><td>A request for the latest release information (<code>latest.json</code>) and, if you install an update, the update file. GitHub sees your IP address and the app version in the request, like any download</td><td>Once at startup (turn it off in Settings → About), when you check for updates, and when you click links to the repository or docs</td></tr>
       </table>
       <p>Each of those services handles data under its own privacy policy. Review them before connecting an account.</p>
 
-      <h2>Webhooks</h2>
-      <p>The automation webhook server listens only on <code>127.0.0.1</code>, so it can be reached from your own computer and not from the network.</p>
+      <h2>Local servers</h2>
+      <p>The automation webhook server and the Docker desktop view listen only on <code>127.0.0.1</code>, so they can be reached from your own computer and not from the network.</p>
+
+      <h2>Install scripts</h2>
+      <p><code>install.sh</code> and <code>install.ps1</code> ask the GitHub API for the latest release, download it from GitHub and install it for your user. They send nothing else and collect nothing.</p>
 
       <h2>This website</h2>
-      <p>This site is static and hosted on GitHub Pages. It sets no cookies and runs no analytics. GitHub may keep standard server logs (such as IP addresses) as described in the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>.</p>
+      <p>This site is static and hosted on GitHub Pages. It sets no cookies and runs no analytics. GitHub may keep standard server logs (such as IP addresses) as described in the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>. The home page loads the three.js library from the jsDelivr CDN for its animation and asks the GitHub API which release is the latest, so those services receive a normal request from your browser. Your operating system is detected in your browser to pick the right download and is not sent anywhere.</p>
 
       <h2>Deleting your data</h2>
-      <p>Delete an agent to remove its chat, memory, instructions, workspace and email password. To remove everything, quit OpenCue and delete the data folder; API keys can be removed from Settings or your system's credential manager.</p>
+      <p>Delete an agent to remove its chat, memory, instructions, workspace and email password. Clearing a conversation removes its messages; shared files stay in the <code>files/</code> folder until you delete them. To remove everything, quit OpenCue and delete the data folder; API keys can be removed from Settings or your system's credential manager.</p>
 
       <h2>Children</h2>
       <p>OpenCue is not directed at children. Model providers you connect have their own age requirements.</p>
@@ -81,6 +85,7 @@
         <a href="../docs/">Docs</a>
         <a href="../changelog/">Changelog</a>
         <a href="./">Privacy</a>
+        <a href="../llms.txt">llms.txt</a>
         <a href="https://github.com/Lautaro005/opencue/security/policy">Security</a>
         <a href="https://github.com/Lautaro005/opencue">GitHub</a>
       </nav>

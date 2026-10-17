@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Bot, MessageSquarePlus, Plus, Settings, Users } from "lucide-react";
+import { Bot, MessageSquarePlus, Plus, Settings, Sparkles, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cx, shortTime } from "../lib/format";
 import { openUrl } from "../lib/api";
@@ -14,6 +14,7 @@ export function Sidebar() {
   const select = useStore((s) => s.select);
   const setDialog = useStore((s) => s.setDialog);
   const openSettings = useStore((s) => s.openSettings);
+  const update = useStore((s) => s.update);
   const settings = useStore((s) => s.settings);
   const working = useStore((s) => s.working);
   const [menu, setMenu] = useState(false);
@@ -105,6 +106,11 @@ export function Sidebar() {
         )}
       </nav>
 
+      {update && (
+        <button onClick={() => openSettings("about")} className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-accent-soft px-3 py-2 text-left text-[12.5px] font-medium text-accent hover:opacity-90">
+          <Sparkles size={14} /> {t("update.available", { version: update.version })}
+        </button>
+      )}
       <div className="flex items-center gap-2 border-t border-line px-3 py-2.5">
         <button onClick={() => openSettings("account")} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-hover">
           <UserAvatar name={userName} size={30} />

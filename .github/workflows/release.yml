@@ -17,10 +17,13 @@ jobs:
         include:
           - name: linux-x64
             os: ubuntu-22.04
-            bundles: appimage,deb,rpm
+            args: --bundles appimage,deb,rpm
           - name: windows-x64
             os: windows-latest
-            bundles: msi,nsis
+            args: --bundles msi,nsis
+          - name: macos-universal
+            os: macos-latest
+            args: --target universal-apple-darwin --bundles app,dmg
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -42,6 +45,9 @@ jobs:
         run: npm ci
 
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          # The universal macOS build needs both Apple targets.
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       - uses: Swatinem/rust-cache@v2
 
@@ -49,15 +55,27 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Signs the update bundles that the in-app updater verifies (not OS code signing).
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           # tauri-action substitutes __VERSION__ with the app version from tauri.conf.json.
           tagName: v__VERSION__
           releaseName: OpenCue v__VERSION__
-          releaseBody: See the assets below to download OpenCue for Linux and Windows.
-          releaseDraft: true
+          releaseBody: |
+            Install from a terminal:
+
+            - macOS / Linux: `curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh`
+            - Windows (PowerShell): `irm https://lautaro005.github.io/opencue/install.ps1 | iex`
+
+            Then run `opencue`. Or download an installer below. What's new: https://lautaro005.github.io/opencue/changelog/
+          releaseDraft: false
           prerelease: false
-          args: --bundles ${{ matrix.bundles }}
+          # latest.json for the in-app updater; Windows updates through the NSIS installer.
+          includeUpdaterJson: true
+          updaterJsonPreferNsis: true
+          args: ${{ matrix.args }}
 
   cli:
     name: CLI (${{ matrix.target }})
@@ -71,11 +89,16 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: opencue-cli.exe
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin: opencue-cli
     runs-on: ${{ matrix.os }}
     needs: desktop
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
       - name: Build CLI
         run: cargo build --release -p opencue-cli --target ${{ matrix.target }}
@@ -90,5 +113,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          draft: true
           files: opencue-cli-${{ matrix.target }}.zip

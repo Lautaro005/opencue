@@ -24,6 +24,7 @@ pub const SEARCH_INBOX: &str = "search_inbox";
 pub const SEND_EMAIL: &str = "send_email";
 pub const COMPOSIO_SEARCH: &str = "composio_search";
 pub const COMPOSIO_EXECUTE: &str = "composio_execute";
+pub const SHARE_FILE: &str = "share_file";
 
 pub fn is_phase2(name: &str) -> bool {
     [
@@ -202,6 +203,18 @@ impl Toolbox {
                 "List a folder in your workspace (empty path = workspace root).",
                 json!({
                     "type": "object", "properties": { "path": { "type": "string" } }
+                }),
+            ));
+            specs.push(spec(
+                SHARE_FILE,
+                "Send a file from your workspace to the chat so the user can open or save it (reports, images, spreadsheets…). Files the user shares appear in your workspace under files/.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string" },
+                        "caption": { "type": "string", "description": "Optional short message shown with the file." }
+                    },
+                    "required": ["path"]
                 }),
             ));
         }

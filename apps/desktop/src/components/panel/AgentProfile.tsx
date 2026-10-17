@@ -10,8 +10,9 @@ import { Button, IconButton, Input, Modal, DialogHeader, Select, Textarea, Toggl
 import { AvatarPicker } from "./AvatarPicker";
 import { Row } from "./Section";
 import { AutomationsSection, ComputerPage, EmailPage, SkillsPage, VoicePage } from "./AgentPages";
+import { SharedFiles } from "./SharedFiles";
 
-type Page = "main" | "model" | "apps" | "skills" | "instructions" | "memory" | "voice" | "permissions" | "email" | "computer";
+type Page = "main" | "model" | "apps" | "skills" | "instructions" | "memory" | "voice" | "permissions" | "email" | "computer" | "files";
 
 export function AgentProfile({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
@@ -40,6 +41,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
     permissions: t("profile.permissions"),
     email: t("profile.mails"),
     computer: t("profile.computer"),
+    files: t("files.title"),
   };
 
   return (
@@ -84,6 +86,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
             <Group label={t("profile.assets")}>
               <NavRow icon={<Emoji>✉️</Emoji>} label={t("profile.mails")} value={email?.address} onClick={() => setPage("email")} add={email === null} />
               <NavRow icon={<Emoji>🖥️</Emoji>} label={t("profile.computer")} value={agent.settings.computer === "none" ? undefined : t(`computer.backend.${agent.settings.computer}`)} onClick={() => setPage("computer")} add={agent.settings.computer === "none"} />
+              <NavRow icon={<Emoji>📎</Emoji>} label={t("files.title")} onClick={() => setPage("files")} />
             </Group>
 
             <Group label={t("profile.configurations")}>
@@ -122,6 +125,11 @@ export function AgentProfile({ agent }: { agent: Agent }) {
         {page === "voice" && <VoicePage agent={agent} onChange={patchSettings} />}
         {page === "email" && <EmailPage agent={agent} />}
         {page === "computer" && <ComputerPage agent={agent} onChange={patchSettings} />}
+        {page === "files" && (
+          <div className="px-5 py-3">
+            <SharedFiles threadId={agent.id} />
+          </div>
+        )}
         {page === "permissions" && (
           <Page>
             <div className="space-y-1.5">
@@ -252,7 +260,15 @@ function ModelSection({ agent }: { agent: Agent }) {
           />
         )}
         {error && <p className="line-clamp-3 text-[11.5px] text-danger">{error}</p>}
-        {info && !info.supports_tools && <p className="text-[11.5px] text-warning">{t("profile.noTools")}</p>}
+        {info && info.api === "cli" && (
+          <div className="mt-2 flex items-start justify-between gap-3 rounded-xl border border-line px-3 py-2.5">
+            <span>
+              <span className="block text-[13px] font-medium">{t("profile.cliTools")}</span>
+              <span className="block text-[11.5px] text-muted">{t("profile.cliToolsHint")}</span>
+            </span>
+            <Toggle checked={agent.settings.cli_tools !== false} onChange={(v) => void api.updateAgent(agent.id, { settings: { ...agent.settings, cli_tools: v } })} />
+          </div>
+        )}
       </div>
     </Page>
   );

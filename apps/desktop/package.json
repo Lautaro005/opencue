@@ -1,7 +1,7 @@
 {
   "name": "opencue-desktop",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "scripts": {
@@ -15,6 +15,8 @@
     "@tauri-apps/api": "^2.9.0",
     "@tauri-apps/plugin-dialog": "^2.4.0",
     "@tauri-apps/plugin-opener": "^2.5.0",
+    "@tauri-apps/plugin-process": "^2.4.0",
+    "@tauri-apps/plugin-updater": "^2.14.0",
     "i18next": "^25.6.0",
     "lucide-react": "^0.548.0",
     "react": "^19.2.0",

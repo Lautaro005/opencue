@@ -230,8 +230,59 @@ pub async fn send_message(
     state: State<'_, AppState>,
     thread_id: String,
     text: String,
+    files: Option<Vec<NewAttachment>>,
 ) -> R<Message> {
-    state.core.send_message(&thread_id, &text).await.map_err(e)
+    state
+        .core
+        .send_message_with_files(&thread_id, &text, &files.unwrap_or_default())
+        .await
+        .map_err(e)
+}
+
+// ---------- files ----------
+
+#[tauri::command]
+pub async fn thread_files(
+    state: State<'_, AppState>,
+    thread_id: String,
+) -> R<Vec<opencue_core::files::SharedFile>> {
+    state.core.thread_files(&thread_id).await.map_err(e)
+}
+
+/// The file as a `data:` URL, for image previews.
+#[tauri::command]
+pub async fn read_attachment(state: State<'_, AppState>, id: String) -> R<String> {
+    let (a, bytes) = state.core.read_attachment(&id).await.map_err(e)?;
+    if bytes.len() > 15 * 1024 * 1024 {
+        return Err("too large to preview".into());
+    }
+    Ok(format!(
+        "data:{};base64,{}",
+        a.mime,
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    ))
+}
+
+/// Open the file with the system's default app.
+#[tauri::command]
+pub async fn open_attachment(state: State<'_, AppState>, id: String) -> R<()> {
+    let (_, path) = state.core.attachment(&id).await.map_err(e)?;
+    tauri_plugin_opener::open_path(path, None::<&str>).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub async fn reveal_attachment(state: State<'_, AppState>, id: String) -> R<()> {
+    let (_, path) = state.core.attachment(&id).await.map_err(e)?;
+    tauri_plugin_opener::reveal_item_in_dir(path).map_err(|err| err.to_string())
+}
+
+/// Copy the file to a place the user picked in a save dialog.
+#[tauri::command]
+pub async fn save_attachment(state: State<'_, AppState>, id: String, dest: String) -> R<()> {
+    let (_, path) = state.core.attachment(&id).await.map_err(e)?;
+    std::fs::copy(path, dest)
+        .map(|_| ())
+        .map_err(|err| err.to_string())
 }
 
 #[tauri::command]
@@ -512,6 +563,21 @@ pub async fn computer_read(
     path: String,
 ) -> R<String> {
     state.core.computer_read(&agent_id, &path).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn computer_desktop(state: State<'_, AppState>, agent_id: String) -> R<String> {
+    state.core.computer_desktop(&agent_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn reset_computer(state: State<'_, AppState>, agent_id: String) -> R<()> {
+    state.core.reset_computer(&agent_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn composio_connect(state: State<'_, AppState>, toolkit: String) -> R<String> {
+    state.core.composio_connect(&toolkit).await.map_err(e)
 }
 
 #[tauri::command]

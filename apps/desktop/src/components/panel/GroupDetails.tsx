@@ -7,6 +7,7 @@ import type { Group } from "../../lib/types";
 import { AvatarView, GroupAvatar } from "../AvatarView";
 import { Badge, Button, IconButton, Input, useClickOutside } from "../ui";
 import { Section } from "./Section";
+import { SharedFiles } from "./SharedFiles";
 
 export function GroupDetails({ group }: { group: Group }) {
   const { t } = useTranslation();
@@ -111,8 +112,8 @@ export function GroupDetails({ group }: { group: Group }) {
           </div>
         </Section>
 
-        <Section title={t("group.files")} icon={<FolderOpen size={15} />} action={<Badge>{t("common.nextPhase")}</Badge>}>
-          <div className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-center text-[12.5px] text-muted">{t("group.filesEmpty")}</div>
+        <Section title={t("group.files")} icon={<FolderOpen size={15} />}>
+          <SharedFiles threadId={group.id} />
         </Section>
 
         <div className="border-t border-line px-5 py-4">

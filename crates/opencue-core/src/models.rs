@@ -46,6 +46,9 @@ pub struct AgentSettings {
     /// ElevenLabs voice id for spoken replies; empty uses the app default.
     #[serde(default)]
     pub voice_id: Option<String>,
+    /// Give agents backed by the `claude` / `codex` CLIs OpenCue's tools through MCP.
+    #[serde(default = "yes")]
+    pub cli_tools: bool,
 }
 
 impl Default for AgentSettings {
@@ -162,6 +165,43 @@ pub struct Message {
     pub input_tokens: i64,
     pub output_tokens: i64,
     pub created_at: String,
+    /// Files shared with this message (by the user, or by an agent with `share_file`).
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
+}
+
+/// A file shared in a chat. The bytes are stored at `files/<id>/<name>` in the data folder.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Attachment {
+    pub id: String,
+    pub name: String,
+    pub mime: String,
+    pub size: u64,
+}
+
+impl Attachment {
+    pub fn is_image(&self) -> bool {
+        matches!(
+            self.mime.as_str(),
+            "image/png" | "image/jpeg" | "image/gif" | "image/webp"
+        )
+    }
+
+    pub fn is_text(&self) -> bool {
+        self.mime.starts_with("text/")
+            || matches!(
+                self.mime.as_str(),
+                "application/json" | "application/xml" | "application/x-yaml" | "application/toml"
+            )
+    }
+}
+
+/// A file the user is sending, as it arrives from the UI.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NewAttachment {
+    pub name: String,
+    /// Base64-encoded bytes.
+    pub data: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

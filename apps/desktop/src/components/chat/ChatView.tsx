@@ -108,7 +108,7 @@ export function ChatView() {
         <MessageList threadId={selected} isGroup={!!group} />
       )}
 
-      <Composer threadId={selected} name={name} members={members} busy={busy} onSend={(text) => void send(selected, text)} onStop={() => void api.stopThread(selected)} />
+      <Composer threadId={selected} name={name} members={members} busy={busy} onSend={(text, files) => void send(selected, text, files)} onStop={() => void api.stopThread(selected)} />
     </main>
   );
 }

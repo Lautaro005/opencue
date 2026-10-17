@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 use crate::db::{new_id, now};
 use crate::events::{ApprovalRequest, CoreEvent};
 use crate::models::*;
-use crate::providers::{ChatMessage, ChatRequest, ChatRole, LlmProvider};
+use crate::providers::{ChatMessage, ChatRequest, ChatRole, LlmProvider, ToolSpec};
 use crate::tools::{self, arg_str, arg_u64, Toolbox};
 use crate::Core;
 
@@ -44,7 +44,17 @@ fn message(
         input_tokens: 0,
         output_tokens: 0,
         created_at: now(),
+        attachments: vec![],
     }
+}
+
+pub(crate) fn new_message(
+    thread_id: &str,
+    role: Role,
+    agent_id: Option<&str>,
+    content: impl Into<String>,
+) -> Message {
+    message(thread_id, role, agent_id, content)
 }
 
 fn truncate(s: String, max: usize) -> String {
@@ -133,8 +143,18 @@ impl Core {
         thread_id: &str,
         text: &str,
     ) -> anyhow::Result<Message> {
+        self.send_message_with_files(thread_id, text, &[]).await
+    }
+
+    /// Post a user message, with optional files, and start the agents.
+    pub async fn send_message_with_files(
+        self: &Arc<Self>,
+        thread_id: &str,
+        text: &str,
+        files: &[NewAttachment],
+    ) -> anyhow::Result<Message> {
         let text = text.trim();
-        anyhow::ensure!(!text.is_empty(), "message is empty");
+        anyhow::ensure!(!text.is_empty() || !files.is_empty(), "message is empty");
         let group = self.store.get_group(thread_id).await?;
         if group.is_none() {
             self.store.get_agent(thread_id).await?;
@@ -142,7 +162,8 @@ impl Core {
         // A new message interrupts whatever was running.
         self.stop(thread_id);
 
-        let msg = message(thread_id, Role::User, None, text);
+        let mut msg = message(thread_id, Role::User, None, text);
+        msg.attachments = self.decode_attachments(thread_id, files).await?;
         self.store.insert_message(&msg).await?;
         self.emit(CoreEvent::Message {
             message: msg.clone(),
@@ -298,6 +319,7 @@ impl Core {
                 messages: vec![ChatMessage::user(format!("Agents:\n{roster}\n\nMessage from the user:\n{text}"))],
                 tools: vec![],
                 temperature: Some(0.0),
+                agent_id: None,
             };
             let resp = provider.chat(req, &|_| {}).await?;
             anyhow::Ok(extract_json_array(&resp.text).unwrap_or_default())
@@ -386,9 +408,10 @@ impl Core {
                 )
             })?;
         let supports_tools = provider.supports_tools();
+        let cli_tools = !supports_tools && agent.settings.cli_tools;
         let global_mem = self.global_memory_enabled().await && agent.settings.use_global_memory;
 
-        let caps = if supports_tools {
+        let caps = if supports_tools || cli_tools {
             self.capabilities(&agent).await
         } else {
             tools::Capabilities::default()
@@ -418,9 +441,20 @@ impl Core {
         let mut outcome = AgentOutcome::default();
         let mut last_user = String::new();
         for step in 0..MAX_TOOL_STEPS {
-            let system = self
-                .system_prompt(&agent, group, global_mem, supports_tools, &caps)
+            let mut system = self
+                .system_prompt(
+                    &agent,
+                    group,
+                    global_mem,
+                    supports_tools || cli_tools,
+                    &caps,
+                )
                 .await;
+            if cli_tools {
+                system.push_str(
+                    "\n\nThese tools come from the MCP server \"opencue\" (in Claude Code they are named mcp__opencue__<tool>).",
+                );
+            }
             let history = self.history(thread_id, &agent, supports_tools).await?;
             if step == 0 {
                 last_user = history
@@ -459,6 +493,7 @@ impl Core {
                 messages: history,
                 tools: toolbox.specs.clone(),
                 temperature: agent.settings.temperature,
+                agent_id: (!supports_tools && agent.settings.cli_tools).then(|| agent.id.clone()),
             };
             let result = tokio::select! {
                 r = provider.chat(req, &on_delta) => r,
@@ -564,7 +599,7 @@ impl Core {
                 }
 
                 let result = tokio::select! {
-                    r = self.execute_tool(&agent, group, &toolbox, &call, &mut outcome.handoffs) => r,
+                    r = self.execute_tool(thread_id, &agent, group, &toolbox, &call, &mut outcome.handoffs) => r,
                     _ = token.cancelled() => {
                         tmsg.status = "stopped".into();
                         tmsg.content = "Cancelled.".into();
@@ -703,11 +738,26 @@ impl Core {
             .into_iter()
             .map(|a| (a.id, a.name))
             .collect();
+        // Only the most recent pictures are sent again; older ones stay as a note.
+        let image_cutoff = msgs
+            .iter()
+            .enumerate()
+            .filter(|(_, m)| m.attachments.iter().any(Attachment::is_image))
+            .map(|(i, _)| i)
+            .rev()
+            .nth(2)
+            .unwrap_or(0);
         let mut out = Vec::with_capacity(msgs.len());
-        for m in msgs {
+        for (i, mut m) in msgs.into_iter().enumerate() {
             let mine = m.agent_id.as_deref() == Some(agent.id.as_str());
+            let mut images = vec![];
+            if !m.attachments.is_empty() {
+                let (note, imgs) = self.describe_attachments(&m.attachments, i >= image_cutoff);
+                m.content.push_str(&note);
+                images = imgs;
+            }
             match m.role {
-                Role::User => out.push(ChatMessage::user(m.content)),
+                Role::User => out.push(ChatMessage::user_with_images(m.content, images)),
                 Role::Event => out.push(ChatMessage::user(format!("[event] {}", m.content))),
                 Role::Assistant if m.status == "error" => {}
                 Role::Assistant if mine => {
@@ -766,6 +816,7 @@ impl Core {
 
     async fn execute_tool(
         &self,
+        thread_id: &str,
         agent: &Agent,
         group: Option<&Group>,
         toolbox: &Toolbox,
@@ -863,6 +914,23 @@ impl Core {
                     target.name
                 ))
             }
+            tools::SHARE_FILE => {
+                let path =
+                    arg_str(args, "path").ok_or_else(|| anyhow::anyhow!("`path` is required"))?;
+                let att = self
+                    .share_workspace_file(
+                        thread_id,
+                        agent,
+                        path,
+                        arg_str(args, "caption").unwrap_or_default(),
+                    )
+                    .await?;
+                Ok(format!(
+                    "Shared {} ({}) in the chat.",
+                    att.name,
+                    crate::files::human_size(att.size)
+                ))
+            }
             name if tools::is_phase2(name) => self.phase2_tool(agent, call).await,
             name => {
                 let tool = toolbox
@@ -878,6 +946,52 @@ impl Core {
                 Ok(text)
             }
         }
+    }
+
+    /// The tools a CLI-backed agent gets over MCP: OpenCue's own, without group or MCP passthrough
+    /// tools (the CLI has its own MCP servers).
+    async fn external_toolbox(&self, agent: &Agent) -> Toolbox {
+        let global_mem = self.global_memory_enabled().await && agent.settings.use_global_memory;
+        let caps = self.capabilities(agent).await;
+        Toolbox::build(agent, None, global_mem, &caps, vec![])
+    }
+
+    pub async fn external_tools(&self, agent_id: &str) -> anyhow::Result<Vec<ToolSpec>> {
+        let agent = self.store.get_agent(agent_id).await?;
+        Ok(self.external_toolbox(&agent).await.specs)
+    }
+
+    /// Run one tool for a CLI-backed agent. Actions that need approval are refused in "Ask first"
+    /// mode, because the CLI can't show OpenCue's approval card.
+    pub async fn call_external_tool(
+        &self,
+        agent_id: &str,
+        name: &str,
+        arguments: Value,
+    ) -> anyhow::Result<String> {
+        let agent = self.store.get_agent(agent_id).await?;
+        let toolbox = self.external_toolbox(&agent).await;
+        anyhow::ensure!(
+            toolbox.specs.iter().any(|t| t.name == name),
+            "unknown tool `{name}`"
+        );
+        let call = ToolCall {
+            id: new_id(),
+            name: name.to_string(),
+            arguments,
+        };
+        if agent.settings.approval_mode == ApprovalMode::Ask {
+            if let Some(reason) = toolbox.approval_reason(&call) {
+                anyhow::bail!(
+                    "Not allowed: {reason}. That needs the user's approval, which OpenCue can't ask for through this CLI. \
+                     Tell the user what you wanted to do; they can do it themselves or set you to Fully autonomous."
+                );
+            }
+        }
+        let text = self
+            .execute_tool(agent_id, &agent, None, &toolbox, &call, &mut vec![])
+            .await?;
+        Ok(truncate(text, MAX_TOOL_OUTPUT))
     }
 
     async fn extract_memories(
@@ -904,6 +1018,7 @@ impl Core {
             messages: vec![ChatMessage::user(format!("Already remembered:\n{existing}\n\nUser: {user}\nAssistant: {reply}"))],
             tools: vec![],
             temperature: Some(0.0),
+            agent_id: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         for fact in extract_json_array(&resp.text)

@@ -26,6 +26,8 @@ import type {
   SkillSummary,
   Voice,
   VoiceSettings,
+  NewAttachment,
+  SharedFile,
 } from "./types";
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -74,7 +76,12 @@ export const api = {
   addGroupMember: (groupId: string, agentId: string) => invokeImpl<void>("add_group_member", { groupId, agentId }),
   removeGroupMember: (groupId: string, agentId: string) => invokeImpl<void>("remove_group_member", { groupId, agentId }),
   getMessages: (threadId: string) => invokeImpl<Message[]>("get_messages", { threadId }),
-  sendMessage: (threadId: string, text: string) => invokeImpl<Message>("send_message", { threadId, text }),
+  sendMessage: (threadId: string, text: string, files?: NewAttachment[]) => invokeImpl<Message>("send_message", { threadId, text, files }),
+  threadFiles: (threadId: string) => invokeImpl<SharedFile[]>("thread_files", { threadId }),
+  readAttachment: (id: string) => invokeImpl<string>("read_attachment", { id }),
+  openAttachment: (id: string) => invokeImpl<void>("open_attachment", { id }),
+  revealAttachment: (id: string) => invokeImpl<void>("reveal_attachment", { id }),
+  saveAttachment: (id: string, dest: string) => invokeImpl<void>("save_attachment", { id, dest }),
   stopThread: (threadId: string) => invokeImpl<void>("stop_thread", { threadId }),
   clearThread: (threadId: string) => invokeImpl<void>("clear_thread", { threadId }),
   resolveApproval: (approvalId: string, approved: boolean) => invokeImpl<boolean>("resolve_approval", { approvalId, approved }),
@@ -115,6 +122,9 @@ export const api = {
   computerList: (agentId: string, path: string) => invokeImpl<FileEntry[]>("computer_list", { agentId, path }),
   computerRead: (agentId: string, path: string) => invokeImpl<string>("computer_read", { agentId, path }),
   computerLog: (agentId: string) => invokeImpl<string>("computer_log", { agentId }),
+  computerDesktop: (agentId: string) => invokeImpl<string>("computer_desktop", { agentId }),
+  resetComputer: (agentId: string) => invokeImpl<void>("reset_computer", { agentId }),
+  composioConnect: (toolkit: string) => invokeImpl<string>("composio_connect", { toolkit }),
   voiceSettings: () => invokeImpl<VoiceSettings>("voice_settings"),
   saveVoiceSettings: (settings: VoiceSettings, apiKey?: string) => invokeImpl<VoiceSettings>("save_voice_settings", { settings, apiKey }),
   listVoices: () => invokeImpl<Voice[]>("list_voices"),
@@ -137,4 +147,60 @@ export async function openUrl(url: string) {
   } else {
     window.open(url, "_blank", "noopener");
   }
+}
+
+/** Ask where to save a shared file, then copy it there. */
+export async function saveAttachmentAs(id: string, name: string): Promise<boolean> {
+  if (!isTauri) return false;
+  const { save } = await import("@tauri-apps/plugin-dialog");
+  const dest = await save({ defaultPath: name });
+  if (!dest) return false;
+  await api.saveAttachment(id, dest);
+  return true;
+}
+
+/** Read browser File objects as base64 for `sendMessage`. */
+export async function filesToAttachments(files: File[]): Promise<NewAttachment[]> {
+  return Promise.all(
+    files.map(
+      (f) =>
+        new Promise<NewAttachment>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve({ name: f.name, data: String(reader.result).split(",")[1] ?? "" });
+          reader.onerror = () => reject(reader.error);
+          reader.readAsDataURL(f);
+        }),
+    ),
+  );
+}
+
+export interface UpdateInfo {
+  version: string;
+  notes?: string;
+  install: (onProgress?: (pct: number) => void) => Promise<void>;
+}
+
+/** Check GitHub Releases for a newer signed build. Returns null when up to date or unsupported. */
+export async function checkForUpdate(): Promise<UpdateInfo | null> {
+  if (!isTauri) return null;
+  const { check } = await import("@tauri-apps/plugin-updater");
+  const update = await check();
+  if (!update) return null;
+  return {
+    version: update.version,
+    notes: update.body,
+    install: async (onProgress) => {
+      let total = 0;
+      let done = 0;
+      await update.downloadAndInstall((ev) => {
+        if (ev.event === "Started") total = ev.data.contentLength ?? 0;
+        if (ev.event === "Progress") {
+          done += ev.data.chunkLength;
+          if (total) onProgress?.(Math.round((done / total) * 100));
+        }
+      });
+      const { relaunch } = await import("@tauri-apps/plugin-process");
+      await relaunch();
+    },
+  };
 }

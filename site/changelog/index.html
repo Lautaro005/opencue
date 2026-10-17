@@ -30,7 +30,31 @@
     </div>
     <article class="prose">
       <div class="release">
-        <h2 id="v0.2.0">0.2.0 <span class="badge">Unreleased</span></h2>
+        <h2 id="v0.3.0">0.3.0 <time datetime="2026-10-17">October 17, 2026</time></h2>
+        <h3>New</h3>
+        <ul>
+          <li><strong>macOS</strong>: a universal app (Apple silicon and Intel) and <code>.dmg</code>, built by GitHub Actions with every release.</li>
+          <li><strong>One-line install</strong>: <code>curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh</code> on macOS and Linux, <code>irm https://lautaro005.github.io/opencue/install.ps1 | iex</code> on Windows. Then start OpenCue with <code>opencue</code>.</li>
+          <li><strong>Files in chats and groups</strong>: attach with + → Files, drag and drop or paste. Agents see pictures, get small text files inline and find every file in their workspace under <code>files/</code>. New <code>share_file</code> tool lets agents send files back. Files pages for agents and groups.</li>
+          <li><strong>OpenCue tools for Codex and Claude Code agents</strong>: CLI-backed agents now get memory, web, skills, their computer, files, email and Composio through MCP (<code>opencue mcp-serve</code>). Actions that need approval are refused in Ask-first mode.</li>
+          <li><strong>Desktop view</strong> for Docker computers: a web desktop (Webtop by default; any noVNC, KasmVNC or Selkies image) in a new Desktop tab, published on 127.0.0.1 only. Restart computer keeps the workspace.</li>
+          <li><strong>Automatic updates</strong>: signed updates from GitHub Releases, a note in the sidebar and Install and restart in Settings → About.</li>
+          <li><strong>Connect Composio apps from OpenCue</strong>: Gmail, Calendar, Slack, Notion, GitHub, Drive or any other app, from Settings → Apps.</li>
+          <li><strong>Gmail automations</strong>: “New email” triggers now work with Gmail accounts connected through Composio.</li>
+          <li>Readable schedules: “Weekdays at 9:00” instead of <code>0 9 * * 1-5</code>, also while you type.</li>
+          <li><code>opencue --version</code>; <code>opencue-cli mcp-serve</code>; a macOS build of <code>opencue-cli</code>.</li>
+          <li>Website: new home page with a 3D animation, download button that detects your system with install steps, and <a href="../llms.txt">llms.txt</a>.</li>
+        </ul>
+        <h3>Changed</h3>
+        <ul>
+          <li>Releases are published right away instead of as drafts, so the installers and updater find them.</li>
+          <li>The app binary is called <code>opencue</code> on every system.</li>
+          <li>The microphone permission prompt on macOS explains what it is for.</li>
+        </ul>
+      </div>
+
+      <div class="release">
+        <h2 id="v0.2.0">0.2.0 <time datetime="2026-10-17">October 17, 2026</time></h2>
         <h3>New</h3>
         <ul>
           <li><strong>New look for agents</strong>: drawn avatars — a colored shape with a little face. Ten faces, twelve shapes and a color row; the app icon got the same treatment.</li>
@@ -74,6 +98,7 @@
         <a href="../docs/">Docs</a>
         <a href="./">Changelog</a>
         <a href="../privacy/">Privacy</a>
+        <a href="../llms.txt">llms.txt</a>
         <a href="https://github.com/Lautaro005/opencue/security/policy">Security</a>
         <a href="https://github.com/Lautaro005/opencue">GitHub</a>
       </nav>

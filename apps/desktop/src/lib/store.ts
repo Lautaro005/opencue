@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { api, onCoreEvent } from "./api";
+import { api, onCoreEvent, filesToAttachments, type UpdateInfo } from "./api";
 import { onMessageForVoice } from "./voice";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, ThreadSummary } from "./types";
 
@@ -24,6 +24,8 @@ interface State {
   /** tool message id → pending approval */
   approvals: Record<string, ApprovalRequest>;
   toast: string | null;
+  /** A newer release found by the updater, if any. */
+  update: UpdateInfo | null;
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -33,7 +35,7 @@ interface State {
   openSettings: (s?: SettingsSection) => void;
   closeSettings: () => void;
   loadMessages: (threadId: string) => Promise<void>;
-  send: (threadId: string, text: string) => Promise<void>;
+  send: (threadId: string, text: string, files?: File[]) => Promise<void>;
   setSetting: (key: string, value: string) => Promise<void>;
   refreshProviders: () => Promise<void>;
   showToast: (text: string) => void;
@@ -57,6 +59,7 @@ export const useStore = create<State>((set, get) => ({
   working: {},
   approvals: {},
   toast: null,
+  update: null,
 
   init: async () => {
     if (!listening) {
@@ -109,9 +112,10 @@ export const useStore = create<State>((set, get) => ({
     set((s) => ({ messages: { ...s.messages, [threadId]: list } }));
   },
 
-  send: async (threadId, text) => {
+  send: async (threadId, text, files = []) => {
     try {
-      await api.sendMessage(threadId, text);
+      const attachments = files.length ? await filesToAttachments(files) : undefined;
+      await api.sendMessage(threadId, text, attachments);
     } catch (e) {
       get().showToast(String(e));
     }

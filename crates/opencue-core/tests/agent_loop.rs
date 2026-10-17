@@ -254,3 +254,87 @@ async fn webhook_automation_runs_a_command_on_the_agents_computer() {
     let a = core.automations(Some(&agent.id)).await.unwrap();
     assert_eq!(a[0].last_status.as_deref(), Some("ok"));
 }
+
+#[tokio::test]
+async fn shared_files_reach_the_workspace_and_agents_share_files_back() {
+    use base64::Engine;
+    use opencue_core::computer::ComputerBackend;
+    use opencue_core::models::{AgentSettings, NewAttachment};
+
+    const SHARE_CALL: &[&str] = &[
+        r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"share_file","arguments":"{\"path\":\"files/notes.txt\",\"caption\":\"Here it is\"}"}}]}}]}"#,
+    ];
+    const DONE_REPLY: &[&str] = &[r#"{"choices":[{"delta":{"content":"Sent it back."}}]}"#];
+
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let (base, _) = mock_llm_with(SHARE_CALL, DONE_REPLY).await;
+    let provider = core
+        .save_provider(
+            ProviderConfig {
+                id: String::new(),
+                kind: ProviderKind::OpenaiCompatible,
+                name: "Mock".into(),
+                base_url: Some(base),
+                default_model: Some("mock-1".into()),
+                enabled: true,
+                has_key: false,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let agent = core
+        .create_agent(NewAgent {
+            name: "Clerk".into(),
+            provider_id: Some(provider.id),
+            settings: Some(AgentSettings {
+                computer: ComputerBackend::Host,
+                ..Default::default()
+            }),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+
+    let sent = core
+        .send_message_with_files(
+            &agent.id,
+            "",
+            &[NewAttachment {
+                name: "../notes.txt".into(),
+                data: base64::engine::general_purpose::STANDARD.encode("hearing on the 9th"),
+            }],
+        )
+        .await
+        .unwrap();
+    assert_eq!(sent.attachments.len(), 1);
+    assert_eq!(sent.attachments[0].name, "notes.txt");
+    let copy = core
+        .paths()
+        .agent_workspace(&agent.id)
+        .join("files/notes.txt");
+    assert_eq!(
+        std::fs::read_to_string(&copy).unwrap(),
+        "hearing on the 9th"
+    );
+
+    let shared = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let files = core.thread_files(&agent.id).await.unwrap();
+            if files.len() == 2 && !core.is_busy(&agent.id) {
+                break files;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("agent shared the file back");
+    assert_eq!(shared[0].agent_id.as_deref(), Some(agent.id.as_str()));
+    let (att, bytes) = core
+        .read_attachment(&shared[0].attachment.id)
+        .await
+        .unwrap();
+    assert_eq!(att.name, "notes.txt");
+    assert_eq!(bytes, b"hearing on the 9th");
+}

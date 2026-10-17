@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ChevronRight, File, Folder, FolderOpen, RefreshCw, Settings2, TerminalSquare, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, ExternalLink, File, Folder, FolderOpen, Maximize2, Minimize2, MonitorPlay, RefreshCw, RotateCcw, Settings2, TerminalSquare, X } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { api } from "../../lib/api";
+import { api, openUrl } from "../../lib/api";
 import type { Agent, ComputerBackend, FileEntry } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { IconButton, Spinner } from "../ui";
@@ -19,15 +19,25 @@ function formatSize(n: number) {
 export function ComputerPanel({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
   const setPanel = useStore((s) => s.setPanel);
-  const [tab, setTab] = useState<"terminal" | "files">("terminal");
+  const [tab, setTab] = useState<"terminal" | "files" | "desktop">("terminal");
+  const [wide, setWide] = useState(false);
   const backend = agent.settings.computer;
+  const tabs = backend === "docker" ? (["terminal", "files", "desktop"] as const) : (["terminal", "files"] as const);
+  useEffect(() => {
+    if (backend !== "docker" && tab === "desktop") setTab("terminal");
+  }, [backend, tab]);
 
   return (
-    <aside className="animate-slide flex h-full w-[460px] shrink-0 flex-col border-l border-line bg-panel">
+    <aside className={cx("animate-slide flex h-full shrink-0 flex-col border-l border-line bg-panel transition-[width]", wide ? "w-[min(960px,70vw)]" : "w-[460px]")}>
       <div className="flex h-13 shrink-0 items-center gap-2 px-4">
         <h2 className="text-[14px] font-semibold">{t("computer.title")}</h2>
         <span className="rounded-md bg-hover px-1.5 py-0.5 text-[11px] text-muted">{t(`computer.backend.${backend}`)}</span>
         <div className="ml-auto flex items-center gap-0.5">
+          {tab === "desktop" && (
+            <IconButton label={wide ? t("computer.narrow") : t("computer.widen")} onClick={() => setWide((v) => !v)}>
+              {wide ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </IconButton>
+          )}
           <IconButton label={t("computer.configure")} onClick={() => setPanel("profile")}>
             <Settings2 size={16} />
           </IconButton>
@@ -48,7 +58,7 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
       ) : (
         <>
           <div className="flex gap-1 px-4 pb-2">
-            {(["terminal", "files"] as const).map((k) => (
+            {tabs.map((k) => (
               <button
                 key={k}
                 onClick={() => setTab(k)}
@@ -58,10 +68,89 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
               </button>
             ))}
           </div>
-          {tab === "terminal" ? <Terminal agent={agent} /> : <Files agent={agent} />}
+          {tab === "terminal" ? <Terminal agent={agent} /> : tab === "files" ? <Files agent={agent} /> : <Desktop agent={agent} />}
         </>
       )}
     </aside>
+  );
+}
+
+/** The Docker computer's web desktop (noVNC / KasmVNC / Selkies), served on 127.0.0.1. */
+function Desktop({ agent }: { agent: Agent }) {
+  const { t } = useTranslation();
+  const openSettings = useStore((s) => s.openSettings);
+  const [state, setState] = useState<{ url?: string; error?: string; loading: boolean }>({ loading: true });
+  const [frameKey, setFrameKey] = useState(0);
+
+  const load = useCallback(async () => {
+    setState({ loading: true });
+    try {
+      setState({ url: await api.computerDesktop(agent.id), loading: false });
+    } catch (e) {
+      setState({ error: String(e), loading: false });
+    }
+  }, [agent.id]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const restart = async () => {
+    setState({ loading: true });
+    try {
+      await api.resetComputer(agent.id);
+    } catch (e) {
+      setState({ error: String(e), loading: false });
+      return;
+    }
+    await load();
+  };
+
+  if (state.loading) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 text-[12.5px] text-muted">
+        <Spinner /> {t("computer.desktopStarting")}
+      </div>
+    );
+  }
+  if (state.error || !state.url) {
+    const needsSetting = /settings/i.test(state.error ?? "");
+    const needsRestart = /without a desktop/i.test(state.error ?? "");
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
+        <MonitorPlay size={30} className="text-faint" />
+        <p className="text-[13.5px] font-medium">{t("computer.desktopTitle")}</p>
+        <p className="text-[12.5px] text-muted">{needsSetting ? t("computer.desktopOff") : needsRestart ? t("computer.desktopRestartHint") : state.error}</p>
+        {needsSetting ? (
+          <button onClick={() => openSettings("computers")} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+            {t("computer.openSettings")}
+          </button>
+        ) : (
+          <button onClick={() => void (needsRestart ? restart() : load())} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+            {needsRestart ? t("computer.restart") : t("computer.retry")}
+          </button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div className="flex min-h-0 flex-1 flex-col px-4 pb-4">
+      <div className="mb-2 flex items-center gap-1">
+        <span className="truncate font-mono text-[11.5px] text-muted">{state.url}</span>
+        <div className="ml-auto flex items-center">
+          <IconButton label={t("computer.reload")} onClick={() => setFrameKey((k) => k + 1)} className="size-7">
+            <RefreshCw size={13} />
+          </IconButton>
+          <IconButton label={t("computer.openBrowser")} onClick={() => void openUrl(state.url!)} className="size-7">
+            <ExternalLink size={13} />
+          </IconButton>
+          <IconButton label={t("computer.restart")} onClick={() => confirm(t("computer.restartConfirm")) && void restart()} className="size-7">
+            <RotateCcw size={13} />
+          </IconButton>
+        </div>
+      </div>
+      <iframe key={frameKey} src={state.url} title={t("computer.desktop")} className="min-h-0 flex-1 rounded-xl border border-line bg-black" allow="clipboard-read; clipboard-write; fullscreen" />
+    </div>
   );
 }
 

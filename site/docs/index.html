@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Docs — OpenCue</title>
-  <meta name="description" content="How to install OpenCue and set up agents, providers, memory, groups, apps, email, automations, computers and voice.">
+  <meta name="description" content="How to install OpenCue on macOS, Linux and Windows and set up agents, providers, memory, files, groups, apps, email, automations, computers, voice and updates.">
   <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
   <link rel="stylesheet" href="../assets/style.css">
 </head>
@@ -38,6 +38,7 @@
         <a href="#profile">Profile &amp; avatar</a>
         <a href="#memory">Instructions &amp; memory</a>
         <a href="#groups">Group chats</a>
+        <a href="#files">Files</a>
         <a href="#approvals">Approvals</a>
         <div class="group">Capabilities</div>
         <a href="#apps">Apps, MCP &amp; Composio</a>
@@ -48,6 +49,7 @@
         <a href="#voice">Voice</a>
         <a href="#internet">Internet</a>
         <div class="group">More</div>
+        <a href="#updates">Updates</a>
         <a href="#data">Data &amp; privacy</a>
         <a href="#cli">Command line</a>
         <a href="#build">Build from source</a>
@@ -56,15 +58,30 @@
 
       <article class="prose">
         <h2 id="install">Install</h2>
-        <p>Download the latest installer from <a href="https://github.com/Lautaro005/opencue/releases/latest">GitHub Releases</a>:</p>
+        <h3>From a terminal (recommended)</h3>
+        <p>macOS and Linux:</p>
+        <pre><code>curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh</code></pre>
+        <p>Windows (PowerShell):</p>
+        <pre><code>irm https://lautaro005.github.io/opencue/install.ps1 | iex</code></pre>
+        <p>Then start it with <code>opencue</code> (or from Applications, the Start menu or your app menu). The scripts install the latest release for your user without admin rights:</p>
+        <table>
+          <tr><th>System</th><th>Installs to</th><th>Command</th></tr>
+          <tr><td>macOS 11+ (Apple silicon and Intel)</td><td><code>~/Applications/OpenCue.app</code></td><td><code>~/.local/bin/opencue</code></td></tr>
+          <tr><td>Linux x86-64</td><td><code>~/.local/opt/opencue/OpenCue.AppImage</code> + app menu entry</td><td><code>~/.local/bin/opencue</code></td></tr>
+          <tr><td>Windows 10/11</td><td><code>%LOCALAPPDATA%\OpenCue</code></td><td>added to your PATH</td></tr>
+        </table>
+        <p>If <code>~/.local/bin</code> isn't on your PATH, the script prints the line to add. Uninstall on macOS/Linux with <code>curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh -s -- --uninstall</code> (your data is kept); on Windows use Settings → Apps.</p>
+        <h3>Installers</h3>
+        <p>Or download one from <a href="https://github.com/Lautaro005/opencue/releases/latest">GitHub Releases</a>:</p>
         <table>
           <tr><th>System</th><th>File</th><th>Notes</th></tr>
-          <tr><td>Linux</td><td><code>.AppImage</code></td><td>Runs anywhere: <code>chmod +x OpenCue*.AppImage</code> and open it.</td></tr>
+          <tr><td>macOS</td><td><code>.dmg</code></td><td>Universal (Apple silicon and Intel). Drag OpenCue to Applications.</td></tr>
+          <tr><td>Linux</td><td><code>.AppImage</code></td><td>Runs anywhere: <code>chmod +x OpenCue*.AppImage</code> and open it. Needs FUSE 2 (<code>libfuse2</code>).</td></tr>
           <tr><td>Debian / Ubuntu</td><td><code>.deb</code></td><td><code>sudo apt install ./OpenCue_*.deb</code></td></tr>
           <tr><td>Fedora / openSUSE</td><td><code>.rpm</code></td><td><code>sudo dnf install ./OpenCue-*.rpm</code></td></tr>
-          <tr><td>Windows 10/11</td><td><code>.msi</code> or <code>-setup.exe</code></td><td>The setup.exe installs for the current user without admin rights.</td></tr>
+          <tr><td>Windows 10/11</td><td><code>-setup.exe</code> or <code>.msi</code></td><td>The setup.exe installs for the current user without admin rights.</td></tr>
         </table>
-        <p>Installers are not code-signed yet, so Windows SmartScreen may warn you the first time. macOS isn't distributed but builds from source.</p>
+        <p class="note">The apps aren't notarized or code-signed by Apple or Microsoft yet. On macOS, a downloaded <code>.dmg</code> is blocked the first time: open <strong>System Settings → Privacy &amp; Security</strong> and choose <strong>Open Anyway</strong> (the terminal install doesn't need this). On Windows, SmartScreen may show <em>More info → Run anyway</em>. Updates are signed and checked by the app.</p>
 
         <h2 id="first-agent">Your first agent</h2>
         <ol>
@@ -82,12 +99,14 @@
           <tr><td>Ollama, LM Studio, any OpenAI-compatible server</td><td>Base URL, no key needed for local servers</td></tr>
           <tr><td>ChatGPT / Codex, Claude Code</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code> or <code>claude</code> program you are already logged in to</td></tr>
         </table>
-        <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client. Trade-off: CLI agents reply with text only — OpenCue's tools (memory, web, email, computer, MCP) need an API-key provider.</p>
+        <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client.</p>
+        <h3>OpenCue tools for CLI agents</h3>
+        <p>CLI agents get OpenCue's own tools — memory, web, skills, their computer, files, email and Composio — through MCP: OpenCue hands the CLI a server started as <code>opencue mcp-serve --agent &lt;id&gt;</code>. Turn it off per agent in profile → <strong>Model</strong> → <em>OpenCue tools</em>. The CLI can't show OpenCue's approval cards, so in <em>Ask first</em> mode actions that need approval (sending email, commands on your computer, deleting memories…) are refused and the agent tells you instead. Your own MCP servers configured in OpenCue aren't passed on; configure those in the CLI itself.</p>
 
         <h2 id="profile">Profile &amp; avatar</h2>
         <p>Click an agent's face in its profile to change it: ten faces, twelve shapes and a color row. The profile is organized like this:</p>
         <ul>
-          <li><strong>Assets</strong> — <em>Mails</em> (its inbox) and <em>Computer</em> (where it runs commands).</li>
+          <li><strong>Assets</strong> — <em>Mails</em> (its inbox), <em>Computer</em> (where it runs commands) and <em>Files</em> (everything shared in the chat).</li>
           <li><strong>Configurations</strong> — Model, Apps, Skills, Instructions, Memory, Voice and Permissions.</li>
           <li><strong>Automations</strong> — what wakes the agent up by itself.</li>
         </ul>
@@ -107,6 +126,16 @@
           <li>Agents hand work to each other by mentioning them or with <code>send_to_agent</code>.</li>
           <li><strong>Automatic turns</strong> (group details) caps how many hand-offs happen before the group waits for you.</li>
         </ul>
+
+        <h2 id="files">Files</h2>
+        <p>Attach files with <strong>+ → Files</strong> in the message box, by dragging them onto the chat, or by pasting an image. Up to 10 files per message, 25 MB each.</p>
+        <ul>
+          <li>Each file is copied into the workspace of the agent (or of every member of a group) as <code>files/&lt;name&gt;</code>, so agents with a computer can open it with their tools.</li>
+          <li>Pictures (PNG, JPEG, GIF, WebP) are sent to models that can see images; small text files (up to 40 KB) are included in the message.</li>
+          <li>Agents with a computer send files back with <code>share_file</code> — a report, a spreadsheet, a chart — and they appear in the chat like yours.</li>
+          <li>Click a file to open it; hover for <em>Save as…</em> and <em>Show in folder</em>. Every file shared in a chat is listed in the agent's <strong>Files</strong> page or the group's <strong>Files</strong> section.</li>
+        </ul>
+        <p>Files are kept in the <code>files/</code> folder of your data folder.</p>
 
         <h2 id="approvals">Approvals</h2>
         <p>In <strong>Ask first</strong> mode (the default) these wait for you to click Allow in the chat:</p>
@@ -131,8 +160,8 @@
         <h3>Composio</h3>
         <p><a href="https://composio.dev">Composio</a> connects 1000+ apps (Gmail, Slack, Notion, GitHub, Google Calendar…).</p>
         <ol>
-          <li>Create a Composio account and connect the apps you want in its dashboard.</li>
-          <li>Paste your Composio API key in <strong>Settings → Apps → Composio</strong>. The <em>User ID</em> is the Composio user whose connected accounts agents should use (<code>default</code> if empty).</li>
+          <li>Create a Composio account and paste your API key in <strong>Settings → Apps → Composio</strong>. The <em>User ID</em> is the Composio user whose connected accounts agents should use (<code>default</code> if empty).</li>
+          <li>Under <strong>Connect an app</strong>, pick Gmail, Google Calendar, Slack, Notion, GitHub, Google Drive or type any other app. Sign in in the browser page that opens, then press <strong>Refresh</strong>. You can also connect apps in the Composio dashboard.</li>
           <li>Turn on <strong>Composio apps</strong> in an agent's Apps page. It gets two tools: <code>composio_search</code> to find an action and <code>composio_execute</code> to run it.</li>
         </ol>
 
@@ -161,14 +190,14 @@ description: Write the Friday status report from this week's notes and emails.
         <table>
           <tr><th>Trigger</th><th>Details</th></tr>
           <tr><td>Schedule</td><td>Five-field cron in local time: <code>minute hour day month weekday</code>. <code>0 9 * * 1-5</code> = weekdays at 9:00. Runs missed while OpenCue was closed for more than 10 minutes are skipped.</td></tr>
-          <tr><td>New email</td><td>Checks the agent's IMAP inbox every 1–60 minutes. Optional filter on sender or subject. The first check only records where the inbox is, so old mail doesn't fire.</td></tr>
+          <tr><td>New email</td><td>Checks the agent's inbox (IMAP, or Gmail through Composio) every 1–60 minutes. Optional filter on sender or subject. The first check only records what is already there, so old mail doesn't fire.</td></tr>
           <tr><td>Webhook</td><td>A private URL on your computer, e.g. <code>http://127.0.0.1:7777/hooks/&lt;token&gt;</code>. Anything you POST becomes trigger data.</td></tr>
           <tr><td>Group message</td><td>When you write in a group the agent belongs to, optionally only if the message contains a keyword.</td></tr>
         </table>
         <pre><code>curl -X POST http://127.0.0.1:7777/hooks/YOUR_TOKEN \
   -H 'Content-Type: application/json' \
   -d '{"event":"deploy finished","status":"ok"}'</code></pre>
-        <p>The webhook server listens on <code>127.0.0.1</code> only. Change the port in <strong>Settings → Computers → Webhooks</strong>. Automations run while OpenCue is open or in the tray.</p>
+        <p>The automation list describes schedules in plain words (“Weekdays at 9:00”), and so does the editor as you type a cron expression. The webhook server listens on <code>127.0.0.1</code> only. Change the port in <strong>Settings → Computers → Webhooks</strong>. Automations run while OpenCue is open or in the tray.</p>
 
         <h2 id="computers">Computers</h2>
         <p>Profile → <strong>Computer</strong> picks where an agent runs <code>run_command</code>, <code>read_file</code>, <code>write_file</code> and <code>list_files</code>. The screen icon in the chat header opens the live terminal and a file browser; you can type your own commands there too.</p>
@@ -186,6 +215,13 @@ description: Write the Friday status report from this week's notes and emails.
           <li>In <strong>Settings → Computers → SPACE</strong>, paste the API URL (for example <code>http://host:8080/v1</code>), the template to boot and the API token, then <strong>Test connection</strong>.</li>
         </ol>
         <p>Each agent gets its own sandbox, created on first use and woken up when it was suspended.</p>
+        <h3>Desktop view (Docker)</h3>
+        <p>Turn on <strong>Settings → Computers → Docker → Desktop view</strong> and Docker computers start from an image with a desktop you can watch and use in the <strong>Desktop</strong> tab of the Computer panel (widen it with the arrows icon). Programs the agent starts with <code>run_command</code> appear there (<code>DISPLAY=:1</code>).</p>
+        <ul>
+          <li>Default image: <a href="https://docs.linuxserver.io/images/docker-webtop/">linuxserver.io Webtop</a> (<code>lscr.io/linuxserver/webtop:ubuntu-xfce</code>, web port 3000). Any image that serves a web desktop works — noVNC, KasmVNC or Selkies — set its image and port.</li>
+          <li>The port is published on <code>127.0.0.1</code> only, on a random free port.</li>
+          <li>Existing computers keep their old container: use <strong>Restart computer</strong> in the Desktop tab. Restarting keeps the workspace.</li>
+        </ul>
 
         <h2 id="voice">Voice</h2>
         <ol>
@@ -197,12 +233,17 @@ description: Write the Friday status report from this week's notes and emails.
         <h2 id="internet">Internet</h2>
         <p>Agents with web access get <code>web_search</code> (DuckDuckGo and Wikipedia, no API keys) and <code>web_fetch</code> (any page, converted to Markdown). Results are cached in the local database. If you host <a href="https://docs.searxng.org">SearXNG</a>, add its URL in <strong>Settings → Internet</strong> and it is queried first.</p>
 
+        <h2 id="updates">Updates</h2>
+        <p>OpenCue checks GitHub Releases for a new version a few seconds after it starts. When there is one, a note appears at the bottom of the sidebar; <strong>Settings → About → Install and restart</strong> downloads it, verifies its signature and restarts. Turn off the automatic check there. In-app updates work for the macOS app, the Windows installers and the Linux AppImage; <code>.deb</code> and <code>.rpm</code> installs update through a new download.</p>
+
         <h2 id="data">Data &amp; privacy</h2>
         <table>
-          <tr><th></th><th>Linux</th><th>Windows</th></tr>
-          <tr><td>Data folder</td><td><code>~/.local/share/opencue</code></td><td><code>%APPDATA%\opencue\data</code></td></tr>
+          <tr><th>System</th><th>Data folder</th></tr>
+          <tr><td>macOS</td><td><code>~/Library/Application Support/opencue</code></td></tr>
+          <tr><td>Linux</td><td><code>~/.local/share/opencue</code></td></tr>
+          <tr><td>Windows</td><td><code>%APPDATA%\opencue\data</code></td></tr>
         </table>
-        <p>Inside: <code>opencue.db</code> (agents, chats, settings, automations, web cache), <code>agents/&lt;id&gt;/</code> (instructions, memory, workspace), <code>memory/GLOBAL.md</code> and <code>skills/</code>. Set <code>OPENCUE_HOME</code> to use another folder. Secrets (API keys, email passwords, tokens) go to the system keychain, or a <code>0600</code> <code>secrets.json</code> if there is none. See the <a href="../privacy/">privacy policy</a> for what leaves your computer.</p>
+        <p>Inside: <code>opencue.db</code> (agents, chats, settings, automations, web cache), <code>agents/&lt;id&gt;/</code> (instructions, memory, workspace), <code>files/</code> (files shared in chats), <code>memory/GLOBAL.md</code> and <code>skills/</code>. Set <code>OPENCUE_HOME</code> to use another folder. Secrets (API keys, email passwords, tokens) go to the system keychain, or a <code>0600</code> <code>secrets.json</code> if there is none. See the <a href="../privacy/">privacy policy</a> for what leaves your computer.</p>
 
         <h2 id="cli">Command line</h2>
         <p><code>opencue-cli</code> (zipped with each release) uses the same data folder as the app:</p>
@@ -211,15 +252,18 @@ opencue-cli agents create "Nova" --instructions "Plan my trips"
 opencue-cli chat Nova --message "Find a quiet hotel in Montevideo"
 opencue-cli mcp import ~/.config/Claude/claude_desktop_config.json
 opencue-cli search rust async traits
+opencue-cli mcp-serve --agent &lt;id&gt;   # OpenCue's tools as an MCP server (stdio)
 opencue-cli where</code></pre>
+        <p>The desktop binary understands <code>opencue mcp-serve --agent &lt;id&gt;</code> and <code>opencue --version</code> too.</p>
 
         <h2 id="build">Build from source</h2>
-        <p>Rust (stable), Node 22+, and on Linux <code>libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev</code>.</p>
+        <p>Rust (stable), Node 22+, and on Linux <code>libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev</code>. On macOS, the Xcode command-line tools.</p>
         <pre><code>git clone https://github.com/Lautaro005/opencue
 cd opencue/apps/desktop
 npm install
 npm run tauri dev     # the desktop app
 npm run tauri build   # installers for your system</code></pre>
+        <p>Release builds create signed update bundles, so <code>tauri build</code> needs <code>TAURI_SIGNING_PRIVATE_KEY</code>; for a local build without it, add <code>-c '{"bundle":{"createUpdaterArtifacts":false}}'</code>.</p>
 
         <h2 id="faq">FAQ</h2>
         <h3>Is it really free?</h3>
@@ -241,6 +285,7 @@ npm run tauri build   # installers for your system</code></pre>
         <a href="./">Docs</a>
         <a href="../changelog/">Changelog</a>
         <a href="../privacy/">Privacy</a>
+        <a href="../llms.txt">llms.txt</a>
         <a href="https://github.com/Lautaro005/opencue/security/policy">Security</a>
         <a href="https://github.com/Lautaro005/opencue">GitHub</a>
       </nav>

@@ -54,10 +54,20 @@ fn to_anthropic_messages(req: &ChatRequest) -> Vec<Value> {
     };
     for m in &req.messages {
         match m.role {
-            ChatRole::User => push(
-                "user",
-                vec![json!({ "type": "text", "text": non_empty(&m.content) })],
-            ),
+            ChatRole::User => {
+                let mut blocks: Vec<Value> = m
+                    .images
+                    .iter()
+                    .map(|img| {
+                        json!({
+                            "type": "image",
+                            "source": { "type": "base64", "media_type": img.mime, "data": img.data }
+                        })
+                    })
+                    .collect();
+                blocks.push(json!({ "type": "text", "text": non_empty(&m.content) }));
+                push("user", blocks)
+            }
             ChatRole::Assistant => {
                 let mut blocks = Vec::new();
                 if !m.content.trim().is_empty() {
@@ -272,6 +282,7 @@ mod tests {
             ],
             tools: vec![],
             temperature: None,
+            agent_id: None,
         };
         let msgs = to_anthropic_messages(&req);
         assert_eq!(msgs.len(), 3);

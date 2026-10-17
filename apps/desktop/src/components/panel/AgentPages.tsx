@@ -4,7 +4,7 @@ import { Blocks, Clock, Copy, Mail, Pencil, Play, Plus, Trash2, Webhook, Workflo
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import type { Agent, AgentSettings, Automation, ComputerBackend, ComputerSettings, EmailAccount, SkillSummary, Trigger, Voice } from "../../lib/types";
-import { cx, formatTime } from "../../lib/format";
+import { cx, describeCron, formatTime } from "../../lib/format";
 import { Button, DialogHeader, Field, IconButton, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { BACKENDS } from "./ComputerPanel";
 import { Row } from "./Section";
@@ -269,7 +269,7 @@ export function VoicePage({ agent, onChange }: { agent: Agent; onChange: (s: Par
 function describeTrigger(tr: Trigger, t: (k: string, o?: Record<string, unknown>) => string, groups: Record<string, { name: string }>) {
   switch (tr.kind) {
     case "schedule":
-      return t("automations.summary.schedule", { cron: tr.cron });
+      return describeCron(tr.cron);
     case "email":
       return tr.filter ? t("automations.summary.emailFilter", { filter: tr.filter }) : t("automations.summary.email");
     case "webhook":
@@ -409,6 +409,7 @@ function AutomationEditor({ agent, initial, onClose }: { agent: Agent; initial: 
         {trigger.kind === "schedule" && (
           <Field label={t("automations.cron")} hint={t("automations.cronHint")}>
             <Input value={trigger.cron} onChange={(e) => setTrigger({ ...trigger, cron: e.target.value })} className="font-mono" />
+            {describeCron(trigger.cron) !== trigger.cron && <p className="mt-1 text-[12px] text-accent">{describeCron(trigger.cron)}</p>}
             <div className="mt-1.5 flex flex-wrap gap-1">
               {PRESETS.map((p) => (
                 <button key={p.cron} onClick={() => setTrigger({ ...trigger, cron: p.cron })} className="rounded-full border border-line px-2 py-0.5 text-[11.5px] text-muted hover:bg-hover">

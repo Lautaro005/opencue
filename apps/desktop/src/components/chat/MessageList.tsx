@@ -8,6 +8,7 @@ import { AvatarView } from "../AvatarView";
 import { Typing } from "../ui";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
+import { AttachmentList } from "./Attachments";
 
 const EMPTY: Message[] = [];
 
@@ -59,7 +60,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
           const divider = day !== lastDay ? dayLabel(m.created_at, i18n.language) : null;
           lastDay = day;
           // Assistant turns that only carry tool calls render nothing themselves.
-          const invisible = m.role === "assistant" && !m.content && m.status === "done";
+          const invisible = m.role === "assistant" && !m.content && !m.attachments?.length && m.status === "done";
           const author = m.role === "user" ? "user" : m.role === "event" ? "event" : m.agent_id;
           const firstOfRun = !invisible && author !== prevAuthor;
           if (!invisible) prevAuthor = author;
@@ -94,6 +95,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                       <Typing />
                     </div>
                   ) : null}
+                  {m.attachments?.length ? <AttachmentList items={m.attachments} /> : null}
                 </AgentRow>
               )}
               {m.role === "tool" && (
@@ -112,8 +114,9 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
 function UserBubble({ m, firstOfRun }: { m: Message; firstOfRun: boolean }) {
   return (
     <div className={cx("flex justify-end", firstOfRun && "mt-3")}>
-      <div className="group flex max-w-[75%] flex-col items-end">
-        <div className="selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink">{m.content}</div>
+      <div className="group flex max-w-[75%] flex-col items-end gap-1">
+        {m.attachments?.length ? <AttachmentList items={m.attachments} align="end" /> : null}
+        {m.content && <div className="selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink">{m.content}</div>}
         <span className="mt-0.5 h-4 text-[11px] text-faint opacity-0 transition-opacity group-hover:opacity-100">{clockTime(m.created_at)}</span>
       </div>
     </div>

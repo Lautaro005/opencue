@@ -38,9 +38,39 @@ impl ComputerBackend {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ComputerConfig {
     pub docker_image: String,
+    /// Run Docker computers from a desktop image and show it in the Computer panel.
+    #[serde(default)]
+    pub docker_desktop: bool,
+    /// Image with a web desktop (noVNC, KasmVNC or Selkies); empty uses [`DEFAULT_DESKTOP_IMAGE`].
+    #[serde(default)]
+    pub desktop_image: String,
+    /// Port of the web desktop inside the container; 0 uses [`DEFAULT_DESKTOP_PORT`].
+    #[serde(default)]
+    pub desktop_port: u16,
     pub space_url: Option<String>,
     pub space_template: String,
     pub space_token: Option<String>,
+}
+
+/// linuxserver.io's Webtop: maintained, multi-arch, serves an XFCE desktop to the browser.
+pub const DEFAULT_DESKTOP_IMAGE: &str = "lscr.io/linuxserver/webtop:ubuntu-xfce";
+pub const DEFAULT_DESKTOP_PORT: u16 = 3000;
+
+impl ComputerConfig {
+    pub fn desktop_image(&self) -> &str {
+        match self.desktop_image.trim() {
+            "" => DEFAULT_DESKTOP_IMAGE,
+            s => s,
+        }
+    }
+
+    pub fn desktop_port(&self) -> u16 {
+        if self.desktop_port == 0 {
+            DEFAULT_DESKTOP_PORT
+        } else {
+            self.desktop_port
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,15 +149,12 @@ impl Computer<'_> {
             ComputerBackend::Docker => {
                 self.ensure_container().await?;
                 let mut cmd = tokio::process::Command::new("docker");
-                cmd.args([
-                    "exec",
-                    "-w",
-                    "/workspace",
-                    &self.container_name(),
-                    "sh",
-                    "-lc",
-                    command,
-                ]);
+                cmd.args(["exec", "-w", "/workspace"]);
+                if self.config.docker_desktop {
+                    // GUI programs the agent starts show up in the desktop view.
+                    cmd.args(["-e", "DISPLAY=:1"]);
+                }
+                cmd.args([&self.container_name(), "sh", "-lc", command]);
                 run_process(cmd, timeout, sink, cancel).await
             }
             ComputerBackend::Space => {
@@ -173,29 +200,73 @@ impl Computer<'_> {
                 self.config.docker_image.trim()
             };
             let mount = format!("{}:/workspace", self.workspace.display());
-            tokio::process::Command::new("docker")
-                .args([
-                    "run",
-                    "-d",
-                    "--name",
-                    &name,
-                    "--label",
-                    "opencue=agent",
-                    "-v",
-                    &mount,
-                    "-w",
-                    "/workspace",
-                    image,
-                    "sleep",
-                    "infinity",
-                ])
-                .output()
-                .await?
+            let mut cmd = tokio::process::Command::new("docker");
+            cmd.args(["run", "-d", "--name", &name, "--label", "opencue=agent"]);
+            cmd.args(["-v", &mount]);
+            if self.config.docker_desktop {
+                // The web desktop is published on a random port of 127.0.0.1 only.
+                let publish = format!("127.0.0.1::{}", self.config.desktop_port());
+                cmd.args(["--label", "opencue.desktop=1", "-p", &publish]);
+                cmd.args(["--shm-size", "1g", self.config.desktop_image()]);
+            } else {
+                cmd.args(["-w", "/workspace", image, "sleep", "infinity"]);
+            }
+            cmd.output().await?
         };
         anyhow::ensure!(
             out.status.success(),
             "could not start the container: {}",
             String::from_utf8_lossy(&out.stderr).trim()
+        );
+        Ok(())
+    }
+
+    /// Address of the Docker computer's web desktop on this machine.
+    pub async fn desktop_url(&self) -> anyhow::Result<String> {
+        anyhow::ensure!(
+            self.backend == ComputerBackend::Docker,
+            "the desktop view needs a Docker computer"
+        );
+        anyhow::ensure!(
+            self.config.docker_desktop,
+            "turn on the desktop in Settings → Computers first"
+        );
+        self.ensure_container().await?;
+        let out = tokio::process::Command::new("docker")
+            .args([
+                "port",
+                &self.container_name(),
+                &format!("{}/tcp", self.config.desktop_port()),
+            ])
+            .output()
+            .await?;
+        let mapping = String::from_utf8_lossy(&out.stdout);
+        let addr = mapping
+            .lines()
+            .find(|l| l.starts_with("127.0.0.1:"))
+            .ok_or_else(|| {
+                anyhow::anyhow!(
+                    "this computer was created without a desktop; restart it to add one"
+                )
+            })?;
+        Ok(format!("http://{}/", addr.trim()))
+    }
+
+    /// Remove the Docker container (the workspace folder is kept); the next command recreates it.
+    pub async fn reset(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.backend == ComputerBackend::Docker,
+            "only Docker computers can be restarted from here"
+        );
+        let out = tokio::process::Command::new("docker")
+            .args(["rm", "-f", &self.container_name()])
+            .output()
+            .await?;
+        let err = String::from_utf8_lossy(&out.stderr);
+        anyhow::ensure!(
+            out.status.success() || err.contains("No such container"),
+            "could not remove the container: {}",
+            err.trim()
         );
         Ok(())
     }
@@ -214,6 +285,11 @@ impl Computer<'_> {
             self.config.space_token.clone(),
             &self.config.space_template,
         )
+    }
+
+    /// The local file behind a workspace path (host, Docker and WSL share the folder).
+    pub fn resolve(&self, rel: &str) -> anyhow::Result<PathBuf> {
+        self.local_path(rel)
     }
 
     /// Files live in the workspace folder for host/docker/wsl, and inside the VM for SPACE.
