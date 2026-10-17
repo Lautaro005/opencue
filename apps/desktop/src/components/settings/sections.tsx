@@ -1,0 +1,275 @@
+import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { Box, Search, Server, Terminal } from "lucide-react";
+import { useStore } from "../../lib/store";
+import { api } from "../../lib/api";
+import type { AppInfo, MemoryEntry, UsageRow } from "../../lib/types";
+import { compact } from "../../lib/format";
+import { LANGUAGES, setLanguage } from "../../i18n";
+import { getTheme, setTheme, type Theme } from "../../lib/theme";
+import { Badge, Button, Input, Select, Toggle } from "../ui";
+import { Card, CardRow, PageTitle } from "./SettingsModal";
+
+export function GeneralSection() {
+  const { t, i18n } = useTranslation();
+  const settings = useStore((s) => s.settings);
+  const setSetting = useStore((s) => s.setSetting);
+  const [theme, setThemeState] = useState<Theme>(getTheme());
+  const [info, setInfo] = useState<AppInfo | null>(null);
+  const [global, setGlobal] = useState<MemoryEntry[]>([]);
+  const [draft, setDraft] = useState("");
+  useEffect(() => void api.appInfo().then(setInfo), []);
+  const loadGlobal = () => void api.listMemory("global").then(setGlobal);
+  useEffect(loadGlobal, []);
+
+  const sharedOn = settings.global_memory_enabled !== "false";
+
+  return (
+    <>
+      <PageTitle title={t("settings.nav.general")} />
+      <Card title={t("settings.general.appearance")}>
+        <CardRow label={t("settings.general.language")}>
+          <Select
+            className="w-44"
+            value={i18n.language.startsWith("es") ? "es" : "en"}
+            onChange={(v) => {
+              setLanguage(v);
+              void setSetting("language", v);
+            }}
+            options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))}
+          />
+        </CardRow>
+        <CardRow label={t("settings.general.theme")}>
+          <Select
+            className="w-44"
+            value={theme}
+            onChange={(v) => {
+              setTheme(v as Theme);
+              setThemeState(v as Theme);
+              void setSetting("theme", v);
+            }}
+            options={[
+              { value: "system", label: t("settings.general.themeSystem") },
+              { value: "light", label: t("settings.general.themeLight") },
+              { value: "dark", label: t("settings.general.themeDark") },
+            ]}
+          />
+        </CardRow>
+      </Card>
+      <Card title={t("settings.general.behavior")}>
+        <CardRow label={t("settings.general.closeToTray")}>
+          <Toggle checked={settings.close_to_tray !== "false"} onChange={(v) => void setSetting("close_to_tray", String(v))} />
+        </CardRow>
+      </Card>
+      <Card title={t("settings.general.sharedMemory")}>
+        <CardRow label={t("settings.general.sharedMemoryToggle")} hint={t("settings.general.sharedMemoryHint")}>
+          <Toggle checked={sharedOn} onChange={(v) => void setSetting("global_memory_enabled", String(v))} />
+        </CardRow>
+        {sharedOn && (
+          <div className="space-y-1.5 px-4 py-3">
+            {global.map((e) => (
+              <div key={`${e.id}-${e.text}`} className="group flex items-center gap-2 rounded-lg bg-hover/60 px-2.5 py-1.5 text-[13px]">
+                <span className="selectable flex-1">{e.text}</span>
+                <button onClick={() => void api.deleteMemory("global", e.id).then(loadGlobal)} className="text-[12px] text-faint opacity-0 group-hover:opacity-100 hover:text-danger">
+                  {t("common.remove")}
+                </button>
+              </div>
+            ))}
+            <div className="flex gap-2 pt-1">
+              <Input
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                placeholder={t("profile.memoryAdd")}
+                onKeyDown={async (e) => {
+                  if (e.key === "Enter" && draft.trim()) {
+                    await api.addMemory("global", draft.trim());
+                    setDraft("");
+                    loadGlobal();
+                  }
+                }}
+              />
+            </div>
+          </div>
+        )}
+      </Card>
+      {info && (
+        <Card title={t("settings.general.data")}>
+          <CardRow label={t("settings.general.dataDir")} hint={info.data_dir}>
+            <span className="text-[12px] text-faint">{t("settings.general.version", { v: info.version, platform: info.platform })}</span>
+          </CardRow>
+        </Card>
+      )}
+    </>
+  );
+}
+
+export function AccountSection() {
+  const { t } = useTranslation();
+  const settings = useStore((s) => s.settings);
+  const setSetting = useStore((s) => s.setSetting);
+  const [name, setName] = useState(settings.user_name ?? "");
+  return (
+    <>
+      <PageTitle title={t("settings.nav.account")} hint={t("settings.account.localOnly")} />
+      <Card>
+        <CardRow label={t("settings.account.name")} hint={t("settings.account.nameHint")}>
+          <Input className="w-56" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => void setSetting("user_name", name.trim())} />
+        </CardRow>
+      </Card>
+    </>
+  );
+}
+
+export function UsageSection() {
+  const { t } = useTranslation();
+  const [rows, setRows] = useState<UsageRow[] | null>(null);
+  useEffect(() => void api.usage().then(setRows), []);
+  const total = (rows ?? []).reduce((a, r) => ({ i: a.i + r.input_tokens, o: a.o + r.output_tokens, n: a.n + r.messages }), { i: 0, o: 0, n: 0 });
+  return (
+    <>
+      <PageTitle title={t("settings.usage.title")} hint={t("settings.usage.hint")} />
+      {rows && rows.length === 0 && <p className="text-[13px] text-muted">{t("settings.usage.empty")}</p>}
+      {rows && rows.length > 0 && (
+        <>
+          <div className="mb-5 grid grid-cols-3 gap-3">
+            {[
+              [t("settings.usage.messages"), total.n],
+              [t("settings.usage.input"), total.i],
+              [t("settings.usage.output"), total.o],
+            ].map(([label, v]) => (
+              <div key={label as string} className="rounded-xl border border-line px-4 py-3">
+                <div className="text-[12px] text-muted">{label}</div>
+                <div className="mt-1 text-[22px] font-semibold tabular-nums tracking-tight">{compact(v as number)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="overflow-hidden rounded-xl border border-line">
+            <table className="w-full text-[13px]">
+              <thead className="bg-sidebar text-left text-[12px] text-muted">
+                <tr>
+                  <th className="px-4 py-2 font-medium">{t("settings.usage.agent")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("settings.usage.messages")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("settings.usage.input")}</th>
+                  <th className="px-4 py-2 text-right font-medium">{t("settings.usage.output")}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {rows.map((r) => (
+                  <tr key={r.agent_id ?? "x"}>
+                    <td className="px-4 py-2">{r.agent_name ?? <span className="text-muted">{t("settings.usage.removed")}</span>}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{r.messages}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{compact(r.input_tokens)}</td>
+                    <td className="px-4 py-2 text-right tabular-nums">{compact(r.output_tokens)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function NextPhase({ title, hint, children }: { title: string; hint: string; children?: React.ReactNode }) {
+  const { t } = useTranslation();
+  return (
+    <>
+      <div className="mb-6 flex items-start justify-between gap-4 pr-8">
+        <div>
+          <h1 className="text-[20px] font-semibold tracking-tight">{title}</h1>
+          <p className="mt-1 max-w-xl text-[13px] text-muted">{hint}</p>
+        </div>
+        <Badge>{t("common.nextPhase")}</Badge>
+      </div>
+      {children}
+    </>
+  );
+}
+
+export function SkillsSection() {
+  const { t } = useTranslation();
+  return <NextPhase title={t("settings.skills.title")} hint={t("settings.skills.hint")} />;
+}
+
+export function EmailSection() {
+  const { t } = useTranslation();
+  return <NextPhase title={t("settings.email.title")} hint={t("settings.email.hint")} />;
+}
+
+export function ComputersSection() {
+  const { t } = useTranslation();
+  const [info, setInfo] = useState<AppInfo | null>(null);
+  useEffect(() => void api.appInfo().then(setInfo), []);
+  const rows = [
+    { icon: <Server size={18} />, title: t("settings.computers.space"), hint: info && !info.space_supported ? t("settings.computers.spaceUnsupported") : t("settings.computers.spaceHint") },
+    { icon: <Box size={18} />, title: t("settings.computers.docker"), hint: t("settings.computers.dockerHint") },
+    { icon: <Terminal size={18} />, title: t("settings.computers.host"), hint: t("settings.computers.hostHint") },
+  ];
+  return (
+    <NextPhase title={t("settings.computers.title")} hint={t("settings.computers.hint")}>
+      <div className="space-y-2">
+        {rows.map((r) => (
+          <div key={r.title} className="flex items-start gap-3 rounded-xl border border-line px-4 py-3 opacity-80">
+            <span className="mt-0.5 text-muted">{r.icon}</span>
+            <div>
+              <div className="text-[13.5px] font-medium">{r.title}</div>
+              <div className="mt-0.5 text-[12px] text-muted">{r.hint}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </NextPhase>
+  );
+}
+
+export function InternetSection() {
+  const { t } = useTranslation();
+  const settings = useStore((s) => s.settings);
+  const setSetting = useStore((s) => s.setSetting);
+  const [url, setUrl] = useState(settings.searxng_url ?? "");
+  const [q, setQ] = useState("");
+  const [results, setResults] = useState<{ title: string; url: string; snippet: string }[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const search = async () => {
+    if (!q.trim()) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      setResults(await api.webSearch(q));
+    } catch (e) {
+      setErr(String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <PageTitle title={t("settings.internet.title")} hint={t("settings.internet.hint")} />
+      <Card>
+        <CardRow label={t("settings.internet.searxng")} hint={t("settings.internet.searxngHint")}>
+          <Input className="w-64" value={url} placeholder="http://localhost:8888" onChange={(e) => setUrl(e.target.value)} onBlur={() => void setSetting("searxng_url", url.trim())} />
+        </CardRow>
+      </Card>
+      <Card title={t("settings.internet.tryIt")}>
+        <div className="flex gap-2 p-3">
+          <Input value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void search()} placeholder={t("settings.internet.tryPlaceholder")} />
+          <Button onClick={() => void search()} disabled={busy}>
+            <Search size={14} />
+          </Button>
+        </div>
+        {err && <p className="px-4 py-3 text-[12.5px] text-danger">{err}</p>}
+        {results?.map((r) => (
+          <div key={r.url} className="px-4 py-2.5">
+            <div className="text-[13.5px] font-medium">{r.title}</div>
+            <div className="truncate text-[12px] text-accent">{r.url}</div>
+            <div className="mt-0.5 line-clamp-2 text-[12.5px] text-muted">{r.snippet}</div>
+          </div>
+        ))}
+      </Card>
+    </>
+  );
+}

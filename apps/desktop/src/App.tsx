@@ -1,0 +1,68 @@
+import { useEffect } from "react";
+import { X } from "lucide-react";
+import { useStore } from "./lib/store";
+import { Sidebar } from "./components/Sidebar";
+import { ChatView } from "./components/chat/ChatView";
+import { AgentProfile } from "./components/panel/AgentProfile";
+import { GroupDetails } from "./components/panel/GroupDetails";
+import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
+import { SettingsModal } from "./components/settings/SettingsModal";
+import { Spinner } from "./components/ui";
+
+export default function App() {
+  const ready = useStore((s) => s.ready);
+  const init = useStore((s) => s.init);
+  const panel = useStore((s) => s.panel);
+  const selected = useStore((s) => s.selected);
+  const agent = useStore((s) => (s.selected ? s.agents[s.selected] : undefined));
+  const group = useStore((s) => (s.selected ? s.groups[s.selected] : undefined));
+  const toast = useStore((s) => s.toast);
+
+  useEffect(() => {
+    init().catch((e) => useStore.getState().showToast(String(e)));
+  }, [init]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key === ",") {
+        e.preventDefault();
+        useStore.getState().openSettings();
+      }
+      if (mod && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        useStore.getState().setDialog("create-agent");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  if (!ready) {
+    return (
+      <div className="flex h-full items-center justify-center text-muted">
+        <Spinner size={20} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full">
+      <Sidebar />
+      <ChatView />
+      {panel === "profile" && agent && <AgentProfile key={selected} agent={agent} />}
+      {panel === "group" && group && <GroupDetails key={selected} group={group} />}
+      <CreateAgentDialog />
+      <CreateGroupDialog />
+      <SettingsModal />
+      {toast && (
+        <div role="status" className="animate-pop fixed bottom-24 left-1/2 z-[60] flex max-w-[560px] -translate-x-1/2 items-start gap-3 rounded-xl border border-line bg-elevated px-4 py-2.5 text-[13px] shadow-pop">
+          <span className="selectable line-clamp-4 flex-1">{toast}</span>
+          <button onClick={() => useStore.setState({ toast: null })} className="text-faint hover:text-ink" aria-label="Dismiss">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}

@@ -1,0 +1,19 @@
+[package]
+name = "opencue-cli"
+description = "Command-line companion for OpenCue"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "opencue-cli"
+path = "src/main.rs"
+
+[dependencies]
+opencue-core.workspace = true
+anyhow.workspace = true
+tokio.workspace = true
+serde_json.workspace = true
+tracing-subscriber.workspace = true
+clap = { version = "4", features = ["derive"] }

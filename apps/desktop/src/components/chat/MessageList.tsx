@@ -1,0 +1,147 @@
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { useTranslation } from "react-i18next";
+import { AlertCircle, Mail, Sparkles } from "lucide-react";
+import { useStore } from "../../lib/store";
+import type { Agent, Message, ToolCall } from "../../lib/types";
+import { clockTime, cx } from "../../lib/format";
+import { AvatarView } from "../AvatarView";
+import { Typing } from "../ui";
+import { Markdown } from "./Markdown";
+import { ToolCard } from "./ToolCard";
+
+const EMPTY: Message[] = [];
+
+function dayLabel(iso: string, lang: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return null;
+  return d.toLocaleDateString(lang, { weekday: "long", day: "numeric", month: "long" });
+}
+
+export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: boolean }) {
+  const { t, i18n } = useTranslation();
+  const messages = useStore((s) => s.messages[threadId] ?? EMPTY);
+  const agents = useStore((s) => s.agents);
+  const approvals = useStore((s) => s.approvals);
+  const openSettings = useStore((s) => s.openSettings);
+  const scroller = useRef<HTMLDivElement>(null);
+  const stick = useRef(true);
+
+  // Index tool calls so tool result cards can show their arguments.
+  const calls = useMemo(() => {
+    const map: Record<string, ToolCall> = {};
+    for (const m of messages) for (const c of m.tool_calls ?? []) map[c.id] = c;
+    return map;
+  }, [messages]);
+
+  useEffect(() => {
+    stick.current = true;
+  }, [threadId]);
+
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (el && stick.current) el.scrollTop = el.scrollHeight;
+  }, [messages]);
+
+  const onScroll = () => {
+    const el = scroller.current;
+    if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+  };
+
+  let lastDay = "";
+  let prevAuthor: string | null = null;
+
+  return (
+    <div ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto">
+      <div className="mx-auto flex max-w-[820px] flex-col gap-1 px-6 py-6">
+        {messages.map((m) => {
+          const day = new Date(m.created_at).toDateString();
+          const divider = day !== lastDay ? dayLabel(m.created_at, i18n.language) : null;
+          lastDay = day;
+          // Assistant turns that only carry tool calls render nothing themselves.
+          const invisible = m.role === "assistant" && !m.content && m.status === "done";
+          const author = m.role === "user" ? "user" : m.role === "event" ? "event" : m.agent_id;
+          const firstOfRun = !invisible && author !== prevAuthor;
+          if (!invisible) prevAuthor = author;
+          const agent = m.agent_id ? agents[m.agent_id] : undefined;
+
+          return (
+            <Fragment key={m.id}>
+              {divider && <div className="my-3 text-center text-[11.5px] font-medium text-faint">{divider}</div>}
+              {m.role === "user" && <UserBubble m={m} firstOfRun={firstOfRun} />}
+              {m.role === "event" && <EventCard m={m} />}
+              {m.role === "assistant" && (
+                <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
+                  {m.status === "error" ? (
+                    <div className="max-w-[560px] rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
+                      <div className="flex items-center gap-1.5 font-medium text-danger">
+                        <AlertCircle size={15} /> {t("chat.errorTitle")}
+                      </div>
+                      <p className="selectable mt-1 whitespace-pre-wrap text-ink/90">{m.content}</p>
+                      {/settings|ajustes|api key|provider/i.test(m.content) && (
+                        <button onClick={() => openSettings("models")} className="mt-2 text-[12.5px] font-medium text-accent hover:underline">
+                          {t("chat.openSettings")}
+                        </button>
+                      )}
+                    </div>
+                  ) : m.content ? (
+                    <div className="max-w-[640px] rounded-2xl rounded-tl-md bg-agent px-3.5 py-2 text-[14px] leading-relaxed text-agent-ink">
+                      <Markdown text={m.content} />
+                      {m.status === "stopped" && <div className="mt-1 text-[11.5px] text-muted">— {t("chat.stopped")}</div>}
+                    </div>
+                  ) : m.status === "streaming" ? (
+                    <div className="inline-flex h-9 items-center rounded-2xl rounded-tl-md bg-agent px-4 text-muted">
+                      <Typing />
+                    </div>
+                  ) : null}
+                </AgentRow>
+              )}
+              {m.role === "tool" && (
+                <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
+                  <ToolCard message={m} call={m.tool_call_id ? calls[m.tool_call_id] : undefined} approval={approvals[m.id]} agentName={agent?.name ?? ""} />
+                </AgentRow>
+              )}
+            </Fragment>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function UserBubble({ m, firstOfRun }: { m: Message; firstOfRun: boolean }) {
+  return (
+    <div className={cx("flex justify-end", firstOfRun && "mt-3")}>
+      <div className="group flex max-w-[75%] flex-col items-end">
+        <div className="selectable whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-me px-3.5 py-2 text-[14px] leading-relaxed text-me-ink">{m.content}</div>
+        <span className="mt-0.5 h-4 text-[11px] text-faint opacity-0 transition-opacity group-hover:opacity-100">{clockTime(m.created_at)}</span>
+      </div>
+    </div>
+  );
+}
+
+function AgentRow({ agent, showHeader, isGroup, children }: { agent?: Agent; showHeader: boolean; isGroup: boolean; children: React.ReactNode }) {
+  if (!children) return null;
+  return (
+    <div className={cx("flex items-start gap-2.5", showHeader && "mt-3")}>
+      <div className="w-8 shrink-0">{showHeader && agent && <AvatarView avatar={agent.avatar} name={agent.name} size={30} />}</div>
+      <div className="flex min-w-0 flex-col items-start gap-1">
+        {showHeader && isGroup && agent && <span className="ml-1 text-[12px] font-medium text-muted">{agent.name}</span>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function EventCard({ m }: { m: Message }) {
+  const isMail = /email|correo|mail/i.test(m.content);
+  return (
+    <div className="my-2 flex justify-center">
+      <div className="inline-flex max-w-[80%] items-center gap-2 rounded-xl border border-line bg-event px-3 py-1.5 text-[12.5px] text-muted">
+        {isMail ? <Mail size={14} /> : <Sparkles size={14} />}
+        <span className="truncate">{m.content}</span>
+        <span className="text-faint">· {clockTime(m.created_at)}</span>
+      </div>
+    </div>
+  );
+}
