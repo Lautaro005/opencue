@@ -109,4 +109,11 @@ Windows installers plus CLI zips and attaches them to a draft release.
 
 ## License
 
-[Apache-2.0](LICENSE)
+OpenCue is **free to use, modify and share, but not to sell**. It is licensed under the
+[Apache License 2.0 with the Commons Clause](LICENSE): you may not sell the software, or a product or service (including
+hosting or paid support) whose value derives substantially from it. Because of that condition it is source-available
+rather than OSI open source.
+
+## Security
+
+Please report vulnerabilities privately — see [SECURITY.md](SECURITY.md).

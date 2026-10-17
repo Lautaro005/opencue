@@ -39,7 +39,7 @@ impl OpenAiProvider {
         }
         if self.kind == ProviderKind::Openrouter {
             req = req
-                .header("HTTP-Referer", "https://github.com/opencue/opencue")
+                .header("HTTP-Referer", "https://github.com/Lautaro005/opencue")
                 .header("X-Title", "OpenCue");
         }
         req

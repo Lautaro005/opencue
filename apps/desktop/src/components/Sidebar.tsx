@@ -115,7 +115,7 @@ export function Sidebar() {
               role="link"
               onClick={(e) => {
                 e.stopPropagation();
-                void openUrl("https://github.com/opencue/opencue#use-cases");
+                void openUrl("https://github.com/Lautaro005/opencue#use-cases");
               }}
               className="block truncate text-[11.5px] text-muted hover:text-accent"
             >
