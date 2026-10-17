@@ -27,3 +27,9 @@ export function compact(n: number): string {
 export function cx(...parts: (string | false | null | undefined)[]) {
   return parts.filter(Boolean).join(" ");
 }
+
+/** "Mon 9:00" style, for past and upcoming runs. */
+export function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString(i18n.language, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+}

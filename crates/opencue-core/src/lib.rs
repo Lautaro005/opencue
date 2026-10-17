@@ -1,6 +1,10 @@
 //! OpenCue core: everything except the UI. The desktop app and the CLI both drive a [`Core`].
 
+pub mod automations;
+pub mod composio;
+pub mod computer;
 pub mod db;
+pub mod email;
 pub mod events;
 pub mod mcp;
 pub mod memory;
@@ -8,11 +12,16 @@ pub mod models;
 pub mod paths;
 pub mod providers;
 pub mod secrets;
+pub mod skills;
 pub mod store;
 pub mod tools;
+pub mod voice;
 pub mod web;
 
 mod runtime;
+mod services;
+
+pub use services::{ComposioStatus, ComputerSettings, VoiceSettings};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -40,6 +49,9 @@ pub struct Core {
     /// Active run per thread: (run id, cancellation token).
     runs: Mutex<HashMap<String, (String, CancellationToken)>>,
     approvals: Mutex<HashMap<String, oneshot::Sender<bool>>>,
+    skills: skills::Skills,
+    /// Recent terminal output per agent for the Computer view.
+    computer_logs: Mutex<HashMap<String, String>>,
 }
 
 impl Core {
@@ -63,6 +75,8 @@ impl Core {
             web: WebService::new(db),
             runs: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
+            skills: skills::Skills::new(paths.skills_dir()),
+            computer_logs: Mutex::new(HashMap::new()),
         }))
     }
 
@@ -70,8 +84,9 @@ impl Core {
         Self::open(Paths::resolve()?).await
     }
 
-    /// Connect enabled MCP servers in the background.
+    /// Connect enabled MCP servers and start automations in the background.
     pub fn start_background(self: &Arc<Self>) {
+        self.start_automations();
         let core = self.clone();
         tokio::spawn(async move {
             if let Ok(servers) = core.store.list_mcp_servers().await {
@@ -123,6 +138,7 @@ impl Core {
 
     pub async fn delete_agent(&self, id: &str) -> anyhow::Result<()> {
         self.stop(id);
+        let _ = self.delete_email_account(id).await;
         self.store.delete_agent(id).await?;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(())

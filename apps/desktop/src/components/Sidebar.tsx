@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Bot, MessageSquarePlus, Plus, Settings, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cx, shortTime } from "../lib/format";
 import { openUrl } from "../lib/api";
-import { AvatarView, GroupAvatar } from "./AvatarView";
+import { AvatarView, GroupAvatar, UserAvatar } from "./AvatarView";
 import { IconButton, Typing, useClickOutside } from "./ui";
 
 export function Sidebar() {
@@ -21,7 +21,6 @@ export function Sidebar() {
   useClickOutside(menuRef, () => setMenu(false), menu);
 
   const userName = settings.user_name?.trim() || t("sidebar.you");
-  const userAvatar = useMemo(() => ({ emoji: "", color: "#64748b", shape: "circle" }), []);
 
   return (
     <aside className="flex h-full w-[280px] shrink-0 flex-col border-r border-line bg-sidebar">
@@ -108,14 +107,14 @@ export function Sidebar() {
 
       <div className="flex items-center gap-2 border-t border-line px-3 py-2.5">
         <button onClick={() => openSettings("account")} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-hover">
-          <AvatarView avatar={userAvatar} name={userName} size={30} />
+          <UserAvatar name={userName} size={30} />
           <span className="min-w-0">
             <span className="block truncate text-[13px] font-medium">{userName}</span>
             <span
               role="link"
               onClick={(e) => {
                 e.stopPropagation();
-                void openUrl("https://github.com/Lautaro005/opencue#use-cases");
+                void openUrl("https://lautaro005.github.io/opencue/");
               }}
               className="block truncate text-[11.5px] text-muted hover:text-accent"
             >
@@ -141,18 +140,5 @@ function MenuItem({ icon, label, onClick }: { icon: React.ReactNode; label: stri
 }
 
 export function Logo({ size = 22 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" aria-hidden>
-      <defs>
-        <linearGradient id="oc-g" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#4aa3ff" />
-          <stop offset="1" stopColor="#0a63ff" />
-        </linearGradient>
-      </defs>
-      <rect x="2" y="2" width="60" height="60" rx="18" fill="url(#oc-g)" />
-      <path d="M20 26c0-6.6 5.4-12 12-12s12 5.4 12 12v6c0 6.6-5.4 12-12 12h-5l-7 6v-9.5A12 12 0 0 1 20 32z" fill="#fff" />
-      <circle cx="27" cy="29" r="2.6" fill="#0a63ff" />
-      <circle cx="37" cy="29" r="2.6" fill="#0a63ff" />
-    </svg>
-  );
+  return <AvatarView avatar={{ face: "googly", shape: "bubble", color: "#2f86eb" }} size={size} />;
 }

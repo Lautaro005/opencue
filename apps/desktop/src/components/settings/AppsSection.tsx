@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FileJson, Globe, Plug, Plus, TerminalSquare, Trash2 } from "lucide-react";
+import { FileJson, Globe, Plug, TerminalSquare, Trash2 } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, isTauri, pickJsonFile } from "../../lib/api";
 import type { McpServerConfig, McpServerStatus } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, Field, Input, Textarea, Toggle } from "../ui";
 import { PageTitle } from "./SettingsModal";
+import { ComposioCard } from "./Phase2Sections";
 
 type Mode = null | "stdio" | "http" | "paste";
 
@@ -119,17 +120,8 @@ export function AppsSection() {
         </div>
       )}
 
-      <div className="mt-8 flex items-start gap-3 rounded-xl border border-line px-4 py-3.5">
-        <span className="flex size-8 items-center justify-center rounded-lg bg-hover text-muted">
-          <Plus size={15} />
-        </span>
-        <div className="flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-[13.5px] font-medium">{t("settings.apps.composio")}</span>
-            <Badge>{t("common.nextPhase")}</Badge>
-          </div>
-          <p className="mt-0.5 text-[12.5px] text-muted">{t("settings.apps.composioHint")}</p>
-        </div>
+      <div className="mt-8">
+        <ComposioCard />
       </div>
     </>
   );

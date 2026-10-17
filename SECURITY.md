@@ -1,14 +1,15 @@
 # Security Policy
 
-OpenCue runs AI agents that can read web pages, call MCP tools and keep data on your computer, so security reports are
-taken seriously and handled privately.
+OpenCue runs AI agents that can read web pages and email, call MCP and Composio tools, run commands on a computer and
+keep data on your machine, so security reports are taken seriously and handled privately.
 
 ## Supported versions
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.1.x`) | ✅ |
-| Older releases | ❌ — please update first |
+| Latest release (`0.2.x`) | ✅ |
+| `0.1.x` | ⚠️ critical fixes only, until 0.2.0 is released |
+| Older | ❌ — please update first |
 
 ## Reporting a vulnerability
 
@@ -19,9 +20,10 @@ Report privately through GitHub: go to the repository's **Security** tab →
 
 Please include:
 
-- What is affected (desktop app, CLI, core) and the version / commit
+- What is affected (desktop app, CLI, core, website) and the version / commit
 - Your operating system (Linux distribution or Windows version)
-- Steps to reproduce, a proof of concept, or logs
+- Which features are involved (provider, computer type, email, automations, MCP server…)
+- Steps to reproduce, a proof of concept, or logs (remove your API keys and personal data)
 - The impact you expect (what an attacker can do)
 
 ### What to expect
@@ -38,28 +40,47 @@ being exploited).
 
 In scope:
 
-- **Prompt injection that bypasses approvals** — content from a web page, tool result or MCP server that makes an agent
-  run an action that should have required the user's approval in "Ask" mode
-- **Secret exposure** — API keys leaking from the OS keychain, the `secrets.json` fallback, logs, the UI or network traffic
+- **Prompt injection that bypasses approvals** — content from a web page, email, webhook payload, tool result or MCP /
+  Composio response that makes an agent run an action that should have required approval in "Ask first" mode (sending
+  email, running a command or writing a file on the host or WSL, deleting memory, data-changing tools)
+- **Sandbox escapes through OpenCue** — a command in the Docker or SPACE computer reaching the host or another agent's
+  workspace because of how OpenCue mounts, names or talks to it; file tools escaping an agent's workspace folder
+- **Secret exposure** — API keys, email passwords, the SPACE token or the Composio key leaking from the OS keychain, the
+  `secrets.json` fallback, logs, the UI, the agent's context or network traffic; SPACE session tokens sent to a host
+  other than the configured server
+- **Webhooks** — the automation server accepting requests from other machines, or firing automations without the
+  correct token
 - **MCP handling** — a malicious MCP server escaping its process, injecting commands, or reaching tools it should not
-- **Local data** — other local users or processes reading or modifying the OpenCue database, memory or instruction files
-  through OpenCue's fault
-- **IPC / webview** — the UI being able to call privileged commands from untrusted content (e.g. rendered Markdown or links)
-- **Supply chain** — compromised dependencies or release artifacts produced by our GitHub Actions workflows
+- **Local data** — other local users or processes reading or modifying the OpenCue database, memory, skills, workspaces
+  or instruction files through OpenCue's fault
+- **IPC / webview** — the UI calling privileged commands from untrusted content (rendered Markdown, links, email bodies),
+  or the microphone being enabled without the user pressing the button
+- **Supply chain** — compromised dependencies, release artifacts or the website produced by our GitHub Actions workflows
 
 Out of scope:
 
-- Actions an agent takes in **Autonomous** mode that the user enabled on purpose
-- Behaviour of third-party model providers, MCP servers or CLIs (`codex`, `claude`) themselves — report those upstream
+- Actions an agent takes in **Fully autonomous** mode, or on **This computer** after the user approved the command
+- Commands that run inside the Docker or SPACE sandbox itself (that is their purpose), unless they escape it
+- Behaviour of third-party services and tools themselves — model providers, Composio, ElevenLabs, email providers, SPACE,
+  Docker, MCP servers, the `codex` and `claude` CLIs — report those upstream
+- Skills or MCP servers the user installed on purpose that are malicious by design
 - Attacks that require an already-compromised user account or machine
 - Missing hardening without a demonstrated impact (e.g. header suggestions, version disclosure)
 - Model output quality, hallucinations or refusals
 
 ## Security model at a glance
 
-- Data is local-first: chats, memory and settings stay in the OpenCue data folder.
-- API keys are stored in the OS credential store; without one, they fall back to a `0600` file and a warning is logged.
-- Sensitive tool calls (deleting memories, MCP tools not marked read-only) wait for approval unless the agent is set to
-  Autonomous.
-- Content from the web and from tools is treated as data; agents are instructed not to follow instructions found in it,
-  but that is not a guarantee — keep agents in "Ask" mode when they use untrusted tools.
+- **Local-first**: chats, memory, skills, workspaces and settings stay in the OpenCue data folder. No telemetry.
+- **Secrets** (API keys, email passwords, SPACE token, Composio and ElevenLabs keys) are stored in the OS credential
+  store; without one they fall back to a `0600` file and a warning is logged. They are never put in the agent's context.
+- **Approvals** ("Ask first", the default): sending email, commands and file writes on the host or WSL, deleting
+  memories, MCP tools not marked read-only and Composio actions that may change data wait for the user.
+- **Computers**: Docker and SPACE isolate commands from the host; each Docker agent sees only its own workspace at
+  `/workspace`. On the host, Docker and WSL, file tools reject paths that leave the agent's workspace. SPACE output
+  streams are only read from the configured host.
+- **Webhooks** listen on `127.0.0.1` only and need a random 32-character token per automation.
+- **Untrusted content**: web pages, emails, webhook payloads and tool results are labeled as data, and agents are
+  instructed not to follow instructions found in them — that is not a guarantee, so keep agents in "Ask first" when they
+  read untrusted content.
+- **Voice**: the microphone is only used while the user holds a recording; audio goes to ElevenLabs only for
+  transcription.

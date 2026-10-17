@@ -6,13 +6,8 @@ import { api } from "../../lib/api";
 import type { Avatar } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
-import { AvatarPicker, COLORS, EMOJIS } from "../panel/AvatarPicker";
+import { AvatarPicker, randomAvatar } from "../panel/AvatarPicker";
 import { Button, DialogHeader, Field, Input, Modal, Select, Textarea } from "../ui";
-
-function randomAvatar(): Avatar {
-  const pick = <T,>(xs: T[]) => xs[Math.floor(Math.random() * xs.length)];
-  return { emoji: pick(EMOJIS.filter(Boolean)), color: pick(COLORS), shape: "circle" };
-}
 
 export function CreateAgentDialog() {
   const { t } = useTranslation();

@@ -1,114 +1,195 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AppWindow, Brain, Cpu, FileText, Mail, Plus, RefreshCw, Shield, Trash2, X, Zap } from "lucide-react";
+import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, Plus, RefreshCw, Shield, Sparkles, Trash2, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
-import type { Agent, AgentSettings, McpServerConfig, McpServerStatus, MemoryEntry, ProviderInfo } from "../../lib/types";
+import type { Agent, AgentSettings, EmailAccount, McpServerConfig, McpServerStatus, MemoryEntry, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
-import { Badge, Button, IconButton, Input, Modal, DialogHeader, Select, Textarea, Toggle, useClickOutside } from "../ui";
+import { Button, IconButton, Input, Modal, DialogHeader, Select, Textarea, Toggle, useClickOutside } from "../ui";
 import { AvatarPicker } from "./AvatarPicker";
-import { Row, Section } from "./Section";
+import { Row } from "./Section";
+import { AutomationsSection, ComputerPage, EmailPage, SkillsPage, VoicePage } from "./AgentPages";
+
+type Page = "main" | "model" | "apps" | "skills" | "instructions" | "memory" | "voice" | "permissions" | "email" | "computer";
 
 export function AgentProfile({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
   const setPanel = useStore((s) => s.setPanel);
+  const providers = useStore((s) => s.providers);
+  const [page, setPage] = useState<Page>("main");
   const [picker, setPicker] = useState(false);
   const pickerRef = useRef<HTMLDivElement>(null);
   useClickOutside(pickerRef, () => setPicker(false), picker);
   const [name, setName] = useState(agent.name);
   useEffect(() => setName(agent.name), [agent.id, agent.name]);
+  const [email, setEmail] = useState<EmailAccount | null | undefined>(undefined);
+  useEffect(() => void api.getEmailAccount(agent.id).then(setEmail), [agent.id, page]);
 
   const patchSettings = (s: Partial<AgentSettings>) => void api.updateAgent(agent.id, { settings: { ...agent.settings, ...s } });
+  const provider = providers.find((p) => p.id === agent.provider_id);
+
+  const titles: Record<Page, string> = {
+    main: t("profile.title"),
+    model: t("profile.model"),
+    apps: t("profile.apps"),
+    skills: t("profile.skills"),
+    instructions: t("profile.instructions"),
+    memory: t("profile.memory"),
+    voice: t("profile.voice"),
+    permissions: t("profile.permissions"),
+    email: t("profile.mails"),
+    computer: t("profile.computer"),
+  };
 
   return (
-    <aside className="animate-slide flex h-full w-[340px] shrink-0 flex-col border-l border-line bg-panel">
-      <div className="flex h-13 shrink-0 items-center justify-between px-4">
-        <h2 className="text-[14px] font-semibold">{t("profile.title")}</h2>
+    <aside className="animate-slide flex h-full w-[360px] shrink-0 flex-col border-l border-line bg-panel">
+      <div className="flex h-13 shrink-0 items-center justify-between gap-2 px-4">
+        <div className="flex min-w-0 items-center gap-1">
+          {page !== "main" && (
+            <IconButton label={t("common.back")} onClick={() => setPage("main")} className="-ml-1.5">
+              <ChevronLeft size={18} />
+            </IconButton>
+          )}
+          <h2 className="truncate text-[14px] font-semibold">{titles[page]}</h2>
+        </div>
         <IconButton label={t("common.close")} onClick={() => setPanel(null)}>
           <X size={17} />
         </IconButton>
       </div>
       <div className="flex-1 overflow-y-auto">
-        <div className="flex flex-col items-center px-5 pt-2 pb-5">
-          <div className="relative" ref={pickerRef}>
-            <button onClick={() => setPicker((v) => !v)} className="rounded-full transition-transform hover:scale-[1.03]" title={t("profile.pickAvatar")}>
-              <AvatarView avatar={agent.avatar} name={agent.name} size={88} />
-            </button>
-            {picker && (
-              <div className="animate-pop absolute top-full left-1/2 z-30 mt-2 -translate-x-1/2 rounded-2xl border border-line bg-elevated shadow-pop">
-                <AvatarPicker value={agent.avatar} onChange={(avatar) => void api.updateAgent(agent.id, { avatar })} />
-              </div>
-            )}
-          </div>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={() => name.trim() && name !== agent.name && void api.updateAgent(agent.id, { name })}
-            onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-            aria-label={t("profile.name")}
-            className="mt-3 w-full rounded-lg bg-transparent px-2 py-1 text-center text-[18px] font-semibold tracking-tight outline-none hover:bg-hover focus:bg-hover"
-          />
-        </div>
-
-        <ModelSection agent={agent} />
-
-        <AppsSection agent={agent} onChange={patchSettings} />
-
-        <InstructionsSection agent={agent} />
-
-        <MemorySection agent={agent} onChange={patchSettings} />
-
-        <Section title={t("profile.messenger")} icon={<Mail size={15} />} action={<Badge>{t("common.nextPhase")}</Badge>}>
-          <p className="text-[12.5px] text-muted">{t("profile.messengerHint")}</p>
-        </Section>
-
-        <Section title={t("profile.automations")} icon={<Zap size={15} />} action={<Badge>{t("common.nextPhase")}</Badge>}>
-          <div className="rounded-xl border border-dashed border-line-strong px-4 py-5 text-center">
-            <p className="text-[13px] font-medium">{t("profile.automationsEmpty")}</p>
-            <p className="mt-1 text-[12px] text-muted">{t("profile.automationsHint")}</p>
-          </div>
-        </Section>
-
-        <Section title={t("profile.permissions")} icon={<Shield size={15} />}>
-          <div className="space-y-1.5">
-            {(["ask", "autonomous"] as const).map((mode) => (
-              <button
-                key={mode}
-                onClick={() => patchSettings({ approval_mode: mode })}
-                className={cx(
-                  "flex w-full items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
-                  agent.settings.approval_mode === mode ? "border-accent bg-accent-soft" : "border-line hover:bg-hover",
+        {page === "main" && (
+          <>
+            <div className="flex flex-col items-center px-5 pt-2 pb-4">
+              <div className="relative" ref={pickerRef}>
+                <button onClick={() => setPicker((v) => !v)} className="rounded-full transition-transform hover:scale-[1.03]" title={t("profile.pickAvatar")}>
+                  <AvatarView avatar={agent.avatar} size={76} />
+                </button>
+                {picker && (
+                  <div className="animate-pop absolute top-full left-1/2 z-30 mt-2 -translate-x-1/2 rounded-2xl border border-line bg-elevated shadow-pop">
+                    <AvatarPicker value={agent.avatar} onChange={(avatar) => void api.updateAgent(agent.id, { avatar })} />
+                  </div>
                 )}
-              >
-                <span className={cx("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2", agent.settings.approval_mode === mode ? "border-accent" : "border-line-strong")}>
-                  {agent.settings.approval_mode === mode && <span className="size-1.5 rounded-full bg-accent" />}
-                </span>
-                <span>
-                  <span className="block text-[13px] font-medium">{mode === "ask" ? t("profile.askFirst") : t("profile.autonomous")}</span>
-                  <span className="block text-[11.5px] text-muted">{mode === "ask" ? t("profile.askFirstHint") : t("profile.autonomousHint")}</span>
-                </span>
-              </button>
-            ))}
-          </div>
-        </Section>
+              </div>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onBlur={() => name.trim() && name !== agent.name && void api.updateAgent(agent.id, { name })}
+                onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+                aria-label={t("profile.name")}
+                className="mt-2 w-full rounded-lg bg-transparent px-2 py-1 text-center text-[17px] font-semibold tracking-tight outline-none hover:bg-hover focus:bg-hover"
+              />
+            </div>
 
-        <div className="border-t border-line px-5 py-4">
-          <Button
-            variant="danger"
-            className="w-full"
-            onClick={() => {
-              if (confirm(t("profile.deleteConfirm", { name: agent.name }))) {
-                setPanel(null);
-                void api.deleteAgent(agent.id);
-              }
-            }}
-          >
-            <Trash2 size={15} /> {t("profile.deleteAgent")}
-          </Button>
-        </div>
+            <Group label={t("profile.assets")}>
+              <NavRow icon={<Emoji>✉️</Emoji>} label={t("profile.mails")} value={email?.address} onClick={() => setPage("email")} add={email === null} />
+              <NavRow icon={<Emoji>🖥️</Emoji>} label={t("profile.computer")} value={agent.settings.computer === "none" ? undefined : t(`computer.backend.${agent.settings.computer}`)} onClick={() => setPage("computer")} add={agent.settings.computer === "none"} />
+            </Group>
+
+            <Group label={t("profile.configurations")}>
+              <NavRow icon={<Cpu size={17} />} label={t("profile.model")} value={agent.model ?? provider?.default_model ?? undefined} onClick={() => setPage("model")} />
+              <NavRow icon={<Box size={17} />} label={t("profile.apps")} onClick={() => setPage("apps")} />
+              <NavRow icon={<Sparkles size={17} />} label={t("profile.skills")} value={agent.settings.skills ? undefined : t("common.off")} onClick={() => setPage("skills")} />
+              <NavRow icon={<FileText size={17} />} label={t("profile.instructions")} onClick={() => setPage("instructions")} />
+              <NavRow icon={<Brain size={17} />} label={t("profile.memory")} onClick={() => setPage("memory")} />
+              <NavRow icon={<AudioLines size={17} />} label={t("profile.voice")} onClick={() => setPage("voice")} />
+              <NavRow icon={<Shield size={17} />} label={t("profile.permissions")} value={agent.settings.approval_mode === "ask" ? t("profile.askShort") : t("profile.autonomousShort")} onClick={() => setPage("permissions")} />
+            </Group>
+
+            <AutomationsSection agent={agent} />
+
+            <div className="px-5 pt-2 pb-5">
+              <Button
+                variant="danger"
+                className="w-full"
+                onClick={() => {
+                  if (confirm(t("profile.deleteConfirm", { name: agent.name }))) {
+                    setPanel(null);
+                    void api.deleteAgent(agent.id);
+                  }
+                }}
+              >
+                <Trash2 size={15} /> {t("profile.deleteAgent")}
+              </Button>
+            </div>
+          </>
+        )}
+        {page === "model" && <ModelSection agent={agent} />}
+        {page === "apps" && <AppsSection agent={agent} onChange={patchSettings} />}
+        {page === "skills" && <SkillsPage agent={agent} onChange={patchSettings} />}
+        {page === "instructions" && <InstructionsSection agent={agent} />}
+        {page === "memory" && <MemorySection agent={agent} onChange={patchSettings} />}
+        {page === "voice" && <VoicePage agent={agent} onChange={patchSettings} />}
+        {page === "email" && <EmailPage agent={agent} />}
+        {page === "computer" && <ComputerPage agent={agent} onChange={patchSettings} />}
+        {page === "permissions" && (
+          <Page>
+            <div className="space-y-1.5">
+              {(["ask", "autonomous"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => patchSettings({ approval_mode: mode })}
+                  className={cx(
+                    "flex w-full items-start gap-2.5 rounded-xl border px-3 py-2 text-left transition-colors",
+                    agent.settings.approval_mode === mode ? "border-accent bg-accent-soft" : "border-line hover:bg-hover",
+                  )}
+                >
+                  <span className={cx("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2", agent.settings.approval_mode === mode ? "border-accent" : "border-line-strong")}>
+                    {agent.settings.approval_mode === mode && <span className="size-1.5 rounded-full bg-accent" />}
+                  </span>
+                  <span>
+                    <span className="block text-[13px] font-medium">{mode === "ask" ? t("profile.askFirst") : t("profile.autonomous")}</span>
+                    <span className="block text-[11.5px] text-muted">{mode === "ask" ? t("profile.askFirstHint") : t("profile.autonomousHint")}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Page>
+        )}
       </div>
     </aside>
+  );
+}
+
+function Emoji({ children }: { children: string }) {
+  return <span className="text-[17px] leading-none">{children}</span>;
+}
+
+function Group({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="px-5 pb-3">
+      <div className="mb-1 text-[12.5px] font-medium text-muted">{label}</div>
+      <div className="divide-y divide-line">{children}</div>
+    </div>
+  );
+}
+
+function NavRow({ icon, label, value, onClick, add }: { icon: ReactNode; label: string; value?: string; onClick: () => void; add?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <button onClick={onClick} className="group flex w-full items-center gap-3 py-2.5 text-left">
+      <span className="flex w-5 justify-center text-ink">{icon}</span>
+      <span className="flex-1 text-[13.5px]">{label}</span>
+      {add ? (
+        <span className="flex items-center gap-1 rounded-full border border-line-strong px-2.5 py-0.5 text-[12.5px] group-hover:bg-hover">
+          <Plus size={13} /> {t("common.add")}
+        </span>
+      ) : (
+        <>
+          {value && <span className="max-w-[150px] truncate text-[12.5px] text-muted">{value}</span>}
+          <ChevronRight size={16} className="text-faint group-hover:text-muted" />
+        </>
+      )}
+    </button>
+  );
+}
+
+function Page({ children, action }: { children: ReactNode; action?: ReactNode }) {
+  return (
+    <div className="px-5 pt-1 pb-5">
+      {action && <div className="mb-2 flex justify-end">{action}</div>}
+      {children}
+    </div>
   );
 }
 
@@ -147,9 +228,7 @@ function ModelSection({ agent }: { agent: Agent }) {
   if (current && !models.includes(current)) options.push({ value: current, label: current });
 
   return (
-    <Section
-      title={t("profile.model")}
-      icon={<Cpu size={15} />}
+    <Page
       action={
         <IconButton label={t("profile.refreshModels")} onClick={() => void load()} className="size-7">
           <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
@@ -175,7 +254,7 @@ function ModelSection({ agent }: { agent: Agent }) {
         {error && <p className="line-clamp-3 text-[11.5px] text-danger">{error}</p>}
         {info && !info.supports_tools && <p className="text-[11.5px] text-warning">{t("profile.noTools")}</p>}
       </div>
-    </Section>
+    </Page>
   );
 }
 
@@ -204,10 +283,14 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
   };
 
   return (
-    <Section title={t("profile.apps")} icon={<AppWindow size={15} />}>
+    <Page>
       <Row label={t("profile.webAccess")}>
         <Toggle checked={s.web_access} onChange={(v) => onChange({ web_access: v })} label={t("profile.webAccess")} />
       </Row>
+      <Row label={t("profile.composio")} hint={t("profile.composioHint")}>
+        <Toggle checked={s.composio} onChange={(v) => onChange({ composio: v })} label={t("profile.composio")} />
+      </Row>
+      <div className="mt-2 mb-1 text-[12px] font-medium text-muted">MCP</div>
       {enabledServers.length === 0 ? (
         <button onClick={() => openSettings("apps")} className="mt-1 text-left text-[12px] text-muted hover:text-accent">
           {t("profile.noMcp")}
@@ -233,7 +316,7 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
           </div>
         </>
       )}
-    </Section>
+    </Page>
   );
 }
 
@@ -259,16 +342,16 @@ function InstructionsSection({ agent }: { agent: Agent }) {
   };
 
   return (
-    <Section title={t("profile.instructions")} icon={<FileText size={15} />} action={saved ? <span className="text-[11.5px] text-faint">{t("common.saved")}</span> : null}>
+    <Page action={saved ? <span className="text-[11.5px] text-faint">{t("common.saved")}</span> : null}>
       <Textarea
         value={text ?? ""}
         disabled={text === null}
         onChange={(e) => onChange(e.target.value)}
         placeholder={t("profile.instructionsPlaceholder", { name: agent.name })}
-        rows={6}
-        className="min-h-28 resize-y"
+        rows={16}
+        className="min-h-64 resize-y"
       />
-    </Section>
+    </Page>
   );
 }
 
@@ -291,9 +374,7 @@ function MemorySection({ agent, onChange }: { agent: Agent; onChange: (s: Partia
   };
 
   return (
-    <Section
-      title={t("profile.memory")}
-      icon={<Brain size={15} />}
+    <Page
       action={
         <button onClick={() => void api.getMemoryRaw("agent", agent.id).then(setRaw)} className="text-[11.5px] text-muted hover:text-accent">
           {t("profile.memoryRaw")}
@@ -352,6 +433,6 @@ function MemorySection({ agent, onChange }: { agent: Agent; onChange: (s: Partia
           </div>
         </div>
       </Modal>
-    </Section>
+    </Page>
   );
 }

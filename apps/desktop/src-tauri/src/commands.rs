@@ -331,3 +331,243 @@ pub async fn usage(state: State<'_, AppState>) -> R<Vec<UsageRow>> {
 pub async fn web_search(state: State<'_, AppState>, query: String) -> R<Vec<SearchResult>> {
     state.core.web_search(&query, 8).await.map_err(e)
 }
+
+// ---------- skills ----------
+
+use base64::Engine;
+use opencue_core::automations::{Automation, AutomationInput};
+use opencue_core::computer::{CommandResult, FileEntry};
+use opencue_core::email::EmailAccount;
+use opencue_core::skills::{Skill, SkillSummary};
+use opencue_core::voice::Voice;
+use opencue_core::{ComposioStatus, ComputerSettings, VoiceSettings};
+
+#[tauri::command]
+pub fn list_skills(state: State<'_, AppState>) -> Vec<SkillSummary> {
+    state.core.skills()
+}
+
+#[tauri::command]
+pub fn get_skill(state: State<'_, AppState>, name: String) -> Option<Skill> {
+    state.core.skill(&name)
+}
+
+#[tauri::command]
+pub fn save_skill(
+    state: State<'_, AppState>,
+    name: String,
+    description: String,
+    body: String,
+) -> R<Skill> {
+    state.core.save_skill(&name, &description, &body).map_err(e)
+}
+
+#[tauri::command]
+pub fn delete_skill(state: State<'_, AppState>, name: String) -> R<()> {
+    state.core.delete_skill(&name).map_err(e)
+}
+
+#[tauri::command]
+pub async fn import_skill(state: State<'_, AppState>, url: String) -> R<Skill> {
+    state.core.import_skill(&url).await.map_err(e)
+}
+
+// ---------- automations ----------
+
+#[tauri::command]
+pub async fn list_automations(
+    state: State<'_, AppState>,
+    agent_id: Option<String>,
+) -> R<Vec<Automation>> {
+    state.core.automations(agent_id.as_deref()).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn save_automation(
+    state: State<'_, AppState>,
+    automation: AutomationInput,
+) -> R<Automation> {
+    state.core.save_automation(automation).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn delete_automation(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.delete_automation(&id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn run_automation(state: State<'_, AppState>, id: String) -> R<()> {
+    let core = state.core.clone();
+    tauri::async_runtime::spawn(async move {
+        let _ = core.run_automation_now(&id).await;
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn new_webhook_token() -> String {
+    opencue_core::automations::new_token()
+}
+
+// ---------- email ----------
+
+#[tauri::command]
+pub async fn get_email_account(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> R<Option<EmailAccount>> {
+    state.core.email_account(&agent_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn save_email_account(
+    state: State<'_, AppState>,
+    account: EmailAccount,
+    password: Option<String>,
+) -> R<EmailAccount> {
+    state
+        .core
+        .save_email_account(account, password)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn delete_email_account(state: State<'_, AppState>, agent_id: String) -> R<()> {
+    state.core.delete_email_account(&agent_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn test_email(state: State<'_, AppState>, agent_id: String) -> R<()> {
+    state.core.test_email(&agent_id).await.map_err(e)
+}
+
+// ---------- Composio ----------
+
+#[tauri::command]
+pub async fn composio_status(state: State<'_, AppState>) -> R<ComposioStatus> {
+    Ok(state.core.composio_status().await)
+}
+
+#[tauri::command]
+pub async fn save_composio(
+    state: State<'_, AppState>,
+    api_key: Option<String>,
+    user_id: String,
+) -> R<ComposioStatus> {
+    state.core.save_composio(api_key, user_id).await.map_err(e)
+}
+
+// ---------- computers ----------
+
+#[tauri::command]
+pub async fn computer_settings(state: State<'_, AppState>) -> R<ComputerSettings> {
+    Ok(state.core.computer_settings().await)
+}
+
+#[tauri::command]
+pub async fn save_computer_settings(
+    state: State<'_, AppState>,
+    settings: ComputerSettings,
+    space_token: Option<String>,
+) -> R<ComputerSettings> {
+    state
+        .core
+        .save_computer_settings(settings, space_token)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn test_space(state: State<'_, AppState>) -> R<usize> {
+    state.core.test_space().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn computer_exec(
+    state: State<'_, AppState>,
+    agent_id: String,
+    command: String,
+) -> R<CommandResult> {
+    state
+        .core
+        .computer_exec(&agent_id, &command)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn computer_list(
+    state: State<'_, AppState>,
+    agent_id: String,
+    path: String,
+) -> R<Vec<FileEntry>> {
+    state.core.computer_list(&agent_id, &path).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn computer_read(
+    state: State<'_, AppState>,
+    agent_id: String,
+    path: String,
+) -> R<String> {
+    state.core.computer_read(&agent_id, &path).await.map_err(e)
+}
+
+#[tauri::command]
+pub fn computer_log(state: State<'_, AppState>, agent_id: String) -> String {
+    state.core.computer_log(&agent_id)
+}
+
+// ---------- voice ----------
+
+#[tauri::command]
+pub async fn voice_settings(state: State<'_, AppState>) -> R<VoiceSettings> {
+    Ok(state.core.voice_settings().await)
+}
+
+#[tauri::command]
+pub async fn save_voice_settings(
+    state: State<'_, AppState>,
+    settings: VoiceSettings,
+    api_key: Option<String>,
+) -> R<VoiceSettings> {
+    state
+        .core
+        .save_voice_settings(settings, api_key)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn list_voices(state: State<'_, AppState>) -> R<Vec<Voice>> {
+    state.core.voices().await.map_err(e)
+}
+
+/// Audio arrives base64-encoded from the webview's MediaRecorder.
+#[tauri::command]
+pub async fn transcribe(
+    state: State<'_, AppState>,
+    audio_base64: String,
+    mime: String,
+) -> R<String> {
+    let audio = base64::engine::general_purpose::STANDARD
+        .decode(audio_base64)
+        .map_err(|err| err.to_string())?;
+    state.core.transcribe(audio, &mime).await.map_err(e)
+}
+
+/// Returns MP3 audio as base64.
+#[tauri::command]
+pub async fn speak(
+    state: State<'_, AppState>,
+    text: String,
+    agent_id: Option<String>,
+) -> R<String> {
+    let audio = state
+        .core
+        .speak(&text, agent_id.as_deref())
+        .await
+        .map_err(e)?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(audio))
+}

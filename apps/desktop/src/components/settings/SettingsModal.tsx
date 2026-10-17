@@ -1,22 +1,28 @@
 import { useTranslation } from "react-i18next";
-import { AppWindow, BarChart3, Cpu, Globe, Mail, Monitor, Settings2, Sparkles, User, X } from "lucide-react";
+import { AppWindow, ArrowUpRight, AudioLines, BarChart3, Cpu, Globe, Info, LifeBuoy, Monitor, Settings2, Sparkles, User, X } from "lucide-react";
 import { useStore, type SettingsSection } from "../../lib/store";
 import { cx } from "../../lib/format";
 import { IconButton, Modal } from "../ui";
-import { AccountSection, ComputersSection, EmailSection, GeneralSection, InternetSection, SkillsSection, UsageSection } from "./sections";
+import { AboutSection, AccountSection, GeneralSection, InternetSection, UsageSection } from "./sections";
+import { ComputersSection, SkillsSection, VoiceSection } from "./Phase2Sections";
+import { openUrl } from "../../lib/api";
 import { ModelsSection } from "./ModelsSection";
 import { AppsSection } from "./AppsSection";
 
-const NAV: { id: SettingsSection; icon: React.ReactNode }[] = [
+const NAV: ({ id: SettingsSection; icon: React.ReactNode } | "divider")[] = [
   { id: "general", icon: <Settings2 size={16} /> },
   { id: "account", icon: <User size={16} /> },
   { id: "usage", icon: <BarChart3 size={16} /> },
   { id: "models", icon: <Cpu size={16} /> },
+  "divider",
   { id: "apps", icon: <AppWindow size={16} /> },
   { id: "skills", icon: <Sparkles size={16} /> },
+  "divider",
   { id: "computers", icon: <Monitor size={16} /> },
-  { id: "email", icon: <Mail size={16} /> },
+  { id: "voice", icon: <AudioLines size={16} /> },
   { id: "internet", icon: <Globe size={16} /> },
+  "divider",
+  { id: "about", icon: <Info size={16} /> },
 ];
 
 export function SettingsModal() {
@@ -29,7 +35,10 @@ export function SettingsModal() {
     <Modal open={section !== null} onClose={close} className="flex h-[640px] w-[880px]" label={t("settings.title")}>
       <nav className="flex w-[210px] shrink-0 flex-col gap-0.5 border-r border-line bg-sidebar p-2.5">
         <h2 className="px-2.5 pt-2 pb-3 text-[15px] font-semibold">{t("settings.title")}</h2>
-        {NAV.map((n) => (
+        {NAV.map((n, i) =>
+          n === "divider" ? (
+            <div key={i} className="mx-2.5 my-1.5 border-t border-line" />
+          ) : (
           <button
             key={n.id}
             onClick={() => open(n.id)}
@@ -38,7 +47,16 @@ export function SettingsModal() {
             {n.icon}
             {t(`settings.nav.${n.id}`)}
           </button>
-        ))}
+          ),
+        )}
+        <button
+          onClick={() => void openUrl("https://github.com/Lautaro005/opencue/issues")}
+          className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13.5px] text-muted hover:bg-hover hover:text-ink"
+        >
+          <LifeBuoy size={16} />
+          <span className="flex-1">{t("settings.nav.help")}</span>
+          <ArrowUpRight size={14} />
+        </button>
       </nav>
       <div className="relative flex min-w-0 flex-1 flex-col">
         <IconButton label={t("common.close")} onClick={close} className="absolute top-3 right-3 z-10">
@@ -52,7 +70,8 @@ export function SettingsModal() {
           {section === "apps" && <AppsSection />}
           {section === "skills" && <SkillsSection />}
           {section === "computers" && <ComputersSection />}
-          {section === "email" && <EmailSection />}
+          {section === "voice" && <VoiceSection />}
+          {section === "about" && <AboutSection />}
           {section === "internet" && <InternetSection />}
         </div>
       </div>

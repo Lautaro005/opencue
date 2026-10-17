@@ -1,18 +1,22 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, AtSign, Mic, Paperclip, Plus, Square } from "lucide-react";
+import { ArrowUp, AtSign, Loader2, Mic, Paperclip, Plus, Square } from "lucide-react";
 import type { Agent } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
 import { useClickOutside } from "../ui";
+import { useStore } from "../../lib/store";
+import { cancelRecording, markVoiceThread, startRecording, stopRecording } from "../../lib/voice";
 
 export function Composer({
+  threadId,
   name,
   members,
   busy,
   onSend,
   onStop,
 }: {
+  threadId: string;
   name: string;
   members: Agent[] | null;
   busy: boolean;
@@ -26,6 +30,35 @@ export function Composer({
   const ref = useRef<HTMLTextAreaElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   useClickOutside(plusRef, () => setPlus(false), plus);
+  const [voice, setVoice] = useState<"idle" | "recording" | "transcribing">("idle");
+
+  useEffect(() => () => cancelRecording(), [threadId]);
+
+  const toggleVoice = async () => {
+    const toast = useStore.getState().showToast;
+    if (voice === "recording") {
+      setVoice("transcribing");
+      try {
+        const said = (await stopRecording()).trim();
+        if (said) {
+          markVoiceThread(threadId);
+          onSend(said);
+        }
+      } catch (e) {
+        toast(String(e));
+      } finally {
+        setVoice("idle");
+      }
+      return;
+    }
+    if (voice !== "idle") return;
+    try {
+      await startRecording();
+      setVoice("recording");
+    } catch (e) {
+      toast(t("chat.micError", { error: String(e) }));
+    }
+  };
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -155,12 +188,15 @@ export function Composer({
           />
 
           <button
-            aria-label={t("chat.voice")}
-            title={t("chat.voice")}
-            disabled
-            className="flex size-8 items-center justify-center rounded-full text-faint"
+            aria-label={voice === "recording" ? t("chat.voiceStop") : t("chat.voice")}
+            title={voice === "recording" ? t("chat.voiceStop") : t("chat.voice")}
+            onClick={() => void toggleVoice()}
+            className={cx(
+              "flex size-8 items-center justify-center rounded-full",
+              voice === "recording" ? "animate-pulse bg-danger text-white" : "text-muted hover:bg-hover hover:text-ink",
+            )}
           >
-            <Mic size={18} />
+            {voice === "transcribing" ? <Loader2 size={17} className="animate-spin" /> : <Mic size={18} />}
           </button>
           {busy && !text.trim() ? (
             <button

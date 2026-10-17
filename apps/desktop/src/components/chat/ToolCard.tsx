@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookmarkPlus, Brain, Check, ChevronRight, Globe, Plug, Search, Send, ShieldAlert, Trash2, X } from "lucide-react";
+import { BookmarkPlus, Brain, Check, ChevronRight, FileText, FolderOpen, Globe, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2, X, Zap } from "lucide-react";
 import type { ApprovalRequest, Message, ToolCall } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/format";
@@ -21,6 +21,28 @@ function describe(name: string, args: Record<string, unknown> | undefined, t: (k
       return { icon: <Trash2 size={14} />, title: t("chat.tools.forget"), detail: `#${a.id ?? ""}` };
     case "send_to_agent":
       return { icon: <Send size={14} />, title: t("chat.tools.send_to_agent", { agent: a.agent ?? "" }), detail: String(a.message ?? "") };
+    case "use_skill":
+      return { icon: <Sparkles size={14} />, title: t("chat.tools.use_skill"), detail: String(a.name ?? "") };
+    case "save_skill":
+      return { icon: <Sparkles size={14} />, title: t("chat.tools.save_skill"), detail: String(a.name ?? "") };
+    case "run_command":
+      return { icon: <SquareTerminal size={14} />, title: t("chat.tools.run_command"), detail: String(a.command ?? "") };
+    case "read_file":
+      return { icon: <FileText size={14} />, title: t("chat.tools.read_file"), detail: String(a.path ?? "") };
+    case "write_file":
+      return { icon: <FileText size={14} />, title: t("chat.tools.write_file"), detail: String(a.path ?? "") };
+    case "list_files":
+      return { icon: <FolderOpen size={14} />, title: t("chat.tools.list_files"), detail: String(a.path ?? "") };
+    case "read_emails":
+      return { icon: <Inbox size={14} />, title: t("chat.tools.read_emails"), detail: "" };
+    case "search_inbox":
+      return { icon: <Search size={14} />, title: t("chat.tools.search_inbox"), detail: String(a.query ?? "") };
+    case "send_email":
+      return { icon: <Mail size={14} />, title: t("chat.tools.send_email", { to: a.to ?? "" }), detail: String(a.subject ?? "") };
+    case "composio_search":
+      return { icon: <Zap size={14} />, title: t("chat.tools.composio_search"), detail: String(a.query ?? "") };
+    case "composio_execute":
+      return { icon: <Zap size={14} />, title: t("chat.tools.composio_execute"), detail: String(a.slug ?? "") };
     default: {
       const m = name.match(/^mcp__(.+?)__(.+)$/);
       return {

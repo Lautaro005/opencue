@@ -1,7 +1,7 @@
 // In-browser stand-in for the Rust core, used by `npm run dev` outside Tauri so the UI can be
 // developed and previewed. Data lives in memory only.
 
-import type { Agent, CoreEvent, Group, McpServerConfig, Message, ProviderConfig, ProviderInfo } from "./types";
+import type { Agent, Automation, CoreEvent, EmailAccount, Group, McpServerConfig, Message, ProviderConfig, ProviderInfo } from "./types";
 
 const listeners = new Set<(ev: CoreEvent) => void>();
 const emit = (ev: CoreEvent) => listeners.forEach((l) => l(ev));
@@ -16,6 +16,10 @@ const defaults = {
   use_global_memory: true,
   auto_memory: false,
   temperature: null,
+  computer: "none" as const,
+  skills: true,
+  composio: false,
+  voice_id: null,
 };
 
 const providers: ProviderConfig[] = [
@@ -23,14 +27,21 @@ const providers: ProviderConfig[] = [
   { id: "p-anthropic", kind: "anthropic", name: "Anthropic (Claude)", base_url: null, default_model: "claude-sonnet-5-5", enabled: true, has_key: true },
 ];
 
+const agent = (id: string, name: string, shape: string, face: string, color: string, extra: Partial<Agent["settings"]> = {}): Agent => ({
+  id, name, avatar: { face, color, shape }, provider_id: "p-anthropic", model: "claude-sonnet-5-5", settings: { ...defaults, ...extra }, created_at: ago(5000), updated_at: ago(10),
+});
+
 const agents: Agent[] = [
-  { id: "a1", name: "Nova", avatar: { emoji: "🦊", color: "#ff8a65", shape: "circle" }, provider_id: "p-anthropic", model: "claude-sonnet-5-5", settings: { ...defaults }, created_at: ago(5000), updated_at: ago(10) },
-  { id: "a2", name: "Atlas", avatar: { emoji: "🪐", color: "#7c8cff", shape: "circle" }, provider_id: "p-ollama", model: "llama3.2", settings: { ...defaults }, created_at: ago(4000), updated_at: ago(10) },
-  { id: "a3", name: "Chef Lu", avatar: { emoji: "🍋", color: "#ffb74d", shape: "squircle" }, provider_id: "p-ollama", model: null, settings: { ...defaults }, created_at: ago(3000), updated_at: ago(10) },
+  agent("a1", "Asistente", "square", "googly", "#8e8e93", { computer: "docker" }),
+  agent("a2", "Recordatorios", "drop", "wink", "#f6ad2b"),
+  agent("a3", "IA Research", "star", "googly", "#f7c32f"),
+  agent("a4", "Asistente Dev", "bubble", "curious", "#2f86eb", { computer: "host" }),
+  agent("a5", "Finance", "bot", "smile", "#2f86eb"),
+  agent("a6", "Research Assistant", "heart", "dots", "#f04848"),
 ];
 
 const groups: Group[] = [
-  { id: "g1", name: "Weekend trip", max_auto_turns: 6, created_at: ago(2000), members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }] },
+  { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
 ];
 
 const instructions: Record<string, string> = { a1: "You are my travel and admin assistant. Keep answers short." };
@@ -41,16 +52,24 @@ const msg = (thread_id: string, role: Message["role"], content: string, minAgo: 
 });
 
 const messages: Message[] = [
-  msg("a1", "user", "Can you find me a quiet hotel in Montevideo for next weekend?", 50),
-  msg("a1", "assistant", "", 49, "a1", { tool_calls: [{ id: "t1", name: "web_search", arguments: { query: "quiet boutique hotel Montevideo Ciudad Vieja" } }] }),
-  msg("a1", "tool", "1. [Hotel Casa Sarandí](https://example.com)\n   Boutique guesthouse in Ciudad Vieja…", 49, "a1", { tool_call_id: "t1", tool_name: "web_search" }),
-  msg("a1", "assistant", "Here are two quiet options:\n\n1. **Casa Sarandí** — boutique, Ciudad Vieja, ~US$120/night\n2. **Alma Histórica** — rooftop, very calm street\n\nWant me to check availability for Friday–Sunday?", 48, "a1"),
-  msg("a1", "event", "Received an email: “Your booking request at Casa Sarandí”", 20),
-  msg("a2", "user", "Summarize today's tech news", 300),
-  msg("a2", "assistant", "Three things stood out today: a new open-weights model release, a major browser update, and a chip export rule change.", 299, "a2"),
-  msg("g1", "user", "@Nova @Atlas plan a 2-day itinerary", 30),
-  msg("g1", "assistant", "Day 1: Ciudad Vieja walk, Mercado del Puerto lunch, sunset on the Rambla. @Atlas can you add a museum?", 29, "a1"),
-  msg("g1", "assistant", "Add Museo Torres García on Day 2 morning, then Parque Rodó.", 28, "a2"),
+  msg("a1", "assistant", "Envié la consulta al Juzgado 9 por la audiencia del 9 de octubre de 13:00 a 13:30, preguntando si pueden asistir vos y tus dos compañeros y qué requisitos hay.", 400, "a1"),
+  msg("a1", "user", "manda un recordatorio a los ultimos 4 que mandaste", 300),
+  msg("a1", "assistant", "Voy a revisar cuáles fueron los últimos cuatro correos y les mando un recordatorio.", 299, "a1"),
+  msg("a1", "assistant", "", 298, "a1", { tool_calls: [{ id: "t1", name: "read_emails", arguments: { limit: 4 } }] }),
+  msg("a1", "tool", "#41 Juzgado 15 …\n#40 Juzgado 2 …", 298, "a1", { tool_call_id: "t1", tool_name: "read_emails" }),
+  msg("a1", "assistant", "Listo, mandé recordatorios a los juzgados 15, 2, 1 y 9. Al 15 le remarqué que la audiencia es hoy; a los otros tres, las audiencias del 9 de octubre.", 297, "a1"),
+  msg("a1", "event", "Received an email:\nFrom: Juzgado 9\nSubject: Audiencia 9/10", 200),
+  msg("a1", "assistant", "El Juzgado 9 respondió que el juicio del 9 de octubre no se realizará.", 199, "a1"),
+  msg("a1", "user", "prueba usar el conector de trello y dime si funciona", 130),
+  msg("a1", "assistant", "Dale, lo pruebo", 129, "a1"),
+  msg("a1", "assistant", "No pude confirmar si funciona: el acceso a Trello falló antes de mostrar tu espacio. No hice ningún cambio. Si querés, lo intento de nuevo más tarde", 125, "a1"),
+  msg("a2", "user", "Dale, pruebo", 200),
+  msg("a2", "assistant", "Todavía falla antes de leer Trello; el entorno desde el que accedo sigue sin estar disponible, así que no pude completar la prueba", 152, "a2"),
+  msg("a3", "assistant", "Sí, probaría esta idea antes de escribir el paper: armá un benchmark chico primero.", 210, "a3"),
+  msg("a4", "assistant", "Ya están las notas de hoy en tu carpeta de proyectos.", 211, "a4"),
+  msg("a5", "assistant", "Mi hipótesis para dos años sería mantener el fondo de emergencia en dólares.", 1500, "a5"),
+  msg("a6", "assistant", "El correo no se envió: se canceló la aprobación.", 22000, "a6"),
+  msg("g1", "event", "Asistente, Recordatorios, and Research Assistant joined the chat", 25000),
 ];
 
 const catalog: ProviderInfo[] = [
@@ -105,14 +124,26 @@ async function simulateReply(threadId: string, text: string) {
   emit({ type: "threads_changed" });
 }
 
+const skills = [
+  { name: "weekly-report", description: "Write the Friday status report from this week's notes and emails.", body: "1. Read notes\n2. Summarize", path: "skills/weekly-report/SKILL.md" },
+];
+const automations: Automation[] = [
+  { id: "au1", agent_id: "a2", name: "Vencimientos de la semana", trigger: { kind: "schedule", cron: "0 9 * * 1" }, prompt: "Revisá Trello y avisame qué vence esta semana.", enabled: true, last_run_at: ago(60 * 24 * 4), last_status: "ok", created_at: ago(9000), next_run_at: ago(-60 * 24 * 2) },
+];
+const emails: Record<string, EmailAccount> = {
+  a2: { agent_id: "a2", kind: "imap", address: "recordatorios@example.com", display_name: "Recordatorios", imap_host: "imap.example.com", imap_port: 993, smtp_host: "smtp.example.com", smtp_port: 465, username: null, last_seen_uid: 0, has_password: true },
+};
+const computer = { docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, wsl_available: false, webhook_port: 7777 };
+const voice = { configured: false, voice_id: "", auto_speak: true };
+
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.1.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.2.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
   create_agent: ({ agent }) => {
-    const a: Agent = { id: id(), name: agent.name, avatar: agent.avatar ?? { emoji: "🐙", color: "#4db6ac", shape: "circle" }, provider_id: agent.provider_id ?? providers[0].id, model: agent.model ?? null, settings: agent.settings ?? { ...defaults }, created_at: ago(0), updated_at: ago(0) };
+    const a: Agent = { id: id(), name: agent.name, avatar: agent.avatar ?? { face: "smile", color: "#2f86eb", shape: "bubble" }, provider_id: agent.provider_id ?? providers[0].id, model: agent.model ?? null, settings: agent.settings ?? { ...defaults }, created_at: ago(0), updated_at: ago(0) };
     agents.push(a);
     instructions[a.id] = agent.instructions ?? "";
     emit({ type: "threads_changed" });
@@ -210,6 +241,63 @@ const handlers: Record<string, (a: Args) => unknown> = {
   web_search: ({ query }) => [{ title: `Results for “${query}” appear in the desktop app`, url: "https://duckduckgo.com/?q=" + encodeURIComponent(query), snippet: "The browser preview has no network backend.", source: "preview" }],
   get_settings: () => settings,
   set_setting: ({ key, value }) => void (settings[key] = value),
+  list_skills: () => skills.map(({ body: _b, ...k }) => k),
+  get_skill: ({ name }) => skills.find((k) => k.name === name) ?? null,
+  save_skill: ({ name, description, body }) => {
+    const k = { name, description, body, path: `skills/${name}/SKILL.md` };
+    const i = skills.findIndex((x) => x.name === name);
+    if (i >= 0) skills[i] = k;
+    else skills.push(k);
+    return k;
+  },
+  delete_skill: ({ name }) => void skills.splice(skills.findIndex((k) => k.name === name), 1),
+  import_skill: ({ url }) => {
+    const name = String(url).split("/").filter(Boolean).slice(-2, -1)[0] ?? "imported";
+    const k = { name, description: "Imported from " + url, body: "# " + name, path: `skills/${name}/SKILL.md` };
+    skills.push(k);
+    return k;
+  },
+  list_automations: ({ agentId }) => automations.filter((a) => !agentId || a.agent_id === agentId),
+  save_automation: ({ automation }) => {
+    const a: Automation = { last_run_at: null, last_status: null, created_at: ago(0), next_run_at: automation.trigger.kind === "schedule" ? ago(-60 * 12) : null, ...automation, id: automation.id || id() };
+    const i = automations.findIndex((x) => x.id === a.id);
+    if (i >= 0) automations[i] = a;
+    else automations.push(a);
+    emit({ type: "automations_changed" });
+    return a;
+  },
+  delete_automation: ({ id }) => {
+    automations.splice(automations.findIndex((a) => a.id === id), 1);
+    emit({ type: "automations_changed" });
+  },
+  run_automation: () => undefined,
+  new_webhook_token: () => id() + id() + id(),
+  get_email_account: ({ agentId }) => emails[agentId] ?? null,
+  save_email_account: ({ account, password }) => (emails[account.agent_id] = { ...account, has_password: account.has_password || !!password }),
+  delete_email_account: ({ agentId }) => void delete emails[agentId],
+  test_email: () => undefined,
+  composio_status: () => ({ configured: false, user_id: "", accounts: [], error: null }),
+  save_composio: ({ userId }) => ({ configured: true, user_id: userId, accounts: [{ id: "ca_1", toolkit: "gmail", status: "ACTIVE" }], error: null }),
+  computer_settings: () => computer,
+  save_computer_settings: ({ settings }) => Object.assign(computer, settings),
+  test_space: () => 0,
+  computer_exec: ({ agentId, command }) => {
+    const out = `$ ${command}\n(preview) commands run in the desktop app\n[exit 0]\n`;
+    emit({ type: "computer_output", agent_id: agentId, text: out, stderr: false });
+    return { exit_code: 0, output: out, timed_out: false };
+  },
+  computer_list: () => [
+    { name: "notas", path: "notas", is_dir: true, size: 0 },
+    { name: "audiencias.csv", path: "audiencias.csv", is_dir: false, size: 2310 },
+    { name: "README.md", path: "README.md", is_dir: false, size: 512 },
+  ],
+  computer_read: ({ path }) => `# ${path}\n\n(preview file)`,
+  computer_log: () => "$ ls\nnotas  audiencias.csv  README.md\n[exit 0]\n",
+  voice_settings: () => voice,
+  save_voice_settings: ({ settings, apiKey }) => Object.assign(voice, settings, { configured: voice.configured || !!apiKey }),
+  list_voices: () => [{ id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, { id: "pNInz6obpgDQGcFmaJgB", name: "Adam" }],
+  transcribe: () => "Hola, ¿qué tengo en la agenda hoy?",
+  speak: () => "",
   usage: () => agents.map((a, i) => ({ agent_id: a.id, agent_name: a.name, messages: 12 - i * 3, input_tokens: 48210 - i * 9000, output_tokens: 9120 - i * 2000 })),
 };
 

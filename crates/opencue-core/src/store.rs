@@ -19,7 +19,7 @@ fn agent_from_row(r: &sqlx::sqlite::SqliteRow) -> Agent {
         id: r.get("id"),
         name: r.get("name"),
         avatar: Avatar {
-            emoji: r.get("avatar_emoji"),
+            face: r.get("avatar_face"),
             color: r.get("avatar_color"),
             shape: r.get("avatar_shape"),
         },
@@ -80,10 +80,19 @@ fn mcp_from_row(r: &sqlx::sqlite::SqliteRow) -> McpServerConfig {
     }
 }
 
-const PALETTE: &[&str] = &[
-    "#7c8cff", "#ff8a65", "#4db6ac", "#f06292", "#ffb74d", "#9575cd", "#64b5f6", "#81c784",
+/// Default avatars for new agents: (shape, face, color), matching the desktop picker.
+const AVATARS: &[(&str, &str, &str)] = &[
+    ("square", "googly", "#8e8e93"),
+    ("drop", "wink", "#f6ad2b"),
+    ("star", "googly", "#f7c32f"),
+    ("bubble", "curious", "#2f86eb"),
+    ("heart", "dots", "#f04848"),
+    ("bot", "smile", "#34b27b"),
+    ("cloud", "happy", "#5ec2f2"),
+    ("hexagon", "stern", "#ff7a45"),
+    ("flower", "sleepy", "#a78bfa"),
+    ("ghost", "surprised", "#b7713f"),
 ];
-const EMOJIS: &[&str] = &["🦊", "🐙", "🦉", "🐝", "🌵", "🪐", "🍋", "🐳", "🦄", "🌸"];
 
 impl Store {
     // ---------- agents ----------
@@ -119,10 +128,13 @@ impl Store {
             .fetch_one(&self.db)
             .await?
             .get::<i64, _>("n") as usize;
-        let avatar = new.avatar.unwrap_or_else(|| Avatar {
-            emoji: EMOJIS[count % EMOJIS.len()].into(),
-            color: PALETTE[count % PALETTE.len()].into(),
-            shape: "circle".into(),
+        let avatar = new.avatar.unwrap_or_else(|| {
+            let (shape, face, color) = AVATARS[count % AVATARS.len()];
+            Avatar {
+                face: face.into(),
+                color: color.into(),
+                shape: shape.into(),
+            }
         });
         let provider_id = match new.provider_id {
             Some(p) => Some(p),
@@ -131,12 +143,12 @@ impl Store {
         let id = new_id();
         let ts = now();
         sqlx::query(
-            "INSERT INTO agents (id, name, avatar_emoji, avatar_color, avatar_shape, provider_id, model, settings, created_at, updated_at)
+            "INSERT INTO agents (id, name, avatar_face, avatar_color, avatar_shape, provider_id, model, settings, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&id)
         .bind(name)
-        .bind(&avatar.emoji)
+        .bind(&avatar.face)
         .bind(&avatar.color)
         .bind(&avatar.shape)
         .bind(&provider_id)
@@ -173,10 +185,10 @@ impl Store {
             agent.settings = s;
         }
         sqlx::query(
-            "UPDATE agents SET name = ?, avatar_emoji = ?, avatar_color = ?, avatar_shape = ?, provider_id = ?, model = ?, settings = ?, updated_at = ? WHERE id = ?",
+            "UPDATE agents SET name = ?, avatar_face = ?, avatar_color = ?, avatar_shape = ?, provider_id = ?, model = ?, settings = ?, updated_at = ? WHERE id = ?",
         )
         .bind(&agent.name)
-        .bind(&agent.avatar.emoji)
+        .bind(&agent.avatar.face)
         .bind(&agent.avatar.color)
         .bind(&agent.avatar.shape)
         .bind(&agent.provider_id)
@@ -678,5 +690,183 @@ impl Store {
             .iter()
             .map(|r| (r.get("key"), r.get("value")))
             .collect())
+    }
+}
+
+fn automation_from_row(r: &sqlx::sqlite::SqliteRow) -> Option<crate::automations::Automation> {
+    Some(crate::automations::Automation {
+        id: r.get("id"),
+        agent_id: r.get("agent_id"),
+        name: r.get("name"),
+        trigger: serde_json::from_str(r.get::<&str, _>("trigger")).ok()?,
+        prompt: r.get("prompt"),
+        enabled: r.get::<i64, _>("enabled") != 0,
+        last_run_at: r.get("last_run_at"),
+        last_status: r.get("last_status"),
+        created_at: r.get("created_at"),
+        next_run_at: None,
+    })
+}
+
+fn email_from_row(r: &sqlx::sqlite::SqliteRow) -> crate::email::EmailAccount {
+    crate::email::EmailAccount {
+        agent_id: r.get("agent_id"),
+        kind: crate::email::EmailKind::parse(r.get("kind")),
+        address: r.get("address"),
+        display_name: r.get("display_name"),
+        imap_host: r.get("imap_host"),
+        imap_port: r.get::<i64, _>("imap_port") as u16,
+        smtp_host: r.get("smtp_host"),
+        smtp_port: r.get::<i64, _>("smtp_port") as u16,
+        username: r.get("username"),
+        last_seen_uid: r.get::<i64, _>("last_seen_uid") as u32,
+        has_password: false,
+    }
+}
+
+impl Store {
+    // ---------- automations ----------
+
+    pub async fn list_automations(
+        &self,
+        agent_id: Option<&str>,
+    ) -> anyhow::Result<Vec<crate::automations::Automation>> {
+        let rows = match agent_id {
+            Some(a) => {
+                sqlx::query("SELECT * FROM automations WHERE agent_id = ? ORDER BY created_at")
+                    .bind(a)
+                    .fetch_all(&self.db)
+                    .await?
+            }
+            None => {
+                sqlx::query("SELECT * FROM automations ORDER BY created_at")
+                    .fetch_all(&self.db)
+                    .await?
+            }
+        };
+        Ok(rows.iter().filter_map(automation_from_row).collect())
+    }
+
+    pub async fn get_automation(&self, id: &str) -> anyhow::Result<crate::automations::Automation> {
+        let row = sqlx::query("SELECT * FROM automations WHERE id = ?")
+            .bind(id)
+            .fetch_optional(&self.db)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("automation not found"))?;
+        automation_from_row(&row).ok_or_else(|| anyhow::anyhow!("automation is corrupted"))
+    }
+
+    pub async fn save_automation(
+        &self,
+        input: &crate::automations::AutomationInput,
+    ) -> anyhow::Result<crate::automations::Automation> {
+        anyhow::ensure!(!input.name.trim().is_empty(), "automation name is required");
+        anyhow::ensure!(!input.prompt.trim().is_empty(), "tell the agent what to do");
+        input.trigger.validate()?;
+        self.get_agent(&input.agent_id).await?;
+        let id = input
+            .id
+            .clone()
+            .filter(|i| !i.is_empty())
+            .unwrap_or_else(new_id);
+        sqlx::query(
+            "INSERT INTO automations (id, agent_id, name, trigger_kind, trigger, prompt, enabled, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(id) DO UPDATE SET name = excluded.name, trigger_kind = excluded.trigger_kind,
+             trigger = excluded.trigger, prompt = excluded.prompt, enabled = excluded.enabled",
+        )
+        .bind(&id)
+        .bind(&input.agent_id)
+        .bind(input.name.trim())
+        .bind(input.trigger.kind())
+        .bind(serde_json::to_string(&input.trigger)?)
+        .bind(input.prompt.trim())
+        .bind(input.enabled as i64)
+        .bind(now())
+        .execute(&self.db)
+        .await?;
+        self.get_automation(&id).await
+    }
+
+    pub async fn mark_automation_run(&self, id: &str, status: &str) -> anyhow::Result<()> {
+        sqlx::query("UPDATE automations SET last_run_at = ?, last_status = ? WHERE id = ?")
+            .bind(now())
+            .bind(status)
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_automation(&self, id: &str) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM automations WHERE id = ?")
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    // ---------- email accounts ----------
+
+    pub async fn email_account(
+        &self,
+        agent_id: &str,
+    ) -> anyhow::Result<Option<crate::email::EmailAccount>> {
+        Ok(
+            sqlx::query("SELECT * FROM email_accounts WHERE agent_id = ?")
+                .bind(agent_id)
+                .fetch_optional(&self.db)
+                .await?
+                .as_ref()
+                .map(email_from_row),
+        )
+    }
+
+    pub async fn list_email_accounts(&self) -> anyhow::Result<Vec<crate::email::EmailAccount>> {
+        let rows = sqlx::query("SELECT * FROM email_accounts")
+            .fetch_all(&self.db)
+            .await?;
+        Ok(rows.iter().map(email_from_row).collect())
+    }
+
+    pub async fn save_email_account(&self, a: &crate::email::EmailAccount) -> anyhow::Result<()> {
+        anyhow::ensure!(a.address.contains('@'), "enter a valid email address");
+        sqlx::query(
+            "INSERT INTO email_accounts (agent_id, kind, address, display_name, imap_host, imap_port, smtp_host, smtp_port, username, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(agent_id) DO UPDATE SET kind = excluded.kind, address = excluded.address, display_name = excluded.display_name,
+             imap_host = excluded.imap_host, imap_port = excluded.imap_port, smtp_host = excluded.smtp_host,
+             smtp_port = excluded.smtp_port, username = excluded.username",
+        )
+        .bind(&a.agent_id)
+        .bind(a.kind.as_str())
+        .bind(a.address.trim())
+        .bind(&a.display_name)
+        .bind(&a.imap_host)
+        .bind(a.imap_port as i64)
+        .bind(&a.smtp_host)
+        .bind(a.smtp_port as i64)
+        .bind(&a.username)
+        .bind(now())
+        .execute(&self.db)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn set_email_seen_uid(&self, agent_id: &str, uid: u32) -> anyhow::Result<()> {
+        sqlx::query("UPDATE email_accounts SET last_seen_uid = ? WHERE agent_id = ?")
+            .bind(uid as i64)
+            .bind(agent_id)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_email_account(&self, agent_id: &str) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM email_accounts WHERE agent_id = ?")
+            .bind(agent_id)
+            .execute(&self.db)
+            .await?;
+        Ok(())
     }
 }

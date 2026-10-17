@@ -11,7 +11,25 @@ use opencue_core::{Core, CoreEvent};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
+const REMEMBER_CALL: &[&str] = &[
+    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"remember","arguments":""}}]}}]}"#,
+    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"text\":\"Likes green tea\"}"}}]}}]}"#,
+];
+const NOTED_REPLY: &[&str] = &[
+    r#"{"choices":[{"delta":{"content":"Noted, "}}]}"#,
+    r#"{"choices":[{"delta":{"content":"you like green tea."}}]}"#,
+    r#"{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}"#,
+];
+
 async fn mock_llm() -> (String, Arc<AtomicUsize>) {
+    mock_llm_with(REMEMBER_CALL, NOTED_REPLY).await
+}
+
+/// An OpenAI-compatible streaming server: the first request gets `first`, later ones `rest`.
+async fn mock_llm_with(
+    first: &'static [&'static str],
+    rest: &'static [&'static str],
+) -> (String, Arc<AtomicUsize>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let hits = Arc::new(AtomicUsize::new(0));
@@ -45,18 +63,7 @@ async fn mock_llm() -> (String, Arc<AtomicUsize>) {
                         break;
                     }
                 }
-                let events = if n == 0 {
-                    vec![
-                        r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"remember","arguments":""}}]}}]}"#,
-                        r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"text\":\"Likes green tea\"}"}}]}}]}"#,
-                    ]
-                } else {
-                    vec![
-                        r#"{"choices":[{"delta":{"content":"Noted, "}}]}"#,
-                        r#"{"choices":[{"delta":{"content":"you like green tea."}}]}"#,
-                        r#"{"choices":[],"usage":{"prompt_tokens":10,"completion_tokens":5}}"#,
-                    ]
-                };
+                let events = if n == 0 { first } else { rest };
                 let mut body = String::new();
                 for e in events {
                     body.push_str(&format!("data: {e}\n\n"));
@@ -133,4 +140,117 @@ async fn agent_calls_tool_then_replies() {
     assert_eq!(msgs[2].status, "done");
     assert_eq!(msgs[3].content, "Noted, you like green tea.");
     assert_eq!(msgs[3].output_tokens, 5);
+}
+
+#[tokio::test]
+async fn webhook_automation_runs_a_command_on_the_agents_computer() {
+    use opencue_core::automations::{AutomationInput, Trigger};
+    use opencue_core::computer::ComputerBackend;
+    use opencue_core::models::{AgentSettings, ApprovalMode};
+
+    const RUN_CALL: &[&str] = &[
+        r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","function":{"name":"run_command","arguments":"{\"command\":\"echo hello-from-shell\"}"}}]}}]}"#,
+    ];
+    const DONE_REPLY: &[&str] = &[r#"{"choices":[{"delta":{"content":"The deploy hook ran."}}]}"#];
+
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let port = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap().port()
+    };
+    core.store
+        .set_setting("webhook_port", &port.to_string())
+        .await
+        .unwrap();
+    core.start_background();
+
+    let (base, hits) = mock_llm_with(RUN_CALL, DONE_REPLY).await;
+    let provider = core
+        .save_provider(
+            ProviderConfig {
+                id: String::new(),
+                kind: ProviderKind::OpenaiCompatible,
+                name: "Mock".into(),
+                base_url: Some(base),
+                default_model: Some("mock-1".into()),
+                enabled: true,
+                has_key: false,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let settings = AgentSettings {
+        approval_mode: ApprovalMode::Autonomous,
+        computer: ComputerBackend::Host,
+        ..Default::default()
+    };
+    let agent = core
+        .create_agent(NewAgent {
+            name: "Ops".into(),
+            provider_id: Some(provider.id),
+            settings: Some(settings),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    let token = opencue_core::automations::new_token();
+    core.save_automation(AutomationInput {
+        id: None,
+        agent_id: agent.id.clone(),
+        name: "Deploys".into(),
+        trigger: Trigger::Webhook {
+            token: token.clone(),
+        },
+        prompt: "Check the deploy.".into(),
+        enabled: true,
+    })
+    .await
+    .unwrap();
+
+    // Give the webhook server a moment to bind, then call it like an external tool would.
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let res = reqwest::Client::new()
+        .post(format!("http://127.0.0.1:{port}/hooks/{token}"))
+        .body("deploy ok")
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(res.status(), 202);
+
+    let msgs = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            let msgs = core.store.messages(&agent.id, 50).await.unwrap();
+            if msgs
+                .iter()
+                .any(|m| m.role == Role::Assistant && m.content == "The deploy hook ran.")
+            {
+                return msgs;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("automation ran");
+
+    assert_eq!(hits.load(Ordering::SeqCst), 2);
+    assert_eq!(msgs[0].role, Role::Event);
+    assert!(msgs[0].content.contains("Check the deploy."));
+    assert!(msgs[0].content.contains("deploy ok"));
+    let tool = msgs
+        .iter()
+        .find(|m| m.role == Role::Tool)
+        .expect("tool result");
+    assert_eq!(tool.status, "done");
+    assert!(
+        tool.content.contains("hello-from-shell"),
+        "{}",
+        tool.content
+    );
+    assert!(core
+        .computer_log(&agent.id)
+        .contains("$ echo hello-from-shell"));
+    let a = core.automations(Some(&agent.id)).await.unwrap();
+    assert_eq!(a[0].last_status.as_deref(), Some("ok"));
 }

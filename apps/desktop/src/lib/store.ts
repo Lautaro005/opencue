@@ -1,9 +1,10 @@
 import { create } from "zustand";
 import { api, onCoreEvent } from "./api";
+import { onMessageForVoice } from "./voice";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, ThreadSummary } from "./types";
 
-export type Panel = "profile" | "group" | null;
-export type SettingsSection = "general" | "account" | "usage" | "models" | "apps" | "skills" | "computers" | "email" | "internet";
+export type Panel = "profile" | "group" | "computer" | null;
+export type SettingsSection = "general" | "account" | "usage" | "models" | "apps" | "skills" | "computers" | "voice" | "internet" | "about";
 export type Dialog = "create-agent" | "create-group" | null;
 
 interface State {
@@ -90,7 +91,7 @@ export const useStore = create<State>((set, get) => ({
     const { panel, groups } = get();
     const isGroup = !!(id && groups[id]);
     // Keep the right panel open but switch it to the matching kind.
-    const nextPanel: Panel = panel ? (isGroup ? "group" : "profile") : null;
+    const nextPanel: Panel = panel ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
     set({ selected: id, panel: nextPanel });
     try {
       if (id) localStorage.setItem("opencue.selected", id);
@@ -157,6 +158,7 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
         });
       }
       if (m.role !== "tool" && m.status !== "streaming") scheduleRefresh(get);
+      onMessageForVoice(m, get().settings.voice_auto_speak !== "false");
       break;
     }
     case "delta":
@@ -194,6 +196,12 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       break;
     case "mcp_changed":
       window.dispatchEvent(new CustomEvent("opencue:mcp-changed"));
+      break;
+    case "automations_changed":
+      window.dispatchEvent(new CustomEvent("opencue:automations-changed"));
+      break;
+    case "computer_output":
+      window.dispatchEvent(new CustomEvent("opencue:computer-output", { detail: ev }));
       break;
   }
 }

@@ -170,8 +170,7 @@ async fn main() -> anyhow::Result<()> {
         Cmd::Agents(AgentsCmd::List) => {
             for a in core.store.list_agents().await? {
                 println!(
-                    "{} {:<20} {}  {}",
-                    a.avatar.emoji,
+                    "{:<20} {}  {}",
                     a.name,
                     a.model.unwrap_or_else(|| "(provider default)".into()),
                     a.id
@@ -197,7 +196,7 @@ async fn main() -> anyhow::Result<()> {
                     ..Default::default()
                 })
                 .await?;
-            println!("Created {} {} ({})", a.avatar.emoji, a.name, a.id);
+            println!("Created {} ({})", a.name, a.id);
         }
         Cmd::Agents(AgentsCmd::Delete { agent }) => {
             let a = resolve_agent(&core, &agent).await?;
@@ -210,10 +209,7 @@ async fn main() -> anyhow::Result<()> {
             if let Some(m) = message {
                 chat_once(&core, &a.id, &m).await?;
             } else {
-                println!(
-                    "Chatting with {} {} — Ctrl+D to exit",
-                    a.avatar.emoji, a.name
-                );
+                println!("Chatting with {} — Ctrl+D to exit", a.name);
                 loop {
                     print!("› ");
                     std::io::stdout().flush()?;

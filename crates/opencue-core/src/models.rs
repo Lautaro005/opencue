@@ -34,6 +34,18 @@ pub struct AgentSettings {
     pub auto_memory: bool,
     #[serde(default)]
     pub temperature: Option<f32>,
+    /// Where `run_command` and the file tools run.
+    #[serde(default)]
+    pub computer: crate::computer::ComputerBackend,
+    /// Skills listed in the prompt and loadable with `use_skill`.
+    #[serde(default = "yes")]
+    pub skills: bool,
+    /// Composio actions (needs a Composio API key in Settings → Apps).
+    #[serde(default)]
+    pub composio: bool,
+    /// ElevenLabs voice id for spoken replies; empty uses the app default.
+    #[serde(default)]
+    pub voice_id: Option<String>,
 }
 
 impl Default for AgentSettings {
@@ -44,7 +56,9 @@ impl Default for AgentSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Avatar {
-    pub emoji: String,
+    /// Face id drawn on the shape (older versions stored an emoji here).
+    #[serde(alias = "emoji")]
+    pub face: String,
     pub color: String,
     pub shape: String,
 }

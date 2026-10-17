@@ -1,6 +1,6 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Mail, Sparkles } from "lucide-react";
+import { AlertCircle, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { useStore } from "../../lib/store";
 import type { Agent, Message, ToolCall } from "../../lib/types";
 import { clockTime, cx } from "../../lib/format";
@@ -85,12 +85,12 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                       )}
                     </div>
                   ) : m.content ? (
-                    <div className="max-w-[640px] rounded-2xl rounded-tl-md bg-agent px-3.5 py-2 text-[14px] leading-relaxed text-agent-ink">
+                    <div className="max-w-[640px] rounded-[20px] bg-agent px-4 py-2.5 text-[14px] leading-relaxed text-agent-ink">
                       <Markdown text={m.content} />
                       {m.status === "stopped" && <div className="mt-1 text-[11.5px] text-muted">— {t("chat.stopped")}</div>}
                     </div>
                   ) : m.status === "streaming" ? (
-                    <div className="inline-flex h-9 items-center rounded-2xl rounded-tl-md bg-agent px-4 text-muted">
+                    <div className="inline-flex h-10 items-center rounded-[20px] bg-agent px-4 text-muted">
                       <Typing />
                     </div>
                   ) : null}
@@ -113,7 +113,7 @@ function UserBubble({ m, firstOfRun }: { m: Message; firstOfRun: boolean }) {
   return (
     <div className={cx("flex justify-end", firstOfRun && "mt-3")}>
       <div className="group flex max-w-[75%] flex-col items-end">
-        <div className="selectable whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-me px-3.5 py-2 text-[14px] leading-relaxed text-me-ink">{m.content}</div>
+        <div className="selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink">{m.content}</div>
         <span className="mt-0.5 h-4 text-[11px] text-faint opacity-0 transition-opacity group-hover:opacity-100">{clockTime(m.created_at)}</span>
       </div>
     </div>
@@ -124,7 +124,7 @@ function AgentRow({ agent, showHeader, isGroup, children }: { agent?: Agent; sho
   if (!children) return null;
   return (
     <div className={cx("flex items-start gap-2.5", showHeader && "mt-3")}>
-      <div className="w-8 shrink-0">{showHeader && agent && <AvatarView avatar={agent.avatar} name={agent.name} size={30} />}</div>
+      {isGroup && <div className="w-8 shrink-0">{showHeader && agent && <AvatarView avatar={agent.avatar} name={agent.name} size={30} />}</div>}
       <div className="flex min-w-0 flex-col items-start gap-1">
         {showHeader && isGroup && agent && <span className="ml-1 text-[12px] font-medium text-muted">{agent.name}</span>}
         {children}
@@ -134,14 +134,24 @@ function AgentRow({ agent, showHeader, isGroup, children }: { agent?: Agent; sho
 }
 
 function EventCard({ m }: { m: Message }) {
-  const isMail = /email|correo|mail/i.test(m.content);
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const isMail = /received an email/i.test(m.content);
+  const auto = m.content.match(/^Automation “(.+?)”:/);
+  const firstLine = m.content.split("\n")[0];
+  const title = isMail ? t("chat.receivedEmail") : auto ? t("chat.automationRan", { name: auto[1] }) : firstLine;
+  const hasMore = m.content.trim() !== title.trim();
   return (
-    <div className="my-2 flex justify-center">
-      <div className="inline-flex max-w-[80%] items-center gap-2 rounded-xl border border-line bg-event px-3 py-1.5 text-[12.5px] text-muted">
-        {isMail ? <Mail size={14} /> : <Sparkles size={14} />}
-        <span className="truncate">{m.content}</span>
-        <span className="text-faint">· {clockTime(m.created_at)}</span>
-      </div>
+    <div className="my-1.5">
+      <button
+        onClick={() => hasMore && setOpen((v) => !v)}
+        className={cx("inline-flex max-w-[80%] items-center gap-2 rounded-lg px-2 py-1 text-[13px] text-muted", hasMore && "hover:bg-hover")}
+      >
+        {isMail ? <span className="text-[15px] leading-none">✉️</span> : auto ? <Zap size={14} className="text-warning" /> : <Sparkles size={14} />}
+        <span className="truncate">{title}</span>
+        {hasMore && <ChevronRight size={14} className={cx("shrink-0 text-faint transition-transform", open && "rotate-90")} />}
+      </button>
+      {open && <pre className="selectable mt-1 ml-2 max-w-[80%] rounded-xl border border-line bg-event px-3 py-2 font-sans text-[12.5px] whitespace-pre-wrap text-muted">{m.content}</pre>}
     </div>
   );
 }

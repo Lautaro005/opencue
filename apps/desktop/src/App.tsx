@@ -5,6 +5,7 @@ import { Sidebar } from "./components/Sidebar";
 import { ChatView } from "./components/chat/ChatView";
 import { AgentProfile } from "./components/panel/AgentProfile";
 import { GroupDetails } from "./components/panel/GroupDetails";
+import { ComputerPanel } from "./components/panel/ComputerPanel";
 import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
@@ -52,6 +53,7 @@ export default function App() {
       <ChatView />
       {panel === "profile" && agent && <AgentProfile key={selected} agent={agent} />}
       {panel === "group" && group && <GroupDetails key={selected} group={group} />}
+      {panel === "computer" && agent && <ComputerPanel key={selected} agent={agent} />}
       <CreateAgentDialog />
       <CreateGroupDialog />
       <SettingsModal />

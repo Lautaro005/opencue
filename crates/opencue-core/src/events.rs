@@ -34,6 +34,13 @@ pub enum CoreEvent {
     /// Something in the sidebar changed (agent/group created, renamed, deleted).
     ThreadsChanged,
     McpChanged,
+    AutomationsChanged,
+    /// Output from a command running on an agent's computer.
+    ComputerOutput {
+        agent_id: String,
+        text: String,
+        stderr: bool,
+    },
     Error {
         thread_id: Option<String>,
         message: String,

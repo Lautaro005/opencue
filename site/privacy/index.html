@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy policy — OpenCue</title>
+  <meta name="description" content="How OpenCue handles your data: local-first, no telemetry, and only the services you connect.">
+  <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="../"><span data-avatar="bubble googly #2f86eb 26"></span>OpenCue</a>
+      <nav class="nav-links">
+        <a href="../docs/">Docs</a>
+        <a href="../changelog/" class="hide-sm">Changelog</a>
+        <a href="./" aria-current="page" class="hide-sm">Privacy</a>
+        <a class="icon-link" href="https://github.com/Lautaro005/opencue" aria-label="OpenCue on GitHub">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap page">
+    <div class="page-head">
+      <h1>Privacy policy</h1>
+      <p>Effective October 17, 2026</p>
+    </div>
+    <article class="prose">
+      <p>OpenCue is a desktop app that runs on your computer. It has no account system, no servers of its own and no telemetry. This page explains what stays on your computer and what is sent to services <em>you</em> choose to connect.</p>
+
+      <h2>What stays on your computer</h2>
+      <ul>
+        <li>Your agents, their instructions, memory, skills, chats, automations and settings, in the OpenCue data folder (<code>~/.local/share/opencue</code> on Linux, <code>%APPDATA%\opencue\data</code> on Windows).</li>
+        <li>Secrets — API keys, email passwords and tokens — in your operating system's credential store. Only when none is available are they saved in a <code>secrets.json</code> file readable by your user alone.</li>
+        <li>Files agents create in their workspace folder.</li>
+      </ul>
+      <p>The OpenCue project never receives any of this. There is no analytics, crash reporting or usage tracking in the app.</p>
+
+      <h2>What leaves your computer, and to whom</h2>
+      <p>OpenCue only talks to the services you configure, when an agent or you use them:</p>
+      <table>
+        <tr><th>Service</th><th>What is sent</th><th>When</th></tr>
+        <tr><td>Your model provider (OpenAI, Anthropic, xAI, OpenRouter, Ollama Cloud, CheapestInference…)</td><td>The conversation, the agent's instructions and memory, and tool results needed for the reply</td><td>Every time an agent answers</td></tr>
+        <tr><td>Local models (Ollama, LM Studio) or the <code>codex</code> / <code>claude</code> CLIs</td><td>The same, to the program on your machine (the CLIs then talk to their own company under their own terms)</td><td>Every time an agent answers</td></tr>
+        <tr><td>DuckDuckGo, Wikipedia, your SearXNG, and websites</td><td>Search queries and page requests</td><td>When an agent searches or reads the web</td></tr>
+        <tr><td>Your email provider (IMAP/SMTP)</td><td>Login and the messages read or sent</td><td>When an agent uses email or an email automation checks the inbox</td></tr>
+        <tr><td>Composio</td><td>Your Composio API key, user ID and the arguments of actions agents run</td><td>When an agent uses connected apps</td></tr>
+        <tr><td>ElevenLabs</td><td>Your recorded voice and the text of replies to be spoken</td><td>Only while you use the microphone or a reply is read aloud</td></tr>
+        <tr><td>SPACE server, Docker, MCP servers</td><td>Commands, files and tool arguments</td><td>When an agent uses its computer or an app</td></tr>
+        <tr><td>GitHub</td><td>A normal web request</td><td>Only when you click a link to the repository, releases or docs</td></tr>
+      </table>
+      <p>Each of those services handles data under its own privacy policy. Review them before connecting an account.</p>
+
+      <h2>Webhooks</h2>
+      <p>The automation webhook server listens only on <code>127.0.0.1</code>, so it can be reached from your own computer and not from the network.</p>
+
+      <h2>This website</h2>
+      <p>This site is static and hosted on GitHub Pages. It sets no cookies and runs no analytics. GitHub may keep standard server logs (such as IP addresses) as described in the <a href="https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement">GitHub Privacy Statement</a>.</p>
+
+      <h2>Deleting your data</h2>
+      <p>Delete an agent to remove its chat, memory, instructions, workspace and email password. To remove everything, quit OpenCue and delete the data folder; API keys can be removed from Settings or your system's credential manager.</p>
+
+      <h2>Children</h2>
+      <p>OpenCue is not directed at children. Model providers you connect have their own age requirements.</p>
+
+      <h2>Changes</h2>
+      <p>Changes to this policy are published on this page and in the <a href="../changelog/">changelog</a>, with a new effective date.</p>
+
+      <h2>Contact</h2>
+      <p>Questions: open an <a href="https://github.com/Lautaro005/opencue/issues">issue</a>. Security problems: please report them privately as described in the <a href="https://github.com/Lautaro005/opencue/security/policy">security policy</a>.</p>
+    </article>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>© 2026 OpenCue · Apache-2.0 + Commons Clause</span>
+      <nav>
+        <a href="../docs/">Docs</a>
+        <a href="../changelog/">Changelog</a>
+        <a href="./">Privacy</a>
+        <a href="https://github.com/Lautaro005/opencue/security/policy">Security</a>
+        <a href="https://github.com/Lautaro005/opencue">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="../assets/avatars.js"></script>
+</body>
+</html>

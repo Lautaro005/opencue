@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Eraser, MoreHorizontal, PanelRight } from "lucide-react";
+import { Eraser, Monitor, MoreHorizontal, SquareUser, Users } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { AvatarView, GroupAvatar } from "../AvatarView";
@@ -83,8 +83,17 @@ export function ChatView() {
               </div>
             )}
           </div>
-          <IconButton label={group ? t("chat.groupDetails") : t("chat.profile")} active={!!panel} onClick={() => setPanel(panel ? null : group ? "group" : "profile")}>
-            <PanelRight size={18} />
+          {agent && (
+            <IconButton label={t("computer.title")} active={panel === "computer"} onClick={() => setPanel(panel === "computer" ? null : "computer")}>
+              <Monitor size={18} />
+            </IconButton>
+          )}
+          <IconButton
+            label={group ? t("chat.groupDetails") : t("chat.profile")}
+            active={panel === "profile" || panel === "group"}
+            onClick={() => setPanel(panel === "profile" || panel === "group" ? null : group ? "group" : "profile")}
+          >
+            {group ? <Users size={18} /> : <SquareUser size={18} />}
           </IconButton>
         </div>
       </header>
@@ -99,7 +108,7 @@ export function ChatView() {
         <MessageList threadId={selected} isGroup={!!group} />
       )}
 
-      <Composer name={name} members={members} busy={busy} onSend={(text) => void send(selected, text)} onStop={() => void api.stopThread(selected)} />
+      <Composer threadId={selected} name={name} members={members} busy={busy} onSend={(text) => void send(selected, text)} onStop={() => void api.stopThread(selected)} />
     </main>
   );
 }

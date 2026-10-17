@@ -10,12 +10,18 @@ export interface AgentSettings {
   use_global_memory: boolean;
   auto_memory: boolean;
   temperature: number | null;
+  computer: ComputerBackend;
+  skills: boolean;
+  composio: boolean;
+  voice_id: string | null;
 }
 
+export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space";
+
 export interface Avatar {
-  emoji: string;
+  face: string;
   color: string;
-  shape: string; // circle | squircle | blob
+  shape: string; // see SHAPE_DEFS in components/AvatarView
 }
 
 export interface Agent {
@@ -183,4 +189,102 @@ export type CoreEvent =
   | { type: "approval_resolved"; approval_id: string; approved: boolean }
   | { type: "threads_changed" }
   | { type: "mcp_changed" }
+  | { type: "automations_changed" }
+  | { type: "computer_output"; agent_id: string; text: string; stderr: boolean }
   | { type: "error"; thread_id: string | null; message: string };
+
+export interface SkillSummary {
+  name: string;
+  description: string;
+  path: string;
+}
+
+export interface Skill extends SkillSummary {
+  body: string;
+}
+
+export type Trigger =
+  | { kind: "schedule"; cron: string }
+  | { kind: "email"; filter: string; poll_minutes: number }
+  | { kind: "webhook"; token: string }
+  | { kind: "group_message"; group_id: string; keyword: string };
+
+export interface Automation {
+  id: string;
+  agent_id: string;
+  name: string;
+  trigger: Trigger;
+  prompt: string;
+  enabled: boolean;
+  last_run_at: string | null;
+  last_status: string | null;
+  created_at: string;
+  next_run_at: string | null;
+}
+
+export interface AutomationInput {
+  id?: string | null;
+  agent_id: string;
+  name: string;
+  trigger: Trigger;
+  prompt: string;
+  enabled: boolean;
+}
+
+export type EmailKind = "imap" | "composio_gmail";
+
+export interface EmailAccount {
+  agent_id: string;
+  kind: EmailKind;
+  address: string;
+  display_name: string | null;
+  imap_host: string | null;
+  imap_port: number;
+  smtp_host: string | null;
+  smtp_port: number;
+  username: string | null;
+  last_seen_uid: number;
+  has_password: boolean;
+}
+
+export interface ComposioStatus {
+  configured: boolean;
+  user_id: string;
+  accounts: { id: string; toolkit: string; status: string }[];
+  error: string | null;
+}
+
+export interface ComputerSettings {
+  docker_image: string;
+  space_url: string;
+  space_template: string;
+  has_space_token: boolean;
+  os: string;
+  docker_available: boolean;
+  wsl_available: boolean;
+  webhook_port: number;
+}
+
+export interface FileEntry {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+}
+
+export interface CommandResult {
+  exit_code: number;
+  output: string;
+  timed_out: boolean;
+}
+
+export interface VoiceSettings {
+  configured: boolean;
+  voice_id: string;
+  auto_speak: boolean;
+}
+
+export interface Voice {
+  id: string;
+  name: string;
+}

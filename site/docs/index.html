@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Docs — OpenCue</title>
+  <meta name="description" content="How to install OpenCue and set up agents, providers, memory, groups, apps, email, automations, computers and voice.">
+  <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <a class="brand" href="../"><span data-avatar="bubble googly #2f86eb 26"></span>OpenCue</a>
+      <nav class="nav-links">
+        <a href="./" aria-current="page">Docs</a>
+        <a href="../changelog/" class="hide-sm">Changelog</a>
+        <a href="../privacy/" class="hide-sm">Privacy</a>
+        <a class="icon-link" href="https://github.com/Lautaro005/opencue" aria-label="OpenCue on GitHub">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap page">
+    <div class="page-head">
+      <h1>Documentation</h1>
+      <p>Everything you need to set up OpenCue and your agents.</p>
+    </div>
+    <div class="docs">
+      <nav class="toc" aria-label="On this page">
+        <div class="group">Start</div>
+        <a href="#install">Install</a>
+        <a href="#first-agent">Your first agent</a>
+        <a href="#providers">Model providers</a>
+        <div class="group">Agents</div>
+        <a href="#profile">Profile &amp; avatar</a>
+        <a href="#memory">Instructions &amp; memory</a>
+        <a href="#groups">Group chats</a>
+        <a href="#approvals">Approvals</a>
+        <div class="group">Capabilities</div>
+        <a href="#apps">Apps, MCP &amp; Composio</a>
+        <a href="#skills">Skills</a>
+        <a href="#email">Email</a>
+        <a href="#automations">Automations</a>
+        <a href="#computers">Computers</a>
+        <a href="#voice">Voice</a>
+        <a href="#internet">Internet</a>
+        <div class="group">More</div>
+        <a href="#data">Data &amp; privacy</a>
+        <a href="#cli">Command line</a>
+        <a href="#build">Build from source</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <article class="prose">
+        <h2 id="install">Install</h2>
+        <p>Download the latest installer from <a href="https://github.com/Lautaro005/opencue/releases/latest">GitHub Releases</a>:</p>
+        <table>
+          <tr><th>System</th><th>File</th><th>Notes</th></tr>
+          <tr><td>Linux</td><td><code>.AppImage</code></td><td>Runs anywhere: <code>chmod +x OpenCue*.AppImage</code> and open it.</td></tr>
+          <tr><td>Debian / Ubuntu</td><td><code>.deb</code></td><td><code>sudo apt install ./OpenCue_*.deb</code></td></tr>
+          <tr><td>Fedora / openSUSE</td><td><code>.rpm</code></td><td><code>sudo dnf install ./OpenCue-*.rpm</code></td></tr>
+          <tr><td>Windows 10/11</td><td><code>.msi</code> or <code>-setup.exe</code></td><td>The setup.exe installs for the current user without admin rights.</td></tr>
+        </table>
+        <p>Installers are not code-signed yet, so Windows SmartScreen may warn you the first time. macOS isn't distributed but builds from source.</p>
+
+        <h2 id="first-agent">Your first agent</h2>
+        <ol>
+          <li>Open <strong>Settings → Models</strong> (<code>Ctrl+,</code>) and add a provider — paste an API key, or pick Ollama / LM Studio if you run models locally.</li>
+          <li>Click <strong>+</strong> at the top of the sidebar → <strong>Create Agent</strong>. Give it a name, a face and a sentence about what it should help with.</li>
+          <li>Say hi. Click the person icon at the top right to open its profile, or the screen icon to open its computer.</li>
+        </ol>
+        <p class="note">Closing the window keeps OpenCue in the tray so automations and running agents keep working. Quit from the tray icon.</p>
+
+        <h2 id="providers">Model providers</h2>
+        <p>Every agent uses one provider and model, picked in its profile → <strong>Model</strong>. The model list loads from the provider.</p>
+        <table>
+          <tr><th>Provider</th><th>How it signs in</th></tr>
+          <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheapestInference, Ollama Cloud</td><td>API key, stored in your system keychain</td></tr>
+          <tr><td>Ollama, LM Studio, any OpenAI-compatible server</td><td>Base URL, no key needed for local servers</td></tr>
+          <tr><td>ChatGPT / Codex, Claude Code</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code> or <code>claude</code> program you are already logged in to</td></tr>
+        </table>
+        <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client. Trade-off: CLI agents reply with text only — OpenCue's tools (memory, web, email, computer, MCP) need an API-key provider.</p>
+
+        <h2 id="profile">Profile &amp; avatar</h2>
+        <p>Click an agent's face in its profile to change it: ten faces, twelve shapes and a color row. The profile is organized like this:</p>
+        <ul>
+          <li><strong>Assets</strong> — <em>Mails</em> (its inbox) and <em>Computer</em> (where it runs commands).</li>
+          <li><strong>Configurations</strong> — Model, Apps, Skills, Instructions, Memory, Voice and Permissions.</li>
+          <li><strong>Automations</strong> — what wakes the agent up by itself.</li>
+        </ul>
+
+        <h2 id="memory">Instructions &amp; memory</h2>
+        <p><strong>Instructions</strong> are the agent's job description, added to every conversation. They are saved as <code>agents/&lt;id&gt;/INSTRUCTIONS.md</code>.</p>
+        <p><strong>Memory</strong> is a list of facts the agent keeps about you and its work, in <code>agents/&lt;id&gt;/MEMORY.md</code>. Agents save facts with the <code>remember</code> tool, look them up with <code>recall</code> and delete with <code>forget</code> (which asks first). You can add, delete or edit the Markdown directly.</p>
+        <ul>
+          <li><strong>Shared memory</strong> (<code>memory/GLOBAL.md</code>) is visible to every agent that has “Use shared memory” on.</li>
+          <li><strong>Learn from conversations automatically</strong> asks the model after each reply whether anything is worth remembering.</li>
+        </ul>
+
+        <h2 id="groups">Group chats</h2>
+        <p>Create one with <strong>+ → Create group chat</strong>. The first member is the owner.</p>
+        <ul>
+          <li><code>@Name</code> makes that agent answer. Without a mention, the owner's model picks who should reply.</li>
+          <li>Agents hand work to each other by mentioning them or with <code>send_to_agent</code>.</li>
+          <li><strong>Automatic turns</strong> (group details) caps how many hand-offs happen before the group waits for you.</li>
+        </ul>
+
+        <h2 id="approvals">Approvals</h2>
+        <p>In <strong>Ask first</strong> mode (the default) these wait for you to click Allow in the chat:</p>
+        <ul>
+          <li>Sending email</li>
+          <li>Commands and file writes on <em>This computer</em> or WSL</li>
+          <li>Deleting a memory</li>
+          <li>MCP tools not marked read-only, and Composio actions that may change data</li>
+        </ul>
+        <p><strong>Fully autonomous</strong> runs everything without asking. Use it only with tools and content you trust.</p>
+
+        <h2 id="apps">Apps, MCP &amp; Composio</h2>
+        <h3>MCP servers</h3>
+        <p><strong>Settings → Apps</strong> accepts local servers (a command such as <code>npx -y @modelcontextprotocol/server-filesystem ~/Documents</code>), remote servers by URL (Streamable HTTP), or an imported Claude Desktop–style <code>mcp.json</code>:</p>
+        <pre><code>{
+  "mcpServers": {
+    "filesystem": { "command": "npx", "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/me/Documents"] },
+    "remote": { "url": "https://example.com/mcp", "headers": { "Authorization": "Bearer …" } }
+  }
+}</code></pre>
+        <p>In an agent's <strong>Apps</strong> page choose all servers or only some.</p>
+        <h3>Composio</h3>
+        <p><a href="https://composio.dev">Composio</a> connects 1000+ apps (Gmail, Slack, Notion, GitHub, Google Calendar…).</p>
+        <ol>
+          <li>Create a Composio account and connect the apps you want in its dashboard.</li>
+          <li>Paste your Composio API key in <strong>Settings → Apps → Composio</strong>. The <em>User ID</em> is the Composio user whose connected accounts agents should use (<code>default</code> if empty).</li>
+          <li>Turn on <strong>Composio apps</strong> in an agent's Apps page. It gets two tools: <code>composio_search</code> to find an action and <code>composio_execute</code> to run it.</li>
+        </ol>
+
+        <h2 id="skills">Skills</h2>
+        <p>Skills are folders with a <code>SKILL.md</code> file, the same format as Claude Code Agent Skills:</p>
+        <pre><code>---
+name: weekly-report
+description: Write the Friday status report from this week's notes and emails.
+---
+
+1. Read the notes in the workspace from Monday to today.
+2. Search the inbox for "status" from this week.
+3. Write a short report with Done / Next / Blocked.</code></pre>
+        <p>Agents see each skill's name and description and load the full instructions with <code>use_skill</code> when a task matches. Create and edit skills in <strong>Settings → Skills</strong>, import one from a URL (GitHub links work), or let an agent save one with <code>save_skill</code> after you teach it something. Skills live in the <code>skills/</code> folder and are shared by all agents; turn them off per agent in its Skills page.</p>
+
+        <h2 id="email">Email</h2>
+        <p>Profile → <strong>Mails</strong> → Add. Two account types:</p>
+        <ul>
+          <li><strong>IMAP / SMTP</strong> — any provider. Gmail, Outlook, Yahoo, iCloud and Fastmail servers fill in automatically. With 2-step verification use an <em>app password</em>. The password goes to your system keychain.</li>
+          <li><strong>Gmail via Composio</strong> — uses the Gmail account connected in Composio.</li>
+        </ul>
+        <p>The agent gets <code>read_emails</code>, <code>search_inbox</code> (plain words, or <code>from:</code> / <code>subject:</code>) and <code>send_email</code>. Sending waits for approval in Ask-first mode. Email content is treated as data: agents are told not to follow instructions written inside messages.</p>
+
+        <h2 id="automations">Automations</h2>
+        <p>In the profile's <strong>Automations</strong> section click <strong>+</strong>. Each automation has a trigger and a prompt; when it fires, the prompt appears in the agent's chat as an event and the agent gets to work.</p>
+        <table>
+          <tr><th>Trigger</th><th>Details</th></tr>
+          <tr><td>Schedule</td><td>Five-field cron in local time: <code>minute hour day month weekday</code>. <code>0 9 * * 1-5</code> = weekdays at 9:00. Runs missed while OpenCue was closed for more than 10 minutes are skipped.</td></tr>
+          <tr><td>New email</td><td>Checks the agent's IMAP inbox every 1–60 minutes. Optional filter on sender or subject. The first check only records where the inbox is, so old mail doesn't fire.</td></tr>
+          <tr><td>Webhook</td><td>A private URL on your computer, e.g. <code>http://127.0.0.1:7777/hooks/&lt;token&gt;</code>. Anything you POST becomes trigger data.</td></tr>
+          <tr><td>Group message</td><td>When you write in a group the agent belongs to, optionally only if the message contains a keyword.</td></tr>
+        </table>
+        <pre><code>curl -X POST http://127.0.0.1:7777/hooks/YOUR_TOKEN \
+  -H 'Content-Type: application/json' \
+  -d '{"event":"deploy finished","status":"ok"}'</code></pre>
+        <p>The webhook server listens on <code>127.0.0.1</code> only. Change the port in <strong>Settings → Computers → Webhooks</strong>. Automations run while OpenCue is open or in the tray.</p>
+
+        <h2 id="computers">Computers</h2>
+        <p>Profile → <strong>Computer</strong> picks where an agent runs <code>run_command</code>, <code>read_file</code>, <code>write_file</code> and <code>list_files</code>. The screen icon in the chat header opens the live terminal and a file browser; you can type your own commands there too.</p>
+        <table>
+          <tr><th>Computer</th><th>What it is</th><th>Approvals</th></tr>
+          <tr><td>Docker container</td><td>One long-lived container per agent (<code>opencue-&lt;id&gt;</code>, default image <code>ubuntu:24.04</code>) with the agent's workspace mounted at <code>/workspace</code>. Needs Docker.</td><td>No — it's isolated</td></tr>
+          <tr><td>SPACE microVM</td><td>A Firecracker VM on your <a href="https://github.com/perplexityai/SPACE">SPACE</a> server. Linux with KVM, or point Windows at a remote Linux host.</td><td>No — it's isolated</td></tr>
+          <tr><td>This computer</td><td>Your own shell (PowerShell on Windows), starting in the agent's workspace folder.</td><td>Every command and file write</td></tr>
+          <tr><td>WSL</td><td>Windows Subsystem for Linux (Windows only).</td><td>Every command and file write</td></tr>
+        </table>
+        <h3>Setting up SPACE</h3>
+        <ol>
+          <li>On a Linux machine with <code>/dev/kvm</code>, run <code>scripts/check-space-host.sh</code> from the repository to check the basics.</li>
+          <li>Install SPACE following <a href="https://space.docs.perplexity.ai/">its documentation</a>.</li>
+          <li>In <strong>Settings → Computers → SPACE</strong>, paste the API URL (for example <code>http://host:8080/v1</code>), the template to boot and the API token, then <strong>Test connection</strong>.</li>
+        </ol>
+        <p>Each agent gets its own sandbox, created on first use and woken up when it was suspended.</p>
+
+        <h2 id="voice">Voice</h2>
+        <ol>
+          <li>Create an <a href="https://elevenlabs.io">ElevenLabs</a> API key and paste it in <strong>Settings → Voice</strong>.</li>
+          <li>Press the microphone in the message box, speak, press it again. Your speech is transcribed (Scribe) and sent.</li>
+          <li>With <strong>Read replies aloud</strong> on, the agent's answer is spoken. Pick a default voice there, or a voice per agent in its Voice page.</li>
+        </ol>
+
+        <h2 id="internet">Internet</h2>
+        <p>Agents with web access get <code>web_search</code> (DuckDuckGo and Wikipedia, no API keys) and <code>web_fetch</code> (any page, converted to Markdown). Results are cached in the local database. If you host <a href="https://docs.searxng.org">SearXNG</a>, add its URL in <strong>Settings → Internet</strong> and it is queried first.</p>
+
+        <h2 id="data">Data &amp; privacy</h2>
+        <table>
+          <tr><th></th><th>Linux</th><th>Windows</th></tr>
+          <tr><td>Data folder</td><td><code>~/.local/share/opencue</code></td><td><code>%APPDATA%\opencue\data</code></td></tr>
+        </table>
+        <p>Inside: <code>opencue.db</code> (agents, chats, settings, automations, web cache), <code>agents/&lt;id&gt;/</code> (instructions, memory, workspace), <code>memory/GLOBAL.md</code> and <code>skills/</code>. Set <code>OPENCUE_HOME</code> to use another folder. Secrets (API keys, email passwords, tokens) go to the system keychain, or a <code>0600</code> <code>secrets.json</code> if there is none. See the <a href="../privacy/">privacy policy</a> for what leaves your computer.</p>
+
+        <h2 id="cli">Command line</h2>
+        <p><code>opencue-cli</code> (zipped with each release) uses the same data folder as the app:</p>
+        <pre><code>opencue-cli providers add anthropic --key sk-ant-…
+opencue-cli agents create "Nova" --instructions "Plan my trips"
+opencue-cli chat Nova --message "Find a quiet hotel in Montevideo"
+opencue-cli mcp import ~/.config/Claude/claude_desktop_config.json
+opencue-cli search rust async traits
+opencue-cli where</code></pre>
+
+        <h2 id="build">Build from source</h2>
+        <p>Rust (stable), Node 22+, and on Linux <code>libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev</code>.</p>
+        <pre><code>git clone https://github.com/Lautaro005/opencue
+cd opencue/apps/desktop
+npm install
+npm run tauri dev     # the desktop app
+npm run tauri build   # installers for your system</code></pre>
+
+        <h2 id="faq">FAQ</h2>
+        <h3>Is it really free?</h3>
+        <p>Yes. You pay only for the model API you choose, or nothing with local models. The license lets you use, change and share OpenCue but not sell it.</p>
+        <h3>Does OpenCue have phone numbers or payments like Cue?</h3>
+        <p>No, on purpose: no phone, wallet or payments.</p>
+        <h3>Is it safe to let agents run commands?</h3>
+        <p>Prefer Docker or SPACE: they are isolated from your files. On <em>This computer</em>, keep the agent in Ask-first mode and read each command before allowing it. Report security problems privately — see the <a href="https://github.com/Lautaro005/opencue/security/policy">security policy</a>.</p>
+        <h3>Something broke.</h3>
+        <p>Open an <a href="https://github.com/Lautaro005/opencue/issues">issue on GitHub</a> with your system, version (Settings → About) and steps to reproduce.</p>
+      </article>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <span>© 2026 OpenCue · Apache-2.0 + Commons Clause</span>
+      <nav>
+        <a href="./">Docs</a>
+        <a href="../changelog/">Changelog</a>
+        <a href="../privacy/">Privacy</a>
+        <a href="https://github.com/Lautaro005/opencue/security/policy">Security</a>
+        <a href="https://github.com/Lautaro005/opencue">GitHub</a>
+      </nav>
+    </div>
+  </footer>
+  <script src="../assets/avatars.js"></script>
+</body>
+</html>

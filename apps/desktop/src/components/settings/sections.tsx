@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Search, Server, Terminal } from "lucide-react";
+import { Search } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { api } from "../../lib/api";
+import { api, openUrl } from "../../lib/api";
 import type { AppInfo, MemoryEntry, UsageRow } from "../../lib/types";
 import { compact } from "../../lib/format";
 import { LANGUAGES, setLanguage } from "../../i18n";
 import { getTheme, setTheme, type Theme } from "../../lib/theme";
-import { Badge, Button, Input, Select, Toggle } from "../ui";
+import { Button, Input, Select, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
 
 export function GeneralSection() {
@@ -171,58 +171,6 @@ export function UsageSection() {
   );
 }
 
-function NextPhase({ title, hint, children }: { title: string; hint: string; children?: React.ReactNode }) {
-  const { t } = useTranslation();
-  return (
-    <>
-      <div className="mb-6 flex items-start justify-between gap-4 pr-8">
-        <div>
-          <h1 className="text-[20px] font-semibold tracking-tight">{title}</h1>
-          <p className="mt-1 max-w-xl text-[13px] text-muted">{hint}</p>
-        </div>
-        <Badge>{t("common.nextPhase")}</Badge>
-      </div>
-      {children}
-    </>
-  );
-}
-
-export function SkillsSection() {
-  const { t } = useTranslation();
-  return <NextPhase title={t("settings.skills.title")} hint={t("settings.skills.hint")} />;
-}
-
-export function EmailSection() {
-  const { t } = useTranslation();
-  return <NextPhase title={t("settings.email.title")} hint={t("settings.email.hint")} />;
-}
-
-export function ComputersSection() {
-  const { t } = useTranslation();
-  const [info, setInfo] = useState<AppInfo | null>(null);
-  useEffect(() => void api.appInfo().then(setInfo), []);
-  const rows = [
-    { icon: <Server size={18} />, title: t("settings.computers.space"), hint: info && !info.space_supported ? t("settings.computers.spaceUnsupported") : t("settings.computers.spaceHint") },
-    { icon: <Box size={18} />, title: t("settings.computers.docker"), hint: t("settings.computers.dockerHint") },
-    { icon: <Terminal size={18} />, title: t("settings.computers.host"), hint: t("settings.computers.hostHint") },
-  ];
-  return (
-    <NextPhase title={t("settings.computers.title")} hint={t("settings.computers.hint")}>
-      <div className="space-y-2">
-        {rows.map((r) => (
-          <div key={r.title} className="flex items-start gap-3 rounded-xl border border-line px-4 py-3 opacity-80">
-            <span className="mt-0.5 text-muted">{r.icon}</span>
-            <div>
-              <div className="text-[13.5px] font-medium">{r.title}</div>
-              <div className="mt-0.5 text-[12px] text-muted">{r.hint}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </NextPhase>
-  );
-}
-
 export function InternetSection() {
   const { t } = useTranslation();
   const settings = useStore((s) => s.settings);
@@ -270,6 +218,41 @@ export function InternetSection() {
           </div>
         ))}
       </Card>
+    </>
+  );
+}
+
+export function AboutSection() {
+  const { t } = useTranslation();
+  const [info, setInfo] = useState<AppInfo | null>(null);
+  useEffect(() => void api.appInfo().then(setInfo), []);
+  const links = [
+    { label: t("settings.about.website"), url: "https://lautaro005.github.io/opencue/" },
+    { label: "GitHub", url: "https://github.com/Lautaro005/opencue" },
+    { label: t("settings.about.changelog"), url: "https://lautaro005.github.io/opencue/changelog/" },
+    { label: t("settings.about.privacy"), url: "https://lautaro005.github.io/opencue/privacy/" },
+  ];
+  return (
+    <>
+      <PageTitle title={t("settings.nav.about")} hint={t("settings.about.hint")} />
+      <Card>
+        <CardRow label={t("settings.about.version")}>
+          <span className="font-mono text-[12.5px] text-muted">{info?.version}</span>
+        </CardRow>
+        <CardRow label={t("settings.about.dataDir")}>
+          <span className="selectable max-w-[320px] truncate font-mono text-[12px] text-muted">{info?.data_dir}</span>
+        </CardRow>
+        <CardRow label={t("settings.about.license")} hint={t("settings.about.licenseHint")}>
+          <span className="text-[12.5px] text-muted">Apache-2.0 + Commons Clause</span>
+        </CardRow>
+      </Card>
+      <div className="flex flex-wrap gap-2">
+        {links.map((l) => (
+          <Button key={l.url} size="sm" onClick={() => void openUrl(l.url)}>
+            {l.label}
+          </Button>
+        ))}
+      </div>
     </>
   );
 }

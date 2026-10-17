@@ -21,6 +21,33 @@ fn show_main(app: &tauri::AppHandle) {
     }
 }
 
+/// WebKitGTK blocks getUserMedia by default; enable it for the voice button and approve only
+/// microphone/camera requests (the page is our own UI).
+#[cfg(target_os = "linux")]
+fn allow_microphone(app: &tauri::App) {
+    use webkit2gtk::glib::prelude::*;
+    use webkit2gtk::{PermissionRequestExt, SettingsExt, WebViewExt};
+    if let Some(w) = app.get_webview_window("main") {
+        let _ = w.with_webview(|wv| {
+            let view = wv.inner();
+            if let Some(settings) = WebViewExt::settings(&view) {
+                settings.set_enable_media_stream(true);
+            }
+            view.connect_permission_request(|_, req| {
+                if req.is::<webkit2gtk::UserMediaPermissionRequest>() {
+                    req.allow();
+                    true
+                } else {
+                    false
+                }
+            });
+        });
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn allow_microphone(_app: &tauri::App) {}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -58,6 +85,7 @@ pub fn run() {
                 }
             });
             app.manage(AppState { core });
+            allow_microphone(app);
 
             // Tray: agents keep working while the window is closed.
             let show = MenuItem::with_id(app, "show", "Open OpenCue", true, None::<&str>)?;
@@ -143,6 +171,34 @@ pub fn run() {
             commands::set_setting,
             commands::usage,
             commands::web_search,
+            commands::list_skills,
+            commands::get_skill,
+            commands::save_skill,
+            commands::delete_skill,
+            commands::import_skill,
+            commands::list_automations,
+            commands::save_automation,
+            commands::delete_automation,
+            commands::run_automation,
+            commands::new_webhook_token,
+            commands::get_email_account,
+            commands::save_email_account,
+            commands::delete_email_account,
+            commands::test_email,
+            commands::composio_status,
+            commands::save_composio,
+            commands::computer_settings,
+            commands::save_computer_settings,
+            commands::test_space,
+            commands::computer_exec,
+            commands::computer_list,
+            commands::computer_read,
+            commands::computer_log,
+            commands::voice_settings,
+            commands::save_voice_settings,
+            commands::list_voices,
+            commands::transcribe,
+            commands::speak,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenCue");
