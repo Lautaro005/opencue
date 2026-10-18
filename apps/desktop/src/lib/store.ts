@@ -4,7 +4,7 @@ import { onMessageForVoice } from "./voice";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | null;
-export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "skills" | "computers" | "voice" | "internet" | "about";
+export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
 export type Dialog = "create-agent" | "create-group" | "walkthrough" | null;
 
 export interface ModelList {
@@ -34,6 +34,8 @@ interface State {
   models: Record<string, ModelList>;
   /** A newer release found by the updater, if any. */
   update: UpdateInfo | null;
+  /** Bumped by the menu-bar "Check for Updates"; the About page runs a check when it changes. */
+  updateCheckNonce: number;
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -81,6 +83,7 @@ export const useStore = create<State>((set, get) => ({
   toast: null,
   models: {},
   update: null,
+  updateCheckNonce: 0,
 
   init: async () => {
     if (!listening) {
@@ -239,6 +242,9 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       break;
     case "error":
       get().showToast(ev.message);
+      break;
+    case "profile_changed":
+      window.dispatchEvent(new CustomEvent("opencue:profile-changed", { detail: ev.agent_id }));
       break;
     case "mcp_changed":
       window.dispatchEvent(new CustomEvent("opencue:mcp-changed"));

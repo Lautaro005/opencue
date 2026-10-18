@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Check, ChevronLeft, ChevronRight, KeyRound, Plus, Server, Sparkles, Terminal } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
+import { greetNewAgent } from "../../lib/greet";
 import { isConfigured } from "../../lib/models";
 import type { Avatar, ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
@@ -86,6 +87,7 @@ export function Walkthrough() {
       }
       if (step === "agent" && agentName.trim()) {
         const agent = await api.createAgent({ name: agentName.trim(), avatar, instructions, provider_id: providerId, model });
+        await greetNewAgent(agent, instructions.trim().length > 0);
         await useStore.getState().refresh();
         useStore.getState().select(agent.id);
       }

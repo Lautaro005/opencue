@@ -1,12 +1,13 @@
 //! Tauri shell: exposes the OpenCue core to the React UI and keeps agents running from the tray.
 
 mod commands;
+mod notify;
 
 use std::sync::Arc;
 
 use opencue_core::Core;
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::tray::TrayIconBuilder;
 use tauri::{Emitter, Manager, WindowEvent};
 
 pub struct AppState {
@@ -68,7 +69,15 @@ fn serve_mcp(agent_id: &str) -> ! {
     std::process::exit(0)
 }
 
+/// Show the window and tell the UI what the tray menu asked for ("settings", "check-updates").
+fn tray_action(app: &tauri::AppHandle, action: &str) {
+    show_main(app);
+    let _ = app.emit("tray-action", action);
+}
+
 pub fn run() {
+    // A GUI app starts with a bare PATH; find the user's tools (claude, codex, grok, npx, docker).
+    opencue_core::paths::fix_path_env();
     let args: Vec<String> = std::env::args().collect();
     if let Some(agent_id) = opencue_core::mcp_server::agent_from_args(&args) {
         serve_mcp(&agent_id);
@@ -93,6 +102,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             // Open inside the runtime so background tasks (MCP connections) can be spawned.
             let core = tauri::async_runtime::block_on(async {
@@ -104,10 +114,12 @@ pub fn run() {
             // Forward core events to the UI.
             let handle = app.handle().clone();
             let mut rx = core.subscribe();
+            let notify_core = core.clone();
             tauri::async_runtime::spawn(async move {
                 loop {
                     match rx.recv().await {
                         Ok(ev) => {
+                            notify::on_event(&handle, &notify_core, &ev).await;
                             let _ = handle.emit("core-event", ev);
                         }
                         Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
@@ -118,29 +130,43 @@ pub fn run() {
             app.manage(AppState { core });
             allow_microphone(app);
 
-            // Tray: agents keep working while the window is closed.
-            let show = MenuItem::with_id(app, "show", "Open OpenCue", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            // Tray: agents keep working while the window is closed. The menu opens on click, with
+            // the app name and version on top.
+            let title = MenuItem::with_id(
+                app,
+                "title",
+                format!("OpenCue {}", env!("CARGO_PKG_VERSION")),
+                false,
+                None::<&str>,
+            )?;
+            let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+            let settings =
+                MenuItem::with_id(app, "settings", "Settings…", true, Some("CmdOrCtrl+,"))?;
+            let updates =
+                MenuItem::with_id(app, "updates", "Check for Updates…", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, Some("CmdOrCtrl+Q"))?;
+            let menu = Menu::with_items(
+                app,
+                &[
+                    &title,
+                    &PredefinedMenuItem::separator(app)?,
+                    &open,
+                    &settings,
+                    &updates,
+                    &quit,
+                ],
+            )?;
             TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().cloned().expect("bundle icon"))
                 .tooltip("OpenCue")
                 .menu(&menu)
-                .show_menu_on_left_click(false)
+                .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "show" => show_main(app),
+                    "open" => show_main(app),
+                    "settings" => tray_action(app, "settings"),
+                    "updates" => tray_action(app, "check-updates"),
                     "quit" => app.exit(0),
                     _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        show_main(tray.app_handle());
-                    }
                 })
                 .build(app)?;
             Ok(())
@@ -170,6 +196,10 @@ pub fn run() {
             commands::delete_agent,
             commands::get_instructions,
             commands::set_instructions,
+            commands::get_soul,
+            commands::set_soul,
+            commands::greet_agent,
+            commands::test_notification,
             commands::list_memory,
             commands::add_memory,
             commands::delete_memory,

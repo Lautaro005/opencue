@@ -54,7 +54,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
 
   return (
     <div ref={scroller} onScroll={onScroll} className="flex-1 overflow-y-auto">
-      <div className="mx-auto flex max-w-[820px] flex-col gap-1 px-6 py-6">
+      <div className="flex flex-col gap-1 px-4 py-6">
         {messages.map((m) => {
           const day = new Date(m.created_at).toDateString();
           const divider = day !== lastDay ? dayLabel(m.created_at, i18n.language) : null;
@@ -74,7 +74,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
               {m.role === "assistant" && (
                 <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
                   {m.status === "error" ? (
-                    <div className="max-w-[560px] rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
+                    <div className="max-w-[85%] rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
                       <div className="flex items-center gap-1.5 font-medium text-danger">
                         <AlertCircle size={15} /> {t("chat.errorTitle")}
                       </div>
@@ -86,7 +86,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                       )}
                     </div>
                   ) : m.content ? (
-                    <div className="max-w-[640px] rounded-[20px] bg-agent px-4 py-2.5 text-[14px] leading-relaxed text-agent-ink">
+                    <div className="max-w-[85%] rounded-[20px] bg-agent px-4 py-2.5 text-[14px] leading-relaxed text-agent-ink">
                       <Markdown text={m.content} />
                       {m.status === "stopped" && <div className="mt-1 text-[11.5px] text-muted">— {t("chat.stopped")}</div>}
                     </div>

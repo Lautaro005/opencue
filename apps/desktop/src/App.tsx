@@ -11,7 +11,7 @@ import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
 import { ConfirmHost, ContextMenuHost, TooltipHost } from "./components/ui/Overlays";
 import { Walkthrough } from "./components/dialogs/Walkthrough";
-import { checkForUpdate } from "./lib/api";
+import { checkForUpdate, onTrayAction } from "./lib/api";
 
 export default function App() {
   const ready = useStore((s) => s.ready);
@@ -34,6 +34,20 @@ export default function App() {
       })
       .catch((e) => useStore.getState().showToast(String(e)));
   }, [init]);
+
+  // The menu-bar icon: Settings opens the settings window; Check for Updates runs a check there.
+  useEffect(() => {
+    let off = () => {};
+    void onTrayAction((action) => {
+      const st = useStore.getState();
+      if (action === "settings") st.openSettings();
+      if (action === "check-updates") {
+        st.openSettings("about");
+        useStore.setState((s) => ({ updateCheckNonce: s.updateCheckNonce + 1 }));
+      }
+    }).then((fn) => (off = fn));
+    return () => off();
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

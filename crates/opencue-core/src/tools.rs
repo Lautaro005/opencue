@@ -26,6 +26,8 @@ pub const COMPOSIO_SEARCH: &str = "composio_search";
 pub const COMPOSIO_EXECUTE: &str = "composio_execute";
 pub const SHARE_FILE: &str = "share_file";
 pub const CREATE_AUTOMATION: &str = "create_automation";
+pub const UPDATE_INSTRUCTIONS: &str = "update_instructions";
+pub const UPDATE_SOUL: &str = "update_soul";
 
 pub fn is_phase2(name: &str) -> bool {
     [
@@ -41,6 +43,8 @@ pub fn is_phase2(name: &str) -> bool {
         COMPOSIO_SEARCH,
         COMPOSIO_EXECUTE,
         CREATE_AUTOMATION,
+        UPDATE_INSTRUCTIONS,
+        UPDATE_SOUL,
     ]
     .contains(&name)
 }
@@ -111,6 +115,24 @@ impl Toolbox {
                 }),
             },
         ];
+        specs.push(spec(
+            UPDATE_INSTRUCTIONS,
+            "Rewrite your own instructions: your job, what you do, rules, workflows and how to treat the user. Call it when the user tells you what you are for or how to work, and send the COMPLETE updated text (merge with the current one, keep it short, Markdown).",
+            json!({
+                "type": "object",
+                "properties": { "text": { "type": "string", "description": "The full new instructions." } },
+                "required": ["text"]
+            }),
+        ));
+        specs.push(spec(
+            UPDATE_SOUL,
+            "Rewrite your own soul (SOUL.md): who you are, your personality, tone, values and style. Call it when the user shapes how you should sound or behave, and send the COMPLETE updated text (merge with the current one, keep it short, Markdown).",
+            json!({
+                "type": "object",
+                "properties": { "text": { "type": "string", "description": "The full new soul." } },
+                "required": ["text"]
+            }),
+        ));
         if agent.settings.web_access {
             specs.push(ToolSpec {
                 name: WEB_SEARCH.into(),

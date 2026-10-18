@@ -9,6 +9,7 @@ import { AvatarView, GroupAvatar } from "../AvatarView";
 import { Badge, Button, IconButton, Input, useClickOutside } from "../ui";
 import { Section } from "./Section";
 import { SharedFiles } from "./SharedFiles";
+import { useResizable } from "../ui/Resizer";
 
 export function GroupDetails({ group }: { group: Group }) {
   const { t } = useTranslation();
@@ -25,15 +26,18 @@ export function GroupDetails({ group }: { group: Group }) {
   const members = group.members.map((m) => ({ ...m, agent: agents[m.agent_id] })).filter((m) => m.agent);
   const candidates = Object.values(agents).filter((a) => !group.members.some((m) => m.agent_id === a.id));
 
+  const { width, handle } = useResizable("opencue:panel-width", 360, 300, 640, "left");
+
   return (
-    <aside className="animate-slide flex h-full w-[340px] shrink-0 flex-col border-l border-line bg-panel">
+    <aside style={{ width }} className="animate-slide relative flex h-full shrink-0 flex-col border-l border-line bg-panel">
+      {handle}
       <div className="flex h-13 shrink-0 items-center justify-between px-4">
         <h2 className="text-[14px] font-semibold">{t("group.details")}</h2>
         <IconButton label={t("common.close")} onClick={() => setPanel(null)}>
           <X size={17} />
         </IconButton>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         <div className="flex flex-col items-center px-5 pt-2 pb-5">
           <GroupAvatar avatars={members.map((m) => m.agent.avatar)} size={88} />
           <input

@@ -25,6 +25,8 @@ pub enum ComputerBackend {
     Docker,
     Wsl,
     Space,
+    /// Virtual machines from VMPal, driven through their MCP servers (no shell of its own).
+    Vmpal,
 }
 
 impl ComputerBackend {
@@ -132,7 +134,7 @@ impl Computer<'_> {
     ) -> anyhow::Result<CommandResult> {
         std::fs::create_dir_all(&self.workspace)?;
         match self.backend {
-            ComputerBackend::None => {
+            ComputerBackend::None | ComputerBackend::Vmpal => {
                 anyhow::bail!("this agent has no computer; pick one in its profile")
             }
             ComputerBackend::Host => {

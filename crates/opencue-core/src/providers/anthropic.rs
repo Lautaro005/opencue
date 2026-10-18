@@ -283,6 +283,7 @@ mod tests {
             tools: vec![],
             temperature: None,
             agent_id: None,
+            mcp_extra: vec![],
         };
         let msgs = to_anthropic_messages(&req);
         assert_eq!(msgs.len(), 3);

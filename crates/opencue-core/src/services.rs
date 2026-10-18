@@ -848,7 +848,11 @@ impl Core {
     pub(crate) async fn capabilities(&self, agent: &Agent) -> Capabilities {
         Capabilities {
             skills: agent.settings.skills,
-            computer: agent.settings.computer.clone(),
+            // VMPal machines come in as MCP tools, not through the shell tools.
+            computer: match agent.settings.computer {
+                ComputerBackend::Vmpal => ComputerBackend::None,
+                ref b => b.clone(),
+            },
             email: self
                 .store
                 .email_account(&agent.id)
@@ -912,6 +916,26 @@ impl Core {
                     .get(name)
                     .ok_or_else(|| anyhow::anyhow!("no skill named {name}"))?;
                 Ok(format!("# Skill: {}\n\n{}", skill.name, skill.body))
+            }
+            tools::UPDATE_INSTRUCTIONS | tools::UPDATE_SOUL => {
+                let text = need("text")?;
+                anyhow::ensure!(
+                    text.chars().count() <= 8000,
+                    "too long: keep it under 8000 characters"
+                );
+                let soul = call.name == tools::UPDATE_SOUL;
+                if soul {
+                    self.store.set_soul(&agent.id, text)?;
+                } else {
+                    self.store.set_instructions(&agent.id, text)?;
+                }
+                self.emit(CoreEvent::ProfileChanged {
+                    agent_id: agent.id.clone(),
+                });
+                Ok(format!(
+                    "Saved your new {}.",
+                    if soul { "soul" } else { "instructions" }
+                ))
             }
             tools::CREATE_AUTOMATION => {
                 let trigger = match need("trigger")? {

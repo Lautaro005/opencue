@@ -30,6 +30,32 @@
     </div>
     <article class="prose">
       <div class="release">
+        <h2 id="v0.3.2">0.3.2 <time datetime="2026-10-18">October 18, 2026</time></h2>
+        <h3>New</h3>
+        <ul>
+          <li><strong>Base system prompt</strong> for every agent: it knows it is an agent inside OpenCue, with tools, memory and skills. It sits before your own instructions and is not shown in the app.</li>
+          <li><strong>A new agent asks what its job will be</strong> and writes its own profile from your answer: <em>instructions</em> (what it does) and a new <em>soul</em> (<code>SOUL.md</code>: personality, tone, values), kept up to date as you talk. Both are editable in its profile.</li>
+          <li><strong>Grok CLI</strong>: a provider that runs your installed, logged-in <code>grok</code> (xAI Grok Build).</li>
+          <li><strong>System notifications</strong> in Settings → Notifications: finished replies and approval requests while OpenCue isn't in front.</li>
+          <li><strong>Tray menu</strong>: app name and version on top, then Open, Settings, Check for Updates and Quit.</li>
+          <li><strong>VMPal as a computer option</strong>, above "This computer", in an agent's Computer page.</li>
+          <li><strong>Resizable panels</strong>: drag the edge of the agent list and of the agent settings; widths are remembered.</li>
+        </ul>
+        <h3>Changed</h3>
+        <ul>
+          <li>Messages start and end at the width of the header and the chat input.</li>
+          <li>Claude Code and Codex agents get the VMPal machines you picked; the Claude, Codex and Grok CLIs list the models they accept.</li>
+        </ul>
+        <h3>Fixed</h3>
+        <ul>
+          <li>CheaperInference had the wrong name and address; existing providers are migrated.</li>
+          <li>Claude Code and Codex now run from the installed app (the Dock/Finder PATH didn't include them).</li>
+          <li>Local models can control a VMPal machine: unique tool names and clear steps to start the VM and allow agent control.</li>
+          <li>No more horizontal scroll in an agent's settings panel.</li>
+        </ul>
+      </div>
+
+      <div class="release">
         <h2 id="v0.3.1">0.3.1 <time datetime="2026-10-17">October 17, 2026</time></h2>
         <h3>New</h3>
         <ul>
@@ -102,7 +128,7 @@
         <ul>
           <li>Agents with instructions, memory (per agent and shared) and streaming chat.</li>
           <li>Group chats with @mentions, model-routed replies, hand-offs and a turn limit.</li>
-          <li>Providers by API key (OpenAI, Anthropic, xAI, OpenRouter, CheapestInference, Ollama, LM Studio, OpenAI-compatible) and the Codex / Claude CLIs.</li>
+          <li>Providers by API key (OpenAI, Anthropic, xAI, OpenRouter, CheaperInference, Ollama, LM Studio, OpenAI-compatible) and the Codex / Claude CLIs.</li>
           <li>MCP servers, local and by URL, with mcp.json import.</li>
           <li>Free web search and page reading.</li>
           <li>Approvals or autonomous mode, tray icon, English and Spanish, light and dark themes, and a CLI.</li>

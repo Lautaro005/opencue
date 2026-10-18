@@ -260,6 +260,11 @@ function UpdateRow() {
   const setSetting = useStore((s) => s.setSetting);
   const [state, setState] = useState<{ kind: "idle" | "checking" | "latest" | "installing" | "error"; text?: string; pct?: number }>({ kind: "idle" });
 
+  const nonce = useStore((s) => s.updateCheckNonce);
+  useEffect(() => {
+    if (nonce > 0) void check();
+  }, [nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const check = async () => {
     setState({ kind: "checking" });
     try {

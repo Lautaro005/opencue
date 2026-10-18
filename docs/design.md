@@ -101,7 +101,7 @@ Usuario (CLI)
     │
     ▼
 Agent Orchestrator (Rust)
-    ├── Provider Router ──► ChatGPT/Codex (OAuth+API key), Claude/Claude Code (OAuth+API key), Grok (OAuth+API key), OpenRouter, CheapestInference, Ollama (local/cloud), LM Studio
+    ├── Provider Router ──► ChatGPT/Codex (OAuth+API key), Claude/Claude Code (OAuth+API key), Grok (OAuth+API key), OpenRouter, CheaperInference, Ollama (local/cloud), LM Studio
     ├── MCP Manager ──────► Local .json configs (stdio) + Remote URLs
     ├── Composio Client ──► 1000+ toolkits
     ├── Skills Engine ────► Manual / Import URL / Auto-apply
@@ -129,7 +129,7 @@ Todos expuestos de forma unificada (preferentemente OpenAI-compatible donde sea 
 | Claude / Claude Code   | Anthropic API         | **OAuth + API key**            | + Claude Agent SDK / Claude Code |
 | **Grok**               | xAI API               | **OAuth + API key**            | Modelos Grok (grok-beta, etc.) |
 | OpenRouter             | OpenAI-compatible     | API key                        | Muchos modelos |
-| CheapestInference      | OpenAI/Anthropic compatible | API key                   | Flat-rate, modelos open (Kimi, GLM, DeepSeek, etc.) |
+| CheaperInference      | OpenAI/Anthropic compatible | API key                   | Flat-rate, modelos open (Kimi, GLM, DeepSeek, etc.) |
 | Ollama local           | OpenAI-compatible     | Ninguna / local                | `http://localhost:11434/v1` |
 | Ollama Cloud           | OpenAI-compatible     | API key o signed-in            | `https://ollama.com/v1` |
 | LM Studio              | OpenAI-compatible     | Ninguna / local                | `http://localhost:1234/v1` |
@@ -354,7 +354,7 @@ agents mcp add local ./mcp.json
 - ElevenLabs: https://elevenlabs.io/docs
 - Ollama: https://docs.ollama.com
 - LM Studio: https://lmstudio.ai/docs/developer
-- CheapestInference: https://cheapestinference.com
+- CheaperInference: https://cheaperinference.com
 - SPACE (Perplexity): https://github.com/perplexityai/SPACE
 - SPACE Docs: https://space.docs.perplexity.ai/
 

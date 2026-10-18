@@ -96,9 +96,9 @@
         <p>Every agent uses one provider and model, picked when you create it or later in its profile → <strong>Model</strong>. <strong>Settings → Providers</strong> shows a container for every supported provider; click one to connect it. <strong>Settings → Models</strong> lists the models of the providers that are ready — search them and switch off the ones that shouldn't appear in pickers; the star sets a provider's default model.</p>
         <table>
           <tr><th>Provider</th><th>How it signs in</th></tr>
-          <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheapestInference, Ollama Cloud</td><td>API key, stored in your system keychain</td></tr>
+          <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheaperInference, Ollama Cloud</td><td>API key, stored in your system keychain</td></tr>
           <tr><td>Ollama, LM Studio, any OpenAI-compatible server</td><td>Base URL, no key needed for local servers</td></tr>
-          <tr><td>ChatGPT / Codex, Claude Code</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code> or <code>claude</code> program you are already logged in to</td></tr>
+          <tr><td>ChatGPT / Codex, Claude Code, Grok Build</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code>, <code>claude</code> or <code>grok</code> program you are already logged in to (Grok answers in text only). Models listed are the ones each CLI accepts.</td></tr>
         </table>
         <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client.</p>
         <h3>OpenCue tools for CLI agents</h3>
@@ -113,7 +113,8 @@
         </ul>
 
         <h2 id="memory">Instructions &amp; memory</h2>
-        <p><strong>Instructions</strong> are the agent's job description, added to every conversation. They are saved as <code>agents/&lt;id&gt;/INSTRUCTIONS.md</code>.</p>
+        <p><strong>Instructions</strong> are the agent's job description, added to every conversation. They are saved as <code>agents/&lt;id&gt;/INSTRUCTIONS.md</code>. The <strong>soul</strong> (<code>agents/&lt;id&gt;/SOUL.md</code>) says who the agent is: personality, tone and values. Every agent also gets a short built-in prompt that tells it it is an agent inside OpenCue; you never see or edit it.</p>
+        <p>A new agent opens the chat by asking what its job will be. It writes its own instructions and soul from what you tell it, and keeps them up to date as you talk (models without tools get the same result from a small pass after each reply). Edit either in the agent's profile, or turn <strong>Let the agent write its own profile</strong> off.</p>
         <p><strong>Memory</strong> is a list of facts the agent keeps about you and its work, in <code>agents/&lt;id&gt;/MEMORY.md</code>. Agents save facts with the <code>remember</code> tool, look them up with <code>recall</code> and delete with <code>forget</code> (which asks first). You can add, delete or edit the Markdown directly.</p>
         <ul>
           <li><strong>Shared memory</strong> (<code>memory/GLOBAL.md</code>) is visible to every agent that has “Use shared memory” on.</li>
@@ -209,6 +210,7 @@ description: Write the Friday status report from this week's notes and emails.
           <tr><th>Computer</th><th>What it is</th><th>Approvals</th></tr>
           <tr><td>Docker container</td><td>One long-lived container per agent (<code>opencue-&lt;id&gt;</code>, default image <code>ubuntu:24.04</code>) with the agent's workspace mounted at <code>/workspace</code>. Needs Docker.</td><td>No — it's isolated</td></tr>
           <tr><td>SPACE microVM</td><td>A Firecracker VM on your <a href="https://github.com/perplexityai/SPACE">SPACE</a> server. Linux with KVM, or point Windows at a remote Linux host.</td><td>No — it's isolated</td></tr>
+          <tr><td>VMPal</td><td>Virtual machines from VMPal that the agent sees and controls with MCP tools (screen, mouse, keyboard). Pick the machines below.</td><td>Per tool, unless read-only</td></tr>
           <tr><td>This computer</td><td>Your own shell (PowerShell on Windows), starting in the agent's workspace folder.</td><td>Every command and file write</td></tr>
           <tr><td>WSL</td><td>Windows Subsystem for Linux (Windows only).</td><td>Every command and file write</td></tr>
         </table>
@@ -217,7 +219,7 @@ description: Write the Friday status report from this week's notes and emails.
         <pre><code>[mcp_servers.vmpal-work]
 command = "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine"
 args = ["--mcp", "E7D-your-machine-id"]</code></pre>
-        <p>Then open an agent's profile → <strong>Computer</strong> → <strong>VMPal</strong> and switch on the machines it may use — or press <strong>Add machine</strong> to paste a new table there, which adds it to the shared list and selects it. A machine starts the first time that agent replies; <strong>Test connection</strong> in Settings starts it now. VMPal machines are never part of “all MCP servers”, and in Ask-first mode their tools ask for approval unless they declare themselves read-only.</p>
+        <p>In VMPal, turn on agent control for the machine (its <strong>Settings › AI Agents</strong>) and keep it running; if it is off, the agent starts it with its <code>vmpal_start</code> tool. Then open an agent's profile → <strong>Computer</strong> → <strong>VMPal</strong> and switch on the machines it may use — or press <strong>Add machine</strong> to paste a new table there, which adds it to the shared list and selects it. A machine starts the first time that agent replies; <strong>Test connection</strong> in Settings starts it now. VMPal machines are never part of “all MCP servers”, and in Ask-first mode their tools ask for approval unless they declare themselves read-only.</p>
         <h3>Setting up SPACE</h3>
         <ol>
           <li>On a Linux machine with <code>/dev/kvm</code>, run <code>scripts/check-space-host.sh</code> from the repository to check the basics.</li>
@@ -242,6 +244,9 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
 
         <h2 id="internet">Internet</h2>
         <p>Agents with web access get <code>web_search</code> (DuckDuckGo and Wikipedia, no API keys) and <code>web_fetch</code> (any page, converted to Markdown). Results are cached in the local database. If you host <a href="https://docs.searxng.org">SearXNG</a>, add its URL in <strong>Settings → Internet</strong> and it is queried first.</p>
+
+        <h2 id="notifications">Notifications</h2>
+        <p><strong>Settings → Notifications</strong> turns on system notifications for finished replies and for actions waiting for your approval. By default they appear only when OpenCue isn't in front; you can show just “New message” instead of the text, and send a test. On macOS and Windows allow OpenCue in the system's notification settings if nothing appears. The icon in the menu bar (or tray) opens a menu with Open, Settings, Check for Updates and Quit.</p>
 
         <h2 id="updates">Updates</h2>
         <p>OpenCue checks GitHub Releases for a new version a few seconds after it starts. When there is one, a note appears at the bottom of the sidebar; <strong>Settings → About → Install and restart</strong> downloads it, verifies its signature and restarts. Turn off the automatic check there. In-app updates work for the macOS app, the Windows installers and the Linux AppImage; <code>.deb</code> and <code>.rpm</code> installs update through a new download.</p>

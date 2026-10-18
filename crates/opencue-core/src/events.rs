@@ -34,6 +34,10 @@ pub enum CoreEvent {
     /// Something in the sidebar changed (agent/group created, renamed, deleted).
     ThreadsChanged,
     McpChanged,
+    /// An agent rewrote its own instructions or soul.
+    ProfileChanged {
+        agent_id: String,
+    },
     AutomationsChanged,
     /// Output from a command running on an agent's computer.
     ComputerOutput {
