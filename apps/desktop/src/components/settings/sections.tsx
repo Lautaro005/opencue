@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Search } from "lucide-react";
 import { useStore } from "../../lib/store";
@@ -7,7 +7,7 @@ import type { AppInfo, MemoryEntry, UsageRow } from "../../lib/types";
 import { compact } from "../../lib/format";
 import { LANGUAGES, setLanguage } from "../../i18n";
 import { getTheme, setTheme, type Theme } from "../../lib/theme";
-import { Button, Input, Select, Toggle } from "../ui";
+import { Button, Input, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
 
 export function GeneralSection() {
@@ -92,6 +92,19 @@ export function GeneralSection() {
           </div>
         )}
       </Card>
+      <Card title={t("walkthrough.title")}>
+        <CardRow label={t("walkthrough.replay")} hint={t("walkthrough.replayHint")}>
+          <Button
+            size="sm"
+            onClick={() => {
+              useStore.getState().closeSettings();
+              useStore.getState().setDialog("walkthrough");
+            }}
+          >
+            {t("walkthrough.start")}
+          </Button>
+        </CardRow>
+      </Card>
       {info && (
         <Card title={t("settings.general.data")}>
           <CardRow label={t("settings.general.dataDir")} hint={info.data_dir}>
@@ -108,6 +121,18 @@ export function AccountSection() {
   const settings = useStore((s) => s.settings);
   const setSetting = useStore((s) => s.setSetting);
   const [name, setName] = useState(settings.user_name ?? "");
+  const [about, setAbout] = useState(settings.about_me ?? "");
+  const [saved, setSaved] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Saved as you type, so nothing is lost when the window closes.
+  const onAbout = (v: string) => {
+    setAbout(v);
+    setSaved(false);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => void setSetting("about_me", v.trim()).then(() => setSaved(true)), 600);
+  };
+
   return (
     <>
       <PageTitle title={t("settings.nav.account")} hint={t("settings.account.localOnly")} />
@@ -115,6 +140,12 @@ export function AccountSection() {
         <CardRow label={t("settings.account.name")} hint={t("settings.account.nameHint")}>
           <Input className="w-56" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => void setSetting("user_name", name.trim())} />
         </CardRow>
+      </Card>
+      <Card title={t("settings.account.aboutTitle")} action={saved ? <span className="text-[11.5px] text-faint">{t("common.saved")}</span> : null}>
+        <div className="space-y-2 p-3">
+          <Textarea value={about} onChange={(e) => onAbout(e.target.value)} rows={7} placeholder={t("settings.account.aboutPlaceholder")} />
+          <p className="text-[12px] text-muted">{t("settings.account.aboutHint")}</p>
+        </div>
       </Card>
     </>
   );

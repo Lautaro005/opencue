@@ -29,8 +29,8 @@ pub struct AgentSettings {
     pub mcp_servers: Vec<String>,
     #[serde(default = "yes")]
     pub use_global_memory: bool,
-    /// Extract durable facts into memory automatically after each reply.
-    #[serde(default)]
+    /// Extract durable facts into memory automatically after each reply (on by default).
+    #[serde(default = "yes")]
     pub auto_memory: bool,
     #[serde(default)]
     pub temperature: Option<f32>,
@@ -49,6 +49,9 @@ pub struct AgentSettings {
     /// Give agents backed by the `claude` / `codex` CLIs OpenCue's tools through MCP.
     #[serde(default = "yes")]
     pub cli_tools: bool,
+    /// Names of the VMPal machines (Settings → Computers) this agent can control.
+    #[serde(default)]
+    pub vmpal: Vec<String>,
 }
 
 impl Default for AgentSettings {

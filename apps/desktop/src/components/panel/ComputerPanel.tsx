@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeft, ChevronRight, ExternalLink, File, Folder, FolderOpen, Maximize2, Minimize2, MonitorPlay, RefreshCw, RotateCcw, Settings2, TerminalSquare, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, openUrl } from "../../lib/api";
+import { confirmDialog } from "../../lib/confirm";
 import type { Agent, ComputerBackend, FileEntry } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { IconButton, Spinner } from "../ui";
@@ -144,7 +145,7 @@ function Desktop({ agent }: { agent: Agent }) {
           <IconButton label={t("computer.openBrowser")} onClick={() => void openUrl(state.url!)} className="size-7">
             <ExternalLink size={13} />
           </IconButton>
-          <IconButton label={t("computer.restart")} onClick={() => confirm(t("computer.restartConfirm")) && void restart()} className="size-7">
+          <IconButton label={t("computer.restart")} onClick={async () => (await confirmDialog(t("computer.restartConfirm"), { danger: false, confirmLabel: t("computer.restart") })) && void restart()} className="size-7">
             <RotateCcw size={13} />
           </IconButton>
         </div>

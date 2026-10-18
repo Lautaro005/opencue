@@ -15,6 +15,7 @@ export interface AgentSettings {
   composio: boolean;
   voice_id: string | null;
   cli_tools: boolean;
+  vmpal: string[];
 }
 
 export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space";
@@ -312,4 +313,16 @@ export interface VoiceSettings {
 export interface Voice {
   id: string;
   name: string;
+}
+
+export interface VmPalMachine {
+  name: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+}
+
+export interface VmPalInfo {
+  toml: string;
+  machines: VmPalMachine[];
 }

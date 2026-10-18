@@ -9,6 +9,8 @@ import { ComputerPanel } from "./components/panel/ComputerPanel";
 import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
+import { ConfirmHost, ContextMenuHost, TooltipHost } from "./components/ui/Overlays";
+import { Walkthrough } from "./components/dialogs/Walkthrough";
 import { checkForUpdate } from "./lib/api";
 
 export default function App() {
@@ -23,6 +25,9 @@ export default function App() {
   useEffect(() => {
     init()
       .then(() => {
+        // First run: a new user (no chats, no name yet) gets the walkthrough once.
+        const st = useStore.getState();
+        if (st.settings.onboarded !== "true" && st.threads.length === 0 && !st.settings.user_name) st.setDialog("walkthrough");
         // Look for a signed update on GitHub once per launch, unless turned off.
         if (useStore.getState().settings.auto_update === "false") return;
         setTimeout(() => void checkForUpdate().then((update) => useStore.setState({ update })).catch(() => {}), 4000);
@@ -64,6 +69,10 @@ export default function App() {
       <CreateAgentDialog />
       <CreateGroupDialog />
       <SettingsModal />
+      <Walkthrough />
+      <ConfirmHost />
+      <TooltipHost />
+      <ContextMenuHost />
       {toast && (
         <div role="status" className="animate-pop fixed bottom-24 left-1/2 z-[60] flex max-w-[560px] -translate-x-1/2 items-start gap-3 rounded-xl border border-line bg-elevated px-4 py-2.5 text-[13px] shadow-pop">
           <span className="selectable line-clamp-4 flex-1">{toast}</span>

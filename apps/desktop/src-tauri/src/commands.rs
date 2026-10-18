@@ -637,3 +637,40 @@ pub async fn speak(
         .map_err(e)?;
     Ok(base64::engine::general_purpose::STANDARD.encode(audio))
 }
+
+#[derive(Serialize)]
+pub struct VmPalInfo {
+    toml: String,
+    machines: Vec<opencue_core::vmpal::VmPalMachine>,
+}
+
+#[tauri::command]
+pub async fn vmpal_get(state: State<'_, AppState>) -> R<VmPalInfo> {
+    Ok(VmPalInfo {
+        toml: state.core.vmpal_toml().await,
+        machines: state.core.vmpal_machines().await,
+    })
+}
+
+#[tauri::command]
+pub async fn save_vmpal(state: State<'_, AppState>, toml: String) -> R<VmPalInfo> {
+    let machines = state.core.save_vmpal(&toml).await.map_err(e)?;
+    Ok(VmPalInfo {
+        toml: state.core.vmpal_toml().await,
+        machines,
+    })
+}
+
+#[tauri::command]
+pub async fn add_vmpal(state: State<'_, AppState>, toml: String) -> R<VmPalInfo> {
+    state.core.add_vmpal(&toml).await.map_err(e)?;
+    Ok(VmPalInfo {
+        toml: state.core.vmpal_toml().await,
+        machines: state.core.vmpal_machines().await,
+    })
+}
+
+#[tauri::command]
+pub async fn test_vmpal(state: State<'_, AppState>, name: String) -> R<McpServerStatus> {
+    state.core.test_vmpal(&name).await.map_err(e)
+}

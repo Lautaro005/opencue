@@ -14,13 +14,14 @@ const defaults = {
   mcp_all: true,
   mcp_servers: [],
   use_global_memory: true,
-  auto_memory: false,
+  auto_memory: true,
   temperature: null,
   computer: "none" as const,
   skills: true,
   composio: false,
   voice_id: null,
   cli_tools: true,
+  vmpal: [] as string[],
 };
 
 /** Files "uploaded" in the preview, kept as data URLs. */
@@ -142,11 +143,13 @@ const emails: Record<string, EmailAccount> = {
   a2: { agent_id: "a2", kind: "imap", address: "recordatorios@example.com", display_name: "Recordatorios", imap_host: "imap.example.com", imap_port: 993, smtp_host: "smtp.example.com", smtp_port: 465, username: null, last_seen_uid: 0, has_password: true },
 };
 const computer = { docker_desktop: false, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, wsl_available: false, webhook_port: 7777 };
+let vmpalToml = "";
+const vmpalMachines = () => [...vmpalToml.matchAll(/^\[mcp_servers\.([^\]\s]+)\]/gm)].map((m) => ({ name: m[1], command: "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine", args: ["--mcp", "E7D-preview"], env: {} }));
 const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.1-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -250,7 +253,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return p;
   },
   delete_provider: ({ id }) => void providers.splice(providers.findIndex((p) => p.id === id), 1),
-  list_models: ({ providerId }) => (providerId === "p-anthropic" ? ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"] : ["llama3.2", "qwen3:8b", "gpt-oss:20b"]),
+  list_models: ({ providerId }) => (providerId === "p-anthropic" ? ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-sonnet-4-5", "claude-opus-4-1", "claude-haiku-4-5"] : ["llama3.2", "qwen3:8b", "gpt-oss:20b", "gemma3:12b", "mistral-small3.2", "deepseek-r1:14b", "phi4", "llava:13b", "codellama:7b", "nomic-embed-text"]),
   list_mcp_servers: () => mcp,
   mcp_status: () => mcp.map((s) => ({ id: s.id, name: s.name, state: "ready", error: null, tools: ["read_file", "write_file", "list_directory"] })),
   save_mcp_server: ({ server }) => {
@@ -322,6 +325,18 @@ const handlers: Record<string, (a: Args) => unknown> = {
   ],
   computer_read: ({ path }) => `# ${path}\n\n(preview file)`,
   computer_log: () => "$ ls\nnotas  audiencias.csv  README.md\n[exit 0]\n",
+  vmpal_get: () => ({ toml: vmpalToml, machines: vmpalMachines() }),
+  save_vmpal: ({ toml }) => {
+    if (toml.trim() && !/\[mcp_servers\./.test(toml)) throw new Error("expected one or more [mcp_servers.<name>] tables");
+    vmpalToml = toml.trim();
+    return { toml: vmpalToml, machines: vmpalMachines() };
+  },
+  add_vmpal: ({ toml }) => {
+    if (!/\[mcp_servers\./.test(toml)) throw new Error("paste at least one [mcp_servers.<name>] table");
+    vmpalToml = (vmpalToml ? vmpalToml + "\n\n" : "") + toml.trim();
+    return { toml: vmpalToml, machines: vmpalMachines() };
+  },
+  test_vmpal: ({ name }) => ({ id: "vmpal:" + name, name, state: "ready", error: null, tools: ["vmpal_screenshot", "vmpal_act", "vmpal_exec"] }),
   voice_settings: () => voice,
   save_voice_settings: ({ settings, apiKey }) => Object.assign(voice, settings, { configured: voice.configured || !!apiKey }),
   list_voices: () => [{ id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, { id: "pNInz6obpgDQGcFmaJgB", name: "Adam" }],

@@ -1,190 +1,134 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronDown, KeyRound, Plus, Star, Terminal, Trash2 } from "lucide-react";
-import { useStore } from "../../lib/store";
+import { ChevronDown, RefreshCw, Search, Star } from "lucide-react";
+import { parseHidden, useStore } from "../../lib/store";
 import { api } from "../../lib/api";
+import { isConfigured } from "../../lib/models";
 import type { ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
-import { Badge, Button, Field, Input, Spinner, Toggle } from "../ui";
+import { Badge, Button, IconButton, Input, Spinner, Toggle } from "../ui";
 import { PageTitle } from "./SettingsModal";
 
+/** Models of the providers that are set up: search them, and choose which ones show in pickers. */
 export function ModelsSection() {
   const { t } = useTranslation();
   const providers = useStore((s) => s.providers);
-  const refreshProviders = useStore((s) => s.refreshProviders);
-  const settings = useStore((s) => s.settings);
+  const loadModels = useStore((s) => s.loadModels);
+  const openSettings = useStore((s) => s.openSettings);
   const [catalog, setCatalog] = useState<ProviderInfo[]>([]);
-  const [adding, setAdding] = useState(false);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   useEffect(() => void api.providerCatalog().then(setCatalog), []);
-
-  const add = async (info: ProviderInfo) => {
-    const p = await api.saveProvider({
-      id: "",
-      kind: info.kind,
-      name: info.label,
-      base_url: null,
-      default_model: info.default_model,
-      enabled: true,
-      has_key: false,
-    });
-    await refreshProviders();
-    setAdding(false);
-    setExpanded(p.id);
-  };
+  const ready = providers.filter((p) => isConfigured(p, catalog.find((c) => c.kind === p.kind)));
+  const readyKey = ready.map((p) => p.id).join(",");
+  useEffect(() => {
+    ready.forEach((p) => void loadModels(p.id));
+  }, [readyKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
       <PageTitle title={t("settings.models.title")} hint={t("settings.models.hint")} />
-      <div className="space-y-2">
-        {providers.map((p) => (
-          <ProviderCard
-            key={p.id}
-            provider={p}
-            info={catalog.find((c) => c.kind === p.kind)}
-            open={expanded === p.id}
-            onToggle={() => setExpanded(expanded === p.id ? null : p.id)}
-            isDefault={settings.default_provider ? settings.default_provider === p.id : providers.find((x) => x.enabled)?.id === p.id}
-          />
-        ))}
-      </div>
-
-      {adding ? (
-        <div className="animate-pop mt-4 rounded-xl border border-line p-3">
-          <div className="mb-2 flex items-center justify-between px-1">
-            <span className="text-[12.5px] font-semibold text-muted">{t("settings.models.choose")}</span>
-            <Button variant="ghost" size="sm" onClick={() => setAdding(false)}>
-              {t("common.cancel")}
-            </Button>
-          </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            {catalog.map((c) => (
-              <button key={c.kind} onClick={() => void add(c)} className="flex items-start gap-2.5 rounded-lg border border-line px-3 py-2 text-left hover:border-line-strong hover:bg-hover">
-                <span className="mt-0.5 text-muted">{c.api === "cli" ? <Terminal size={15} /> : <KeyRound size={15} />}</span>
-                <span className="min-w-0">
-                  <span className="block text-[13px] font-medium">{c.label}</span>
-                  <span className="line-clamp-2 block text-[11.5px] text-muted">{c.note}</span>
-                </span>
-              </button>
-            ))}
-          </div>
+      {catalog.length > 0 && ready.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-line px-5 py-8 text-center">
+          <p className="text-[13px] text-muted">{t("settings.models.noneReady")}</p>
+          <Button className="mt-3" variant="primary" onClick={() => openSettings("providers")}>
+            {t("settings.models.goProviders")}
+          </Button>
         </div>
       ) : (
-        <Button className="mt-4" onClick={() => setAdding(true)}>
-          <Plus size={15} /> {t("settings.models.add")}
-        </Button>
+        <>
+          <div className="relative mb-4">
+            <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("settings.models.search")} className="pl-9" />
+          </div>
+          <div className="space-y-3">
+            {ready.map((p) => (
+              <ProviderModels key={p.id} provider={p} query={query.trim().toLowerCase()} />
+            ))}
+          </div>
+        </>
       )}
     </>
   );
 }
 
-function ProviderCard({ provider, info, open, onToggle, isDefault }: { provider: ProviderConfig; info?: ProviderInfo; open: boolean; onToggle: () => void; isDefault: boolean }) {
+function ProviderModels({ provider, query }: { provider: ProviderConfig; query: string }) {
   const { t } = useTranslation();
-  const refreshProviders = useStore((s) => s.refreshProviders);
+  const entry = useStore((s) => s.models[provider.id]);
+  const hiddenRaw = useStore((s) => s.settings.hidden_models);
+  const loadModels = useStore((s) => s.loadModels);
+  const setModelHidden = useStore((s) => s.setModelHidden);
   const setSetting = useStore((s) => s.setSetting);
-  const [form, setForm] = useState(provider);
-  const [key, setKey] = useState("");
-  const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
-  const [testing, setTesting] = useState(false);
-  useEffect(() => setForm(provider), [provider]);
+  const refreshProviders = useStore((s) => s.refreshProviders);
+  const [open, setOpen] = useState(true);
 
-  const isCli = info?.api === "cli";
-  const needsKey = info?.requires_key && !provider.has_key;
+  const all = entry?.list ?? [];
+  const hidden = useMemo(() => new Set(parseHidden(hiddenRaw)[provider.id] ?? []), [hiddenRaw, provider.id]);
+  const providerMatches = !!query && provider.name.toLowerCase().includes(query);
+  const rows = query && !providerMatches ? all.filter((m) => m.toLowerCase().includes(query)) : all;
+  const shown = all.length - all.filter((m) => hidden.has(m)).length;
 
-  const save = async (patch: Partial<ProviderConfig> = {}, apiKey?: string) => {
-    const next = { ...form, ...patch };
-    setForm(next);
-    await api.saveProvider(next, apiKey);
+  if (query && rows.length === 0 && !providerMatches) return null;
+
+  const setAll = (hide: boolean) => {
+    const map = parseHidden(hiddenRaw);
+    map[provider.id] = hide ? all : [];
+    void setSetting("hidden_models", JSON.stringify(map));
+  };
+  const makeDefault = async (m: string) => {
+    await api.saveProvider({ ...provider, default_model: m });
     await refreshProviders();
   };
 
-  const runTest = async () => {
-    setTesting(true);
-    setTest(null);
-    try {
-      const models = await api.listModels(provider.id);
-      setTest({ ok: true, text: t("settings.models.testOk", { n: models.length }) });
-    } catch (e) {
-      setTest({ ok: false, text: String(e) });
-    } finally {
-      setTesting(false);
-    }
-  };
-
   return (
-    <div className={cx("rounded-xl border transition-colors", open ? "border-line-strong" : "border-line")}>
-      <button onClick={onToggle} className="flex w-full items-center gap-3 px-4 py-3 text-left">
-        <span className={cx("flex size-8 items-center justify-center rounded-lg", provider.enabled ? "bg-accent-soft text-accent" : "bg-hover text-faint")}>
-          {isCli ? <Terminal size={16} /> : <KeyRound size={16} />}
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate text-[13.5px] font-medium">{provider.name}</span>
-            {isDefault && <Badge tone="accent">{t("settings.models.isDefault")}</Badge>}
-            {needsKey && <Badge tone="warning">{t("settings.models.key")}</Badge>}
-          </span>
-          <span className="block truncate text-[12px] text-muted">{provider.default_model || info?.default_base_url || info?.note}</span>
-        </span>
-        <ChevronDown size={16} className={cx("text-faint transition-transform", open && "rotate-180")} />
-      </button>
-
+    <div className="rounded-xl border border-line">
+      <div className="flex items-center gap-2 px-4 py-2.5">
+        <button onClick={() => setOpen((v) => !v)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+          <ChevronDown size={15} className={cx("shrink-0 text-faint transition-transform", !open && "-rotate-90")} />
+          <span className="truncate text-[13.5px] font-medium">{provider.name}</span>
+          {all.length > 0 && <Badge>{t("settings.models.visible", { shown, total: all.length })}</Badge>}
+        </button>
+        {all.length > 0 && (
+          <>
+            <Button size="sm" variant="ghost" onClick={() => setAll(false)} disabled={hidden.size === 0}>
+              {t("settings.models.showAll")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setAll(true)} disabled={shown === 0}>
+              {t("settings.models.hideAll")}
+            </Button>
+          </>
+        )}
+        <IconButton label={t("profile.refreshModels")} onClick={() => void loadModels(provider.id, true)} className="size-7">
+          <RefreshCw size={13} className={entry?.loading ? "animate-spin" : ""} />
+        </IconButton>
+      </div>
       {open && (
-        <div className="space-y-3.5 border-t border-line px-4 py-4">
-          {isCli && <p className="rounded-lg bg-hover px-3 py-2 text-[12.5px] text-muted">{t("settings.models.cliHint")}</p>}
-          {info?.requires_key || (!isCli && !info?.default_base_url?.startsWith("http://localhost")) ? (
-            <Field label={t("settings.models.key")} hint={provider.has_key ? t("settings.models.keySaved") : info?.note}>
-              <div className="flex gap-2">
-                <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={provider.has_key ? "••••••••••••" : t("settings.models.keyPlaceholder")} autoComplete="off" />
-                <Button
-                  disabled={!key.trim()}
-                  onClick={async () => {
-                    await save({}, key.trim());
-                    setKey("");
-                  }}
-                >
-                  {provider.has_key ? t("settings.models.replaceKey") : t("common.save")}
-                </Button>
-              </div>
-            </Field>
-          ) : null}
-          {!isCli && (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label={t("settings.models.baseUrl")}>
-                <Input value={form.base_url ?? ""} placeholder={info?.default_base_url ?? "https://…/v1"} onChange={(e) => setForm({ ...form, base_url: e.target.value })} onBlur={() => void save()} />
-              </Field>
-              <Field label={t("settings.models.defaultModel")}>
-                <Input value={form.default_model ?? ""} placeholder={info?.default_model ?? ""} onChange={(e) => setForm({ ...form, default_model: e.target.value })} onBlur={() => void save()} />
-              </Field>
+        <div className="border-t border-line">
+          {entry?.loading && all.length === 0 && (
+            <div className="flex items-center gap-2 px-4 py-3 text-[12.5px] text-muted">
+              <Spinner size={13} /> {t("common.loading")}
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" onClick={() => void runTest()} disabled={testing}>
-              {testing ? <Spinner size={12} /> : <Check size={13} />} {t("settings.models.test")}
-            </Button>
-            {!isDefault && (
-              <Button size="sm" variant="ghost" onClick={() => void setSetting("default_provider", provider.id)}>
-                <Star size={13} /> {t("settings.models.useDefault")}
-              </Button>
-            )}
-            <label className="ml-auto flex items-center gap-2 text-[12.5px] text-muted">
-              {t("settings.models.enabled")}
-              <Toggle checked={form.enabled} onChange={(v) => void save({ enabled: v })} />
-            </label>
-            <Button
-              size="sm"
-              variant="danger"
-              onClick={async () => {
-                if (confirm(t("settings.models.removeConfirm", { name: provider.name }))) {
-                  await api.deleteProvider(provider.id);
-                  await refreshProviders();
-                }
-              }}
-            >
-              <Trash2 size={13} />
-            </Button>
-          </div>
-          {test && <p className={cx("selectable text-[12px]", test.ok ? "text-success" : "text-danger")}>{test.text}</p>}
+          {entry?.error && <p className="selectable line-clamp-3 px-4 py-3 text-[12px] text-danger">{entry.error}</p>}
+          {!entry?.loading && !entry?.error && all.length === 0 && <p className="px-4 py-3 text-[12.5px] text-faint">{t("settings.models.noModels")}</p>}
+          <ul className="max-h-72 divide-y divide-line overflow-y-auto">
+            {rows.map((m) => {
+              const off = hidden.has(m);
+              return (
+                <li key={m} className="flex items-center gap-2 px-4 py-1.5">
+                  <span className={cx("selectable min-w-0 flex-1 truncate font-mono text-[12.5px]", off && "text-faint line-through")}>{m}</span>
+                  {provider.default_model === m ? (
+                    <Badge tone="accent">{t("settings.models.isDefault")}</Badge>
+                  ) : (
+                    <IconButton label={t("settings.models.makeDefault")} onClick={() => void makeDefault(m)} className="size-6">
+                      <Star size={13} />
+                    </IconButton>
+                  )}
+                  <Toggle checked={!off} onChange={(v) => void setModelHidden(provider.id, m, !v)} label={m} />
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
     </div>

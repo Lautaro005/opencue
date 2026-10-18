@@ -102,6 +102,11 @@ async fn agent_calls_tool_then_replies() {
         .create_agent(NewAgent {
             name: "Tester".into(),
             provider_id: Some(provider.id),
+            // Auto-memory (on by default) would make an extra model call after the reply.
+            settings: Some(opencue_core::models::AgentSettings {
+                auto_memory: false,
+                ..Default::default()
+            }),
             ..Default::default()
         })
         .await
@@ -184,6 +189,7 @@ async fn webhook_automation_runs_a_command_on_the_agents_computer() {
     let settings = AgentSettings {
         approval_mode: ApprovalMode::Autonomous,
         computer: ComputerBackend::Host,
+        auto_memory: false,
         ..Default::default()
     };
     let agent = core
@@ -290,6 +296,7 @@ async fn shared_files_reach_the_workspace_and_agents_share_files_back() {
             provider_id: Some(provider.id),
             settings: Some(AgentSettings {
                 computer: ComputerBackend::Host,
+                auto_memory: false,
                 ..Default::default()
             }),
             ..Default::default()

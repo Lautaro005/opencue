@@ -6,8 +6,10 @@ import { api } from "../../lib/api";
 import type { Avatar } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
-import { AvatarPicker, randomAvatar } from "../panel/AvatarPicker";
-import { Button, DialogHeader, Field, Input, Modal, Select, Textarea } from "../ui";
+import { AvatarPickerDialog, randomAvatar } from "../panel/AvatarPicker";
+import { ModelPicker } from "../ModelPicker";
+import { isConfigured } from "../../lib/models";
+import { Button, DialogHeader, Field, Input, Modal, Textarea } from "../ui";
 
 export function CreateAgentDialog() {
   const { t } = useTranslation();
@@ -18,7 +20,8 @@ export function CreateAgentDialog() {
   const [name, setName] = useState("");
   const [instructions, setInstructions] = useState("");
   const [avatar, setAvatar] = useState<Avatar>(randomAvatar);
-  const [providerId, setProviderId] = useState("");
+  const [providerId, setProviderId] = useState<string | null>(null);
+  const [model, setModel] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -28,15 +31,18 @@ export function CreateAgentDialog() {
     setInstructions("");
     setAvatar(randomAvatar());
     setShowPicker(false);
-    const enabled = providers.filter((p) => p.enabled);
-    setProviderId(settings.default_provider && enabled.some((p) => p.id === settings.default_provider) ? settings.default_provider : enabled[0]?.id ?? "");
+    setModel(null);
+    void api.providerCatalog().then((c) => {
+      const usable = providers.filter((p) => isConfigured(p, c.find((x) => x.kind === p.kind)));
+      setProviderId(settings.default_provider && usable.some((p) => p.id === settings.default_provider) ? settings.default_provider : usable[0]?.id ?? null);
+    });
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async () => {
     if (!name.trim()) return;
     setBusy(true);
     try {
-      const agent = await api.createAgent({ name: name.trim(), avatar, instructions, provider_id: providerId || null });
+      const agent = await api.createAgent({ name: name.trim(), avatar, instructions, provider_id: providerId, model });
       await useStore.getState().refresh();
       useStore.getState().select(agent.id);
       close();
@@ -48,38 +54,37 @@ export function CreateAgentDialog() {
   };
 
   return (
-    <Modal open={open} onClose={close} className="w-[480px]" label={t("dialogs.createAgent")}>
-      <DialogHeader title={t("dialogs.createAgent")} subtitle={t("dialogs.createAgentHint")} onClose={close} />
-      <div className="space-y-4 px-6 pt-3 pb-5">
-        <div className="flex items-center gap-4">
-          <button onClick={() => setShowPicker((v) => !v)} className="rounded-full transition-transform hover:scale-105" title={t("profile.pickAvatar")}>
-            <AvatarView avatar={avatar} name={name} size={60} />
-          </button>
-          <div className="flex-1">
-            <Field label={t("dialogs.name")}>
-              <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void submit()} placeholder={t("dialogs.namePlaceholder")} />
-            </Field>
+    <>
+      <Modal open={open} onClose={close} className="w-[480px]" label={t("dialogs.createAgent")}>
+        <DialogHeader title={t("dialogs.createAgent")} subtitle={t("dialogs.createAgentHint")} onClose={close} />
+        <div className="max-h-[calc(100vh-150px)] space-y-4 overflow-y-auto px-6 pt-3 pb-5">
+          <div className="flex items-center gap-4">
+            <button onClick={() => setShowPicker(true)} className="rounded-full transition-transform hover:scale-105" aria-label={t("profile.pickAvatar")} data-tip={t("profile.pickAvatar")}>
+              <AvatarView avatar={avatar} name={name} size={60} />
+            </button>
+            <div className="flex-1">
+              <Field label={t("dialogs.name")}>
+                <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void submit()} placeholder={t("dialogs.namePlaceholder")} />
+              </Field>
+            </div>
+          </div>
+          <Field label={t("dialogs.instructions")}>
+            <Textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder={t("dialogs.instructionsPlaceholder")} rows={4} />
+          </Field>
+          <div>
+            <div className="mb-1.5 text-[12.5px] font-medium text-muted">{t("dialogs.provider")}</div>
+            <ModelPicker providerId={providerId} model={model} onChange={(p, m) => (setProviderId(p), setModel(m))} />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button onClick={close}>{t("common.cancel")}</Button>
+            <Button variant="primary" onClick={() => void submit()} disabled={!name.trim() || busy}>
+              {t("common.create")}
+            </Button>
           </div>
         </div>
-        {showPicker && (
-          <div className="animate-pop -mx-1 rounded-xl border border-line bg-elevated">
-            <AvatarPicker value={avatar} onChange={setAvatar} />
-          </div>
-        )}
-        <Field label={t("dialogs.instructions")}>
-          <Textarea value={instructions} onChange={(e) => setInstructions(e.target.value)} placeholder={t("dialogs.instructionsPlaceholder")} rows={4} />
-        </Field>
-        <Field label={t("dialogs.provider")} hint={providers.length === 0 ? t("dialogs.noProvider") : undefined}>
-          <Select value={providerId} onChange={setProviderId} options={providers.filter((p) => p.enabled).map((p) => ({ value: p.id, label: p.name }))} disabled={providers.length === 0} />
-        </Field>
-        <div className="flex justify-end gap-2 pt-1">
-          <Button onClick={close}>{t("common.cancel")}</Button>
-          <Button variant="primary" onClick={() => void submit()} disabled={!name.trim() || busy}>
-            {t("common.create")}
-          </Button>
-        </div>
-      </div>
-    </Modal>
+      </Modal>
+      <AvatarPickerDialog open={open && showPicker} value={avatar} onChange={setAvatar} onClose={() => setShowPicker(false)} />
+    </>
   );
 }
 

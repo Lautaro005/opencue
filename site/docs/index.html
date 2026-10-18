@@ -84,15 +84,16 @@
         <p class="note">The apps aren't notarized or code-signed by Apple or Microsoft yet. On macOS, a downloaded <code>.dmg</code> is blocked the first time: open <strong>System Settings → Privacy &amp; Security</strong> and choose <strong>Open Anyway</strong> (the terminal install doesn't need this). On Windows, SmartScreen may show <em>More info → Run anyway</em>. Updates are signed and checked by the app.</p>
 
         <h2 id="first-agent">Your first agent</h2>
+        <p>The first time you open OpenCue a floating <strong>walkthrough</strong> asks your name, connects a provider, picks a default model and creates your first agent. Replay it from <strong>Settings → General</strong>. To do it by hand:</p>
         <ol>
-          <li>Open <strong>Settings → Models</strong> (<code>Ctrl+,</code>) and add a provider — paste an API key, or pick Ollama / LM Studio if you run models locally.</li>
-          <li>Click <strong>+</strong> at the top of the sidebar → <strong>Create Agent</strong>. Give it a name, a face and a sentence about what it should help with.</li>
+          <li>Open <strong>Settings → Providers</strong> (<code>Ctrl+,</code>) and set one up — paste an API key, or pick Ollama / LM Studio if you run models locally. <strong>Settings → Models</strong> then lists its models, with a search bar and switches to hide the ones you never use.</li>
+          <li>Click <strong>+</strong> at the top of the sidebar → <strong>Create Agent</strong>. Give it a name, a face, a sentence about what it should help with, and the provider and model.</li>
           <li>Say hi. Click the person icon at the top right to open its profile, or the screen icon to open its computer.</li>
         </ol>
         <p class="note">Closing the window keeps OpenCue in the tray so automations and running agents keep working. Quit from the tray icon.</p>
 
         <h2 id="providers">Model providers</h2>
-        <p>Every agent uses one provider and model, picked in its profile → <strong>Model</strong>. The model list loads from the provider.</p>
+        <p>Every agent uses one provider and model, picked when you create it or later in its profile → <strong>Model</strong>. <strong>Settings → Providers</strong> shows a container for every supported provider; click one to connect it. <strong>Settings → Models</strong> lists the models of the providers that are ready — search them and switch off the ones that shouldn't appear in pickers; the star sets a provider's default model.</p>
         <table>
           <tr><th>Provider</th><th>How it signs in</th></tr>
           <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheapestInference, Ollama Cloud</td><td>API key, stored in your system keychain</td></tr>
@@ -104,7 +105,7 @@
         <p>CLI agents get OpenCue's own tools — memory, web, skills, their computer, files, email and Composio — through MCP: OpenCue hands the CLI a server started as <code>opencue mcp-serve --agent &lt;id&gt;</code>. Turn it off per agent in profile → <strong>Model</strong> → <em>OpenCue tools</em>. The CLI can't show OpenCue's approval cards, so in <em>Ask first</em> mode actions that need approval (sending email, commands on your computer, deleting memories…) are refused and the agent tells you instead. Your own MCP servers configured in OpenCue aren't passed on; configure those in the CLI itself.</p>
 
         <h2 id="profile">Profile &amp; avatar</h2>
-        <p>Click an agent's face in its profile to change it: ten faces, twelve shapes and a color row. The profile is organized like this:</p>
+        <p>Click an agent's face in its profile to change it in a floating window: ten faces, twelve shapes and a color row. The profile is organized like this:</p>
         <ul>
           <li><strong>Assets</strong> — <em>Mails</em> (its inbox), <em>Computer</em> (where it runs commands) and <em>Files</em> (everything shared in the chat).</li>
           <li><strong>Configurations</strong> — Model, Apps, Skills, Instructions, Memory, Voice and Permissions.</li>
@@ -116,8 +117,9 @@
         <p><strong>Memory</strong> is a list of facts the agent keeps about you and its work, in <code>agents/&lt;id&gt;/MEMORY.md</code>. Agents save facts with the <code>remember</code> tool, look them up with <code>recall</code> and delete with <code>forget</code> (which asks first). You can add, delete or edit the Markdown directly.</p>
         <ul>
           <li><strong>Shared memory</strong> (<code>memory/GLOBAL.md</code>) is visible to every agent that has “Use shared memory” on.</li>
-          <li><strong>Learn from conversations automatically</strong> asks the model after each reply whether anything is worth remembering.</li>
+          <li><strong>Learn from conversations automatically</strong> is on by default: after each reply the model decides whether anything is worth remembering, sends facts every agent should know to the shared memory, skips duplicates and merges the list when it passes 40 entries. Turn it off per agent in its Memory page.</li>
         </ul>
+        <p><strong>About me</strong> (<strong>Settings → Account</strong>) is a description of yourself that every agent reads as background, together with your name. It stays on your computer and goes only to the model provider you chose.</p>
 
         <h2 id="groups">Group chats</h2>
         <p>Create one with <strong>+ → Create group chat</strong>. The first member is the owner.</p>
@@ -176,6 +178,8 @@ description: Write the Friday status report from this week's notes and emails.
 2. Search the inbox for "status" from this week.
 3. Write a short report with Done / Next / Blocked.</code></pre>
         <p>Agents see each skill's name and description and load the full instructions with <code>use_skill</code> when a task matches. Create and edit skills in <strong>Settings → Skills</strong>, import one from a URL (GitHub links work), or let an agent save one with <code>save_skill</code> after you teach it something. Skills live in the <code>skills/</code> folder and are shared by all agents; turn them off per agent in its Skills page.</p>
+        <h3>Slash commands</h3>
+        <p>Type <code>/</code> in the chat input to list commands; arrows and Enter pick one. Every installed skill is a command (<code>/weekly-report for this month</code> loads it and follows it). Two are built in: <code>/create-automation</code> makes the agent create an automation for itself (a schedule or new-email trigger; it asks first in Ask-first mode) and <code>/create-skill</code> makes it write a reusable skill from what you described.</p>
 
         <h2 id="email">Email</h2>
         <p>Profile → <strong>Mails</strong> → Add. Two account types:</p>
@@ -208,6 +212,12 @@ description: Write the Friday status report from this week's notes and emails.
           <tr><td>This computer</td><td>Your own shell (PowerShell on Windows), starting in the agent's workspace folder.</td><td>Every command and file write</td></tr>
           <tr><td>WSL</td><td>Windows Subsystem for Linux (Windows only).</td><td>Every command and file write</td></tr>
         </table>
+        <h3>VMPal machines</h3>
+        <p>VMPal virtual machines can be controlled by agents through MCP. Declare each machine in <strong>Settings → Computers → VMPal</strong> as TOML, the same way Codex declares MCP servers:</p>
+        <pre><code>[mcp_servers.vmpal-work]
+command = "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine"
+args = ["--mcp", "E7D-your-machine-id"]</code></pre>
+        <p>Then open an agent's profile → <strong>Computer</strong> → <strong>VMPal</strong> and switch on the machines it may use — or press <strong>Add machine</strong> to paste a new table there, which adds it to the shared list and selects it. A machine starts the first time that agent replies; <strong>Test connection</strong> in Settings starts it now. VMPal machines are never part of “all MCP servers”, and in Ask-first mode their tools ask for approval unless they declare themselves read-only.</p>
         <h3>Setting up SPACE</h3>
         <ol>
           <li>On a Linux machine with <code>/dev/kvm</code>, run <code>scripts/check-space-host.sh</code> from the repository to check the basics.</li>

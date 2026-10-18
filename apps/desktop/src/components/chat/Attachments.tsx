@@ -29,7 +29,7 @@ export function FileActions({ a }: { a: Attachment }) {
   return (
     <span className="flex shrink-0 items-center opacity-0 transition-opacity group-hover/file:opacity-100">
       <button
-        title={t("files.save")}
+        data-tip={t("files.save")}
         aria-label={t("files.save")}
         onClick={(e) => {
           e.stopPropagation();
@@ -40,7 +40,7 @@ export function FileActions({ a }: { a: Attachment }) {
         <Download size={14} />
       </button>
       <button
-        title={t("files.reveal")}
+        data-tip={t("files.reveal")}
         aria-label={t("files.reveal")}
         onClick={(e) => {
           e.stopPropagation();
@@ -66,7 +66,7 @@ function ImageThumb({ a }: { a: Attachment }) {
   return (
     <button
       onClick={() => void api.openAttachment(a.id).catch(toastError)}
-      title={a.name}
+      data-tip={a.name}
       className="group/file relative block overflow-hidden rounded-2xl border border-line bg-hover"
     >
       {src ? <img src={src} alt={a.name} className="block max-h-64 max-w-[280px] object-cover" /> : <div className="h-40 w-56 animate-pulse" />}

@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`) | ✅ |
+| Latest release (`0.3.x`, currently `0.3.1`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -57,6 +57,8 @@ In scope:
 - **Install and update** — `install.sh` / `install.ps1` fetching or running anything other than the official release,
   the updater accepting a bundle not signed with the release key, or update metadata pointing outside GitHub Releases
 - **MCP handling** — a malicious MCP server escaping its process, injecting commands, or reaching tools it should not
+- **VMPal machines** — an agent reaching a VMPal machine it was not given, or the TOML in Settings → Computers running a
+  command other than the one written there (OpenCue only starts the `command` and `args` the user saved)
 - **Local data** — other local users or processes reading or modifying the OpenCue database, memory, skills, workspaces
   or instruction files through OpenCue's fault
 - **IPC / webview** — the UI calling privileged commands from untrusted content (rendered Markdown, links, email bodies),
@@ -95,6 +97,12 @@ Out of scope:
   port). Actions that need approval are refused in "Ask first" mode.
 - **Updates** are downloaded from GitHub Releases and installed only if their minisign signature matches the public key
   built into the app. The install scripts download only from the official GitHub release over HTTPS.
+- **VMPal**: machines are MCP servers started from the `[mcp_servers.<name>]` TOML the user saves in Settings →
+  Computers. They start only when an agent that picked them replies, are never exposed to agents that did not pick
+  them, and their tools ask for approval in "Ask first" mode unless they declare themselves read-only.
+- **Slash commands and memory**: `/create-automation` and automations an agent creates ask first in "Ask first" mode;
+  automatic memory only stores short text facts, and your *About me* text stays on this computer and is sent only to
+  the model provider you chose, like the rest of the conversation.
 - **Untrusted content**: web pages, emails, shared files, webhook payloads and tool results are labeled as data, and agents are
   instructed not to follow instructions found in them — that is not a guarantee, so keep agents in "Ask first" when they
   read untrusted content.

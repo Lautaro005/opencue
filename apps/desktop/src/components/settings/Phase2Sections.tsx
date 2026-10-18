@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Download, ExternalLink, Plus, Server, Terminal, Trash2 } from "lucide-react";
+import { Box, Download, ExternalLink, MonitorCog, Plus, Server, Terminal, Trash2 } from "lucide-react";
 import { api, openUrl } from "../../lib/api";
 import { useStore } from "../../lib/store";
-import type { ComposioStatus, ComputerSettings, Skill, SkillSummary, Voice, VoiceSettings } from "../../lib/types";
+import type { ComposioStatus, ComputerSettings, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
 
@@ -308,6 +308,7 @@ export function ComputersSection() {
         </div>
         {test && <p className={`px-4 pb-3 text-[12px] ${test.ok ? "text-success" : "text-danger"}`}>{test.text}</p>}
       </Card>
+      <VmPalCard />
       <Card title={t("settings.computers.host")}>
         <div className="flex items-start gap-3 px-4 py-3.5 text-[12.5px] text-muted">
           <Terminal size={16} className="mt-0.5 shrink-0" />
@@ -323,6 +324,105 @@ export function ComputersSection() {
         <Box size={13} /> {t("settings.computers.perAgent")}
       </p>
     </>
+  );
+}
+
+// ---------- VMPal ----------
+
+export const VMPAL_EXAMPLE = `[mcp_servers.vmpal-work]
+command = "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine"
+args = ["--mcp", "E7D-your-machine-id"]`;
+
+function VmPalCard() {
+  const { t } = useTranslation();
+  const [info, setInfo] = useState<VmPalInfo | null>(null);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const [tests, setTests] = useState<Record<string, { busy?: boolean; ok?: boolean; text?: string }>>({});
+
+  useEffect(() => {
+    void api.vmpalGet().then((v) => {
+      setInfo(v);
+      setText(v.toml);
+    });
+  }, []);
+
+  const save = async () => {
+    setError(null);
+    setSaved(false);
+    try {
+      const v = await api.saveVmpal(text);
+      setInfo(v);
+      setText(v.toml);
+      setSaved(true);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const test = async (name: string) => {
+    setTests((s) => ({ ...s, [name]: { busy: true } }));
+    try {
+      const st = await api.testVmpal(name);
+      setTests((s) => ({ ...s, [name]: st.state === "ready" ? { ok: true, text: t("settings.vmpal.ready", { n: st.tools.length }) } : { ok: false, text: st.error ?? st.state } }));
+    } catch (e) {
+      setTests((s) => ({ ...s, [name]: { ok: false, text: String(e) } }));
+    }
+  };
+
+  return (
+    <Card title="VMPal">
+      <div className="space-y-3 px-4 py-3.5">
+        <div className="flex items-start gap-3 text-[12.5px] text-muted">
+          <MonitorCog size={16} className="mt-0.5 shrink-0" />
+          <span>{t("settings.vmpal.hint")}</span>
+        </div>
+        <Textarea
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value);
+            setSaved(false);
+          }}
+          rows={8}
+          spellCheck={false}
+          placeholder={VMPAL_EXAMPLE}
+          className="font-mono text-[12px] leading-relaxed"
+        />
+        <div className="flex items-center gap-2">
+          <Button variant="primary" size="sm" onClick={() => void save()} disabled={text.trim() === (info?.toml ?? "")}>
+            {t("common.save")}
+          </Button>
+          {!text.trim() && (
+            <Button size="sm" onClick={() => setText(VMPAL_EXAMPLE)}>
+              {t("settings.vmpal.example")}
+            </Button>
+          )}
+          {saved && <span className="text-[12px] text-success">{t("common.saved")}</span>}
+        </div>
+        {error && <p className="selectable text-[12px] text-danger">{error}</p>}
+        {info && info.machines.length > 0 && (
+          <ul className="divide-y divide-line rounded-xl border border-line">
+            {info.machines.map((m) => {
+              const st = tests[m.name];
+              return (
+                <li key={m.name} className="flex items-center gap-3 px-3 py-2">
+                  <MonitorCog size={15} className="shrink-0 text-muted" />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-medium">{m.name}</span>
+                    <span className={`block truncate text-[11.5px] ${st?.ok === false ? "text-danger" : st?.ok ? "text-success" : "text-faint"}`}>{st?.text ?? m.args.join(" ")}</span>
+                  </span>
+                  <Button size="sm" onClick={() => void test(m.name)} disabled={st?.busy}>
+                    {st?.busy ? t("settings.vmpal.starting") : t("settings.computers.test")}
+                  </Button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+        <p className="text-[11.5px] text-faint">{t("settings.vmpal.perAgent")}</p>
+      </div>
+    </Card>
   );
 }
 

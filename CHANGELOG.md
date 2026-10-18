@@ -2,6 +2,44 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.3.1 — 2026-10-17
+
+### New
+
+- **Walkthrough**: a floating, step-by-step window on first launch — your name, a few lines about you, connect a
+  provider, pick a default model, create your first agent. Replay it from Settings → General.
+- **Providers and Models are separate pages.** *Providers* shows a container for every supported provider (connected,
+  needs a key, or not set up) and opens a window to configure it. *Models* lists the models of the providers that are
+  ready, with a search bar, a switch to show or hide each model (or all at once) and a star to set the provider's
+  default model. Hidden models disappear from every model picker.
+- **Pick the model when creating an agent**: provider and model (searchable) are right in the Create Agent window.
+- **VMPal machines**: Settings → Computers → VMPal takes TOML in the same format as Codex MCP servers
+  (`[mcp_servers.vmpal-…]` with `command` and `args`). In an agent's profile → Computer, choose machines from that
+  list or paste a new table to add it on the spot. Machines start the first time the agent uses them and are never
+  part of "all MCP servers".
+- **Slash commands** in the chat input: type `/` to run any installed skill, plus the built-in **`/create-automation`**
+  (the agent creates an automation for itself) and **`/create-skill`** (the agent writes a reusable skill). New
+  `create_automation` tool (schedule or new-email triggers; asks first in "Ask first" mode).
+- **Memory builds itself**: auto-learning is now on by default. After each reply the agent extracts durable facts,
+  routes facts every agent should know ("global: …") to the shared memory, avoids duplicates and merges the list when
+  it grows past 40 entries. The prompt also tells agents to remember proactively. Agents created before 0.3.1 are
+  switched on once; you can turn it off per agent.
+- **About me** (Settings → Account): a free-text description every agent reads as background. The name you set is now
+  also shared with agents.
+
+### Changed
+
+- **Avatar picker** is a floating window with a close button that fills its width; faces are drawn on the avatar's own
+  color, fixing the low contrast in dark mode. It opens from Create Agent, the agent profile and the walkthrough.
+- **Chat input** now spans the same width as the header.
+- **No more system widgets**: dropdowns, confirmations, tooltips and the right-click menu are drawn by the app (custom
+  select with search and keyboard support; confirm window; Cut / Copy / Paste / Select all menu).
+- Only the top-most window answers Escape.
+
+### Fixed
+
+- Pickers and confirmations opened from inside another window are no longer clipped by it.
+
 ## 0.3.0 — 2026-10-17
 
 ### New

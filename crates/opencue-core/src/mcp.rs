@@ -99,6 +99,14 @@ impl McpManager {
         }
     }
 
+    pub async fn is_ready(&self, id: &str) -> bool {
+        self.slots
+            .read()
+            .await
+            .get(id)
+            .is_some_and(|s| s.conn.is_some())
+    }
+
     pub async fn disconnect(&self, id: &str) {
         let slot = self.slots.write().await.remove(id);
         if let Some(conn) = slot.and_then(|s| s.conn) {

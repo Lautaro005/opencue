@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { FolderOpen, Repeat, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
+import { confirmDialog } from "../../lib/confirm";
 import type { Group } from "../../lib/types";
 import { AvatarView, GroupAvatar } from "../AvatarView";
 import { Badge, Button, IconButton, Input, useClickOutside } from "../ui";
@@ -59,7 +60,7 @@ export function GroupDetails({ group }: { group: Group }) {
                     onClick={() => void api.removeGroupMember(group.id, agent.id).then(refresh)}
                     className="text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:text-danger"
                     aria-label={t("group.removeMember")}
-                    title={t("group.removeMember")}
+                    data-tip={t("group.removeMember")}
                   >
                     <X size={14} />
                   </button>
@@ -120,8 +121,8 @@ export function GroupDetails({ group }: { group: Group }) {
           <Button
             variant="danger"
             className="w-full"
-            onClick={() => {
-              if (confirm(t("group.deleteConfirm", { name: group.name }))) {
+            onClick={async () => {
+              if (await confirmDialog(t("group.deleteConfirm", { name: group.name }), { confirmLabel: t("common.delete") })) {
                 setPanel(null);
                 void api.deleteGroup(group.id);
               }
