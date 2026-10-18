@@ -19,6 +19,16 @@ export interface AgentSettings {
   vmpal: string[];
   /** Folder the agent works in; empty/null means its own folder in OpenCue's data. */
   working_dir: string | null;
+  vm: VmOptions;
+}
+
+export interface VmOptions {
+  /** Live desktop; null follows Settings → Computers. */
+  desktop: boolean | null;
+  memory_mb: number | null;
+  cpus: number | null;
+  /** Folder that keeps the VM's home; null uses a folder inside OpenCue's data. */
+  data_dir: string | null;
 }
 
 export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space" | "vmpal";
@@ -287,6 +297,9 @@ export interface ComposioStatus {
   user_id: string;
   accounts: { id: string; toolkit: string; status: string }[];
   error: string | null;
+  /** "none", "project" (ak_ key) or "connect" (ck_ key through Composio Connect). */
+  mode: "none" | "project" | "connect";
+  tools: number;
 }
 
 export interface ComputerSettings {

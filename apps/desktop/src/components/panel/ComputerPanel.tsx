@@ -79,7 +79,7 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
 /** The Docker computer's web desktop (noVNC / KasmVNC / Selkies), served on 127.0.0.1. */
 function Desktop({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
-  const openSettings = useStore((s) => s.openSettings);
+  const setPanel = useStore((s) => s.setPanel);
   const [state, setState] = useState<{ url?: string; error?: string; loading: boolean }>({ loading: true });
   const [frameKey, setFrameKey] = useState(0);
 
@@ -123,8 +123,8 @@ function Desktop({ agent }: { agent: Agent }) {
         <p className="text-[13.5px] font-medium">{t("computer.desktopTitle")}</p>
         <p className="text-[12.5px] text-muted">{needsSetting ? t("computer.desktopOff") : needsRestart ? t("computer.desktopRestartHint") : state.error}</p>
         {needsSetting ? (
-          <button onClick={() => openSettings("computers")} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
-            {t("computer.openSettings")}
+          <button onClick={() => setPanel("profile")} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+            {t("computer.configure")}
           </button>
         ) : (
           <button onClick={() => void (needsRestart ? restart() : load())} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">

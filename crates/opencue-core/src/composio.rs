@@ -32,6 +32,120 @@ pub struct ComposioToolkit {
     pub logo: String,
 }
 
+/// Composio Connect: a hosted MCP server that takes a consumer key (`ck_…`) in
+/// `x-consumer-api-key`. Its tools search, connect and run 500+ apps for the user's account.
+pub const CONNECT_URL: &str = "https://connect.composio.dev/mcp";
+/// Id of the MCP server OpenCue keeps for it (like `vmpal:<name>`, hidden from the Apps list).
+pub const CONNECT_SERVER_ID: &str = "composio:connect";
+
+pub fn is_consumer_key(key: &str) -> bool {
+    key.trim().starts_with("ck_")
+}
+
+/// Popular apps offered when Composio's own catalog can't be listed (consumer keys can't).
+pub fn popular_toolkits(query: &str) -> Vec<ComposioToolkit> {
+    const APPS: &[(&str, &str, &str)] = &[
+        ("gmail", "Gmail", "Read, send and organize email"),
+        (
+            "googlecalendar",
+            "Google Calendar",
+            "Events and invitations",
+        ),
+        ("googledrive", "Google Drive", "Files and folders"),
+        ("googledocs", "Google Docs", "Documents"),
+        ("googlesheets", "Google Sheets", "Spreadsheets"),
+        ("slack", "Slack", "Messages and channels"),
+        ("notion", "Notion", "Pages, databases and notes"),
+        ("github", "GitHub", "Repos, issues and pull requests"),
+        ("linear", "Linear", "Issues and projects"),
+        ("jira", "Jira", "Tickets and boards"),
+        ("trello", "Trello", "Boards, lists and cards"),
+        ("asana", "Asana", "Tasks and projects"),
+        ("outlook", "Outlook", "Email and calendar"),
+        ("microsoft_teams", "Microsoft Teams", "Chats and meetings"),
+        ("discord", "Discord", "Servers and messages"),
+        ("telegram", "Telegram", "Bots and chats"),
+        ("twitter", "X (Twitter)", "Posts and searches"),
+        ("linkedin", "LinkedIn", "Posts and profile"),
+        ("instagram", "Instagram", "Posts and insights"),
+        ("youtube", "YouTube", "Videos and channels"),
+        ("hubspot", "HubSpot", "CRM contacts and deals"),
+        ("salesforce", "Salesforce", "CRM records"),
+        ("stripe", "Stripe", "Payments and customers"),
+        ("shopify", "Shopify", "Orders and products"),
+        ("airtable", "Airtable", "Bases and records"),
+        ("dropbox", "Dropbox", "Files"),
+        ("figma", "Figma", "Designs and comments"),
+        ("canva", "Canva", "Designs"),
+        ("zoom", "Zoom", "Meetings"),
+        ("calendly", "Calendly", "Scheduling"),
+        ("clickup", "ClickUp", "Tasks"),
+        ("supabase", "Supabase", "Databases"),
+        ("vercel", "Vercel", "Deployments"),
+        ("google_analytics", "Google Analytics", "Traffic reports"),
+        (
+            "google_search_console",
+            "Google Search Console",
+            "Search performance",
+        ),
+    ];
+    let needle = query.trim().to_lowercase();
+    APPS.iter()
+        .filter(|(slug, name, _)| {
+            needle.is_empty() || slug.contains(&needle) || name.to_lowercase().contains(&needle)
+        })
+        .map(|(slug, name, description)| ComposioToolkit {
+            slug: (*slug).into(),
+            name: (*name).into(),
+            description: (*description).into(),
+            logo: format!("https://logos.composio.dev/api/{slug}"),
+        })
+        .collect()
+}
+
+/// Apps the account already connected, read from Composio Connect's own tool description
+/// ("User has manually connected the apps: a, b, c.").
+pub fn connected_from_description(description: &str) -> Vec<String> {
+    let Some(i) = description.find("connected the apps:") else {
+        return vec![];
+    };
+    description[i + "connected the apps:".len()..]
+        .split(['.', '\n'])
+        .next()
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// The sign-in link in the text a `COMPOSIO_MANAGE_CONNECTIONS` call returns (JSON or prose).
+pub fn redirect_url_in(text: &str) -> Option<String> {
+    if let Ok(v) = serde_json::from_str::<Value>(text) {
+        fn find(v: &Value) -> Option<String> {
+            match v {
+                Value::Object(m) => m
+                    .get("redirect_url")
+                    .or_else(|| m.get("redirectUrl"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| m.values().find_map(find)),
+                Value::Array(a) => a.iter().find_map(find),
+                _ => None,
+            }
+        }
+        if let Some(u) = find(&v) {
+            return Some(u);
+        }
+    }
+    let start = text.find("https://")?;
+    let url: String = text[start..]
+        .chars()
+        .take_while(|c| !c.is_whitespace() && !matches!(c, '"' | '\'' | ')' | '<' | '>' | '\\'))
+        .collect();
+    Some(url.trim_end_matches([',', '.']).to_string())
+}
+
 /// Composio has several kinds of key and each travels in its own header: project keys (`ak_…`)
 /// in `x-api-key`, user keys (`uak_…`) in `x-user-api-key` and consumer keys (`ck_…`) in
 /// `x-consumer-api-key`. Sending a key in the wrong one is a 401, so the likeliest header goes
@@ -342,6 +456,32 @@ mod tests {
         assert_eq!(super::header_candidates("uak_abc")[0], "x-user-api-key");
         // An unknown key still gets every header tried.
         assert!(super::header_candidates("whatever").contains(&"x-consumer-api-key"));
+    }
+
+    #[test]
+    fn reads_connect_replies() {
+        assert!(super::is_consumer_key(" ck_abc"));
+        assert!(!super::is_consumer_key("ak_abc"));
+        assert_eq!(
+            super::connected_from_description(
+                "Use it. User has manually connected the apps: canva, notion, ollama. Prefer these."
+            ),
+            vec!["canva", "notion", "ollama"]
+        );
+        assert_eq!(
+            super::redirect_url_in(
+                r#"{"data":{"results":[{"redirect_url":"https://connect.composio.dev/link/x"}]}}"#
+            )
+            .as_deref(),
+            Some("https://connect.composio.dev/link/x")
+        );
+        assert_eq!(
+            super::redirect_url_in("Open https://example.com/auth?a=1, then reply.").as_deref(),
+            Some("https://example.com/auth?a=1")
+        );
+        assert!(super::popular_toolkits("sla")
+            .iter()
+            .any(|t| t.slug == "slack"));
     }
 
     #[test]

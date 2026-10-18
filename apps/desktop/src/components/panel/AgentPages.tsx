@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Blocks, Clock, Copy, Mail, MonitorCog, Pencil, Play, Plus, Trash2, Webhook, Workflow } from "lucide-react";
+import { Blocks, Clock, Copy, FolderOpen, Github, Mail, MonitorCog, Pencil, Play, Plus, Trash2, Webhook, Workflow } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { api } from "../../lib/api";
+import { api, openUrl, pickFolder } from "../../lib/api";
 import type { Agent, AgentSettings, Automation, ComputerBackend, ComputerSettings, EmailAccount, SkillSummary, Trigger, VmPalMachine, Voice } from "../../lib/types";
 import { cx, describeCron, formatTime } from "../../lib/format";
 import { Button, DialogHeader, Field, IconButton, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { BACKENDS } from "./ComputerPanel";
-import { VMPAL_EXAMPLE } from "../settings/Phase2Sections";
+import { SPACE_REPO, VMPAL_EXAMPLE } from "../settings/Phase2Sections";
 import { Row } from "./Section";
 
 function Page({ children }: { children: ReactNode }) {
@@ -182,10 +182,26 @@ export function ComputerPage({ agent, onChange }: { agent: Agent; onChange: (s: 
               <span className={cx("mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border-2", on ? "border-accent" : "border-line-strong")}>
                 {on && <span className="size-1.5 rounded-full bg-accent" />}
               </span>
-              <span>
+              <span className="min-w-0 flex-1">
                 <span className="block text-[13px] font-medium">{t(`computer.backend.${b}`)}</span>
                 <span className="block text-[11.5px] text-muted">{available(b) ? t(`computer.backendHint.${b}`) : t("computer.unavailable")}</span>
               </span>
+              {b === "space" && (
+                <span
+                  role="link"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void openUrl(SPACE_REPO);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && (e.stopPropagation(), void openUrl(SPACE_REPO))}
+                  className="mt-0.5 shrink-0 rounded-md p-1 text-muted hover:bg-hover hover:text-accent"
+                  aria-label={t("computer.spaceRepo")}
+                  data-tip={t("computer.spaceRepo")}
+                >
+                  <Github size={15} />
+                </span>
+              )}
             </button>
           );
         })}
@@ -200,8 +216,92 @@ export function ComputerPage({ agent, onChange }: { agent: Agent; onChange: (s: 
           {t("computer.open")}
         </Button>
       )}
+      {agent.settings.computer === "docker" && <LocalVmOptions agent={agent} />}
       {agent.settings.computer === "vmpal" && <VmPalPicker agent={agent} onChange={onChange} />}
     </Page>
+  );
+}
+
+const MEMORY_CHOICES = [1024, 2048, 4096, 8192, 16384];
+const CPU_CHOICES = [1, 2, 4, 8];
+
+/** The local VM: live desktop, memory, CPUs and the folder that keeps its state. */
+function LocalVmOptions({ agent }: { agent: Agent }) {
+  const { t } = useTranslation();
+  const showToast = useStore((s) => s.showToast);
+  const vm = agent.settings.vm ?? { desktop: null, memory_mb: null, cpus: null, data_dir: null };
+  const [fallback, setFallback] = useState("");
+  const [typed, setTyped] = useState(vm.data_dir ?? "");
+  useEffect(() => void api.defaultVmFolder(agent.id).then(setFallback), [agent.id]);
+  useEffect(() => setTyped(vm.data_dir ?? ""), [vm.data_dir]);
+
+  const save = async (patch: Partial<typeof vm>) => {
+    try {
+      await api.updateAgent(agent.id, { settings: { ...agent.settings, vm: { ...vm, ...patch } } });
+    } catch (e) {
+      showToast(String(e));
+    }
+  };
+  const choose = async () => {
+    const dir = await pickFolder();
+    if (dir) await save({ data_dir: dir });
+  };
+
+  return (
+    <div className="space-y-3 border-t border-line pt-3">
+      <div>
+        <span className="text-[12.5px] font-medium text-muted">{t("computer.vm.title")}</span>
+        <Hint>{t("computer.vm.hint", { name: agent.name })}</Hint>
+      </div>
+      <Row label={t("computer.vm.desktop")} hint={t("computer.vm.desktopHint")}>
+        <Select
+          value={vm.desktop === null ? "default" : vm.desktop ? "on" : "off"}
+          onChange={(v) => void save({ desktop: v === "default" ? null : v === "on" })}
+          options={[
+            { value: "default", label: t("computer.vm.desktopDefault") },
+            { value: "on", label: t("computer.vm.on") },
+            { value: "off", label: t("computer.vm.off") },
+          ]}
+          className="w-44"
+        />
+      </Row>
+      <div className="grid grid-cols-2 gap-2">
+        <div>
+          <div className="mb-1 text-[12px] text-muted">{t("computer.vm.memory")}</div>
+          <Select
+            value={String(vm.memory_mb ?? 0)}
+            onChange={(v) => void save({ memory_mb: Number(v) || null })}
+            options={[{ value: "0", label: t("computer.vm.auto") }, ...MEMORY_CHOICES.map((mb) => ({ value: String(mb), label: `${mb / 1024} GB` }))]}
+          />
+        </div>
+        <div>
+          <div className="mb-1 text-[12px] text-muted">{t("computer.vm.cpus")}</div>
+          <Select
+            value={String(vm.cpus ?? 0)}
+            onChange={(v) => void save({ cpus: Number(v) || null })}
+            options={[{ value: "0", label: t("computer.vm.auto") }, ...CPU_CHOICES.map((n) => ({ value: String(n), label: String(n) }))]}
+          />
+        </div>
+      </div>
+      <div className="rounded-xl border border-line px-3 py-2.5">
+        <div className="mb-1 text-[12px] text-muted">{vm.data_dir ? t("computer.vm.folderCustom") : t("computer.vm.folderDefault")}</div>
+        <div className="selectable font-mono text-[12px] break-all">{vm.data_dir || fallback}</div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button onClick={() => void choose()}>
+          <FolderOpen size={14} /> {t("computer.vm.choose")}
+        </Button>
+        {vm.data_dir && <Button onClick={() => void save({ data_dir: null })}>{t("computer.vm.useDefault")}</Button>}
+      </div>
+      <div className="flex gap-1.5">
+        <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={fallback} spellCheck={false} className="h-8 font-mono text-[12px]" onKeyDown={(e) => e.key === "Enter" && typed.trim() && void save({ data_dir: typed.trim() })} />
+        <Button size="sm" onClick={() => void save({ data_dir: typed.trim() })} disabled={!typed.trim() || typed.trim() === (vm.data_dir ?? "")}>
+          {t("common.save")}
+        </Button>
+      </div>
+      <Hint>{t("computer.vm.folderHint")}</Hint>
+      <Hint>{t("computer.vm.note")}</Hint>
+    </div>
   );
 }
 

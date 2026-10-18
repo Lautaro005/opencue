@@ -24,6 +24,7 @@ const defaults = {
   cli_tools: true,
   vmpal: [] as string[],
   working_dir: null as string | null,
+  vm: { desktop: null, memory_mb: null, cpus: null, data_dir: null } as { desktop: boolean | null; memory_mb: number | null; cpus: number | null; data_dir: string | null },
 };
 
 /** Files "uploaded" in the preview, kept as data URLs. */
@@ -156,7 +157,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.3-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.4-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -340,9 +341,10 @@ const handlers: Record<string, (a: Args) => unknown> = {
       .map(([slug, name, description]) => ({ slug, name, description, logo: "" }))
       .filter((a) => !query || a.slug.includes(String(query).toLowerCase()) || a.name.toLowerCase().includes(String(query).toLowerCase())),
   agent_workspace: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/workspace`,
+  default_vm_folder: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/vm`,
   default_workspace: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/workspace`,
-  composio_status: () => ({ configured: false, user_id: "", accounts: [], error: null }),
-  save_composio: ({ userId }) => ({ configured: true, user_id: userId, accounts: [{ id: "ca_1", toolkit: "gmail", status: "ACTIVE" }], error: null }),
+  composio_status: () => ({ configured: false, user_id: "", accounts: [], error: null, mode: "none", tools: 0 }),
+  save_composio: ({ apiKey, userId }) => ({ configured: true, user_id: userId, accounts: [{ id: "gmail", toolkit: "gmail", status: "ACTIVE" }], error: null, mode: String(apiKey ?? "").startsWith("ck_") ? "connect" : "project", tools: String(apiKey ?? "").startsWith("ck_") ? 7 : 0 }),
   computer_settings: () => computer,
   save_computer_settings: ({ settings }) => Object.assign(computer, settings),
   test_space: () => 0,

@@ -58,6 +58,9 @@ pub struct AgentSettings {
     /// Folder the agent works in. Empty means its own folder inside OpenCue's data directory.
     #[serde(default)]
     pub working_dir: Option<String>,
+    /// Options for the agent's Docker computer (the local VM).
+    #[serde(default)]
+    pub vm: crate::computer::VmOptions,
 }
 
 impl Default for AgentSettings {

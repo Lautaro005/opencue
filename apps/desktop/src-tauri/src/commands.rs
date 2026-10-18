@@ -616,6 +616,18 @@ pub async fn agent_workspace(state: State<'_, AppState>, id: String) -> R<String
     Ok(state.core.workspace_for(&agent).display().to_string())
 }
 
+/// Where an agent's local VM keeps its home when no folder is picked.
+#[tauri::command]
+pub fn default_vm_folder(state: State<'_, AppState>, id: String) -> String {
+    state
+        .core
+        .paths()
+        .agent_dir(&id)
+        .join("vm")
+        .display()
+        .to_string()
+}
+
 /// Where an agent works when no folder is picked.
 #[tauri::command]
 pub fn default_workspace(state: State<'_, AppState>, id: String) -> String {

@@ -30,7 +30,13 @@ struct Slot {
 #[derive(Default, Clone)]
 pub struct McpManager {
     slots: Arc<RwLock<HashMap<String, Slot>>>,
+    /// Where keychain-held secrets are read from (see [`KEYCHAIN_PREFIX`]).
+    secrets: Option<Arc<crate::secrets::Secrets>>,
 }
+
+/// A header value written `keychain:<name>` is replaced by that secret when the server connects,
+/// so the key itself never sits in the database.
+pub const KEYCHAIN_PREFIX: &str = "keychain:";
 
 /// A tool exposed to agents as `mcp__<server>__<tool>`.
 #[derive(Debug, Clone)]
@@ -84,6 +90,26 @@ pub fn sanitize(name: &str) -> String {
 }
 
 impl McpManager {
+    pub fn new(secrets_fallback: std::path::PathBuf) -> Self {
+        Self {
+            slots: Arc::default(),
+            secrets: Some(Arc::new(crate::secrets::Secrets::new(secrets_fallback))),
+        }
+    }
+
+    fn resolve_headers(&self, cfg: &McpServerConfig) -> BTreeMap<String, String> {
+        cfg.headers
+            .iter()
+            .map(|(k, v)| {
+                let value = v
+                    .strip_prefix(KEYCHAIN_PREFIX)
+                    .and_then(|name| self.secrets.as_ref()?.get(name))
+                    .unwrap_or_else(|| v.clone());
+                (k.clone(), value)
+            })
+            .collect()
+    }
+
     pub async fn connect(&self, cfg: &McpServerConfig) {
         {
             let mut slots = self.slots.write().await;
@@ -91,7 +117,12 @@ impl McpManager {
             slot.state = "connecting".into();
             slot.error = None;
         }
-        let result = tokio::time::timeout(std::time::Duration::from_secs(60), open(cfg)).await;
+        let resolved = McpServerConfig {
+            headers: self.resolve_headers(cfg),
+            ..cfg.clone()
+        };
+        let result =
+            tokio::time::timeout(std::time::Duration::from_secs(60), open(&resolved)).await;
         let mut slots = self.slots.write().await;
         let slot = slots.entry(cfg.id.clone()).or_default();
         match result {

@@ -89,7 +89,7 @@ impl Core {
             store,
             secrets: Secrets::new(paths.secrets_fallback_file()),
             events,
-            mcp: McpManager::default(),
+            mcp: McpManager::new(paths.secrets_fallback_file()),
             web: WebService::new(db),
             runs: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),

@@ -142,6 +142,7 @@ export const api = {
   composioToolkits: (query: string) => invokeImpl<ComposioToolkit[]>("composio_toolkits", { query }),
   agentWorkspace: (id: string) => invokeImpl<string>("agent_workspace", { id }),
   defaultWorkspace: (id: string) => invokeImpl<string>("default_workspace", { id }),
+  defaultVmFolder: (id: string) => invokeImpl<string>("default_vm_folder", { id }),
   voiceSettings: () => invokeImpl<VoiceSettings>("voice_settings"),
   saveVoiceSettings: (settings: VoiceSettings, apiKey?: string) => invokeImpl<VoiceSettings>("save_voice_settings", { settings, apiKey }),
   listVoices: () => invokeImpl<Voice[]>("list_voices"),

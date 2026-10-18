@@ -2,6 +2,37 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.3.4 — 2026-10-18
+
+Asked for as "0.3.3.01"; Cargo, Tauri and the updater only accept `major.minor.patch`, so it ships as 0.3.4.
+
+### New
+
+- **Composio keys that work**: a consumer key (`ck_…`, the one Composio Connect gives for MCP clients) now connects
+  through `connect.composio.dev/mcp` with the `x-consumer-api-key` header, and its tools (search, connect, run) go to
+  agents with the "Composio apps" switch. A project key (`ak_…`) keeps using Composio's API. The key stays in your
+  keychain (the MCP server only references it). Settings → Apps → Composio shows the connection, the number of tools
+  and the apps already connected, and "Connect an app" opens the sign-in link for the app you pick.
+- **Local VM (Docker) options per agent** (profile → Computer): live desktop on/off, memory (1–16 GB), CPUs and a
+  **VM folder** you choose. The folder is the VM's home (desktop settings, browser profile, downloads, anything you
+  install under it), so progress survives closing the app, stopping the VM or recreating it. By default it is a folder
+  inside OpenCue's data. Changing these recreates the VM the next time it starts, keeping the workspace and the folder.
+- **Perplexity SPACE**: named as such in Settings → Computers and in the agent's Computer page, with a GitHub link
+  (github.com/perplexityai/SPACE) and its docs.
+- **Provider logos on the website**: the models section shows each provider's mark instead of its name (drawn as
+  simplified SVGs in the text color, so they read well in light and dark themes).
+
+### Changed
+
+- The Docker computer is called **Local VM (Docker)**; the desktop switch can be set per agent (it follows Settings →
+  Computers until you choose).
+- The Composio server for a consumer key is hidden from the Apps lists, like VMPal machines.
+
+### Not possible
+
+- A **built-in default Composio key** (as OpenMausBot ships): it relies on a service run by that project that hands out
+  keys. OpenCue has no such service and will not bundle someone's key; each person pastes their own.
+
 ## 0.3.3 — 2026-10-18
 
 Planned as "0.3.2.01"; Cargo, Tauri and the updater only accept `major.minor.patch`, so it ships as 0.3.3.
