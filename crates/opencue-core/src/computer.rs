@@ -36,6 +36,25 @@ impl ComputerBackend {
     }
 }
 
+/// Options for an agent's Docker computer ("local VM"). Anything left empty uses the defaults from
+/// Settings → Computers.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+pub struct VmOptions {
+    /// Run a desktop image and show it live; `None` follows Settings → Computers.
+    #[serde(default)]
+    pub desktop: Option<bool>,
+    /// Memory limit in MB.
+    #[serde(default)]
+    pub memory_mb: Option<u32>,
+    #[serde(default)]
+    pub cpus: Option<f32>,
+    /// Folder that keeps the VM's home (desktop settings, browser profile, downloads…), so
+    /// nothing is lost when the app closes, the VM stops or it is recreated. Empty uses a folder
+    /// of its own inside OpenCue's data directory.
+    #[serde(default)]
+    pub data_dir: Option<String>,
+}
+
 /// Global computer settings (Settings → Computers).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ComputerConfig {
@@ -112,6 +131,9 @@ pub struct Computer<'a> {
     pub backend: ComputerBackend,
     pub agent_id: &'a str,
     pub workspace: PathBuf,
+    pub vm: VmOptions,
+    /// Where the VM's home is kept on this machine.
+    pub vm_dir: PathBuf,
     pub config: &'a ComputerConfig,
     /// File that remembers this agent's SPACE sandbox id.
     pub space_state: PathBuf,
@@ -175,6 +197,29 @@ impl Computer<'_> {
         }
     }
 
+    /// Whether this agent's container runs a live desktop.
+    pub fn desktop_enabled(&self) -> bool {
+        self.vm.desktop.unwrap_or(self.config.docker_desktop)
+    }
+
+    /// Everything that is baked into the container when it is created; when it changes the
+    /// container is recreated (the workspace and the VM folder are kept).
+    fn fingerprint(&self) -> String {
+        format!(
+            "desktop={};image={};mem={};cpus={};vm={};ws={}",
+            self.desktop_enabled(),
+            if self.desktop_enabled() {
+                self.config.desktop_image().to_string()
+            } else {
+                self.config.docker_image.trim().to_string()
+            },
+            self.vm.memory_mb.unwrap_or(0),
+            self.vm.cpus.unwrap_or(0.0),
+            self.vm_dir.display(),
+            self.workspace.display()
+        )
+    }
+
     async fn ensure_container(&self) -> anyhow::Result<()> {
         let name = self.container_name();
         let state = tokio::process::Command::new("docker")
@@ -186,11 +231,30 @@ impl Computer<'_> {
                     "Docker is not available ({e}). Install Docker Desktop or Docker Engine."
                 )
             })?;
-        let running = String::from_utf8_lossy(&state.stdout).trim().to_string();
-        if running == "true" {
+        let mut exists = state.status.success();
+        let mut running = String::from_utf8_lossy(&state.stdout).trim() == "true";
+        if exists {
+            // Settings that are fixed at creation changed: start over with the same folders.
+            let label = tokio::process::Command::new("docker")
+                .args([
+                    "inspect",
+                    "-f",
+                    "{{index .Config.Labels \"opencue.fp\"}}",
+                    &name,
+                ])
+                .output()
+                .await?;
+            let have = String::from_utf8_lossy(&label.stdout).trim().to_string();
+            if !have.is_empty() && have != "<no value>" && have != self.fingerprint() {
+                self.reset().await?;
+                exists = false;
+                running = false;
+            }
+        }
+        if running {
             return Ok(());
         }
-        let out = if state.status.success() {
+        let out = if exists {
             tokio::process::Command::new("docker")
                 .args(["start", &name])
                 .output()
@@ -201,16 +265,38 @@ impl Computer<'_> {
             } else {
                 self.config.docker_image.trim()
             };
+            std::fs::create_dir_all(&self.workspace)?;
+            std::fs::create_dir_all(&self.vm_dir)?;
             let mount = format!("{}:/workspace", self.workspace.display());
             let mut cmd = tokio::process::Command::new("docker");
             cmd.args(["run", "-d", "--name", &name, "--label", "opencue=agent"]);
+            cmd.args(["--label", &format!("opencue.fp={}", self.fingerprint())]);
             cmd.args(["-v", &mount]);
-            if self.config.docker_desktop {
-                // The web desktop is published on a random port of 127.0.0.1 only.
+            if let Some(mb) = self.vm.memory_mb.filter(|m| *m > 0) {
+                cmd.args(["--memory", &format!("{mb}m")]);
+            }
+            if let Some(cpus) = self.vm.cpus.filter(|c| *c > 0.0) {
+                cmd.args(["--cpus", &cpus.to_string()]);
+            }
+            if self.desktop_enabled() {
+                // The web desktop is published on a random port of 127.0.0.1 only; its home
+                // (/config) lives in the VM folder so it survives restarts and recreation.
                 let publish = format!("127.0.0.1::{}", self.config.desktop_port());
                 cmd.args(["--label", "opencue.desktop=1", "-p", &publish]);
+                cmd.args(["-v", &format!("{}:/config", self.vm_dir.display())]);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::MetadataExt;
+                    if let Ok(meta) = std::fs::metadata(&self.vm_dir) {
+                        if meta.uid() != 0 {
+                            cmd.args(["-e", &format!("PUID={}", meta.uid())]);
+                            cmd.args(["-e", &format!("PGID={}", meta.gid())]);
+                        }
+                    }
+                }
                 cmd.args(["--shm-size", "1g", self.config.desktop_image()]);
             } else {
+                cmd.args(["-v", &format!("{}:/root", self.vm_dir.display())]);
                 cmd.args(["-w", "/workspace", image, "sleep", "infinity"]);
             }
             cmd.output().await?
@@ -230,8 +316,8 @@ impl Computer<'_> {
             "the desktop view needs a Docker computer"
         );
         anyhow::ensure!(
-            self.config.docker_desktop,
-            "turn on the desktop in Settings → Computers first"
+            self.desktop_enabled(),
+            "turn on the live desktop in this agent's Computer settings first"
         );
         self.ensure_container().await?;
         let out = tokio::process::Command::new("docker")
@@ -748,11 +834,30 @@ mod tests {
                 backend: ComputerBackend::Host,
                 agent_id: "a1",
                 workspace: dir.join("ws"),
+                vm: VmOptions::default(),
+                vm_dir: dir.join("vm"),
                 config: cfg,
                 space_state: dir.join("space.json"),
             },
             cfg,
         )
+    }
+
+    #[test]
+    fn changing_the_vm_options_changes_the_fingerprint() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (mut c, _) = computer(tmp.path());
+        let base = c.fingerprint();
+        c.vm.memory_mb = Some(4096);
+        assert_ne!(c.fingerprint(), base);
+        let with_memory = c.fingerprint();
+        c.vm.data_dir = Some("/somewhere".into());
+        c.vm_dir = "/somewhere".into();
+        assert_ne!(c.fingerprint(), with_memory);
+        // The desktop switch falls back to the global setting.
+        assert!(!c.desktop_enabled());
+        c.vm.desktop = Some(true);
+        assert!(c.desktop_enabled());
     }
 
     #[test]

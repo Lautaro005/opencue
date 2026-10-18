@@ -309,7 +309,7 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
   }, []);
 
   const s = agent.settings;
-  const enabledServers = servers.filter((x) => x.enabled && !x.id.startsWith("vmpal:"));
+  const enabledServers = servers.filter((x) => x.enabled && !x.id.startsWith("vmpal:") && !x.id.startsWith("composio:"));
   const toggleServer = (id: string, on: boolean) => {
     const base = s.mcp_all ? enabledServers.map((x) => x.id) : s.mcp_servers;
     const next = on ? [...new Set([...base, id])] : base.filter((x) => x !== id);

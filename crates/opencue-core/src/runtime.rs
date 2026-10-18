@@ -478,7 +478,10 @@ impl Core {
                 .into_iter()
                 .filter(|s| {
                     s.enabled
-                        && if crate::vmpal::is_vmpal_id(&s.id) {
+                        && if s.id == crate::composio::CONNECT_SERVER_ID {
+                            // Composio Connect follows the agent's "Composio apps" switch.
+                            agent.settings.composio
+                        } else if crate::vmpal::is_vmpal_id(&s.id) {
                             // VMPal machines are opt-in per agent, never part of "all servers".
                             agent
                                 .settings

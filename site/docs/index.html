@@ -161,11 +161,11 @@
 }</code></pre>
         <p>In an agent's <strong>Apps</strong> page choose all servers or only some.</p>
         <h3>Composio</h3>
-        <p><a href="https://composio.dev">Composio</a> connects 1000+ apps (Gmail, Slack, Notion, GitHub, Google Calendar…).</p>
+        <p><a href="https://composio.dev">Composio</a> connects 500+ apps (Gmail, Slack, Notion, GitHub, Google Calendar…). OpenCue takes either kind of Composio key: a <strong>consumer key</strong> (<code>ck_…</code>, the one <a href="https://connect.composio.dev">Composio Connect</a> gives you for MCP clients; OpenCue talks to <code>connect.composio.dev/mcp</code> with it in <code>x-consumer-api-key</code>) or a <strong>project key</strong> (<code>ak_…</code>, Platform → Settings → API Keys, used with Composio's API in <code>x-api-key</code>). The key stays in your keychain.</p>
         <ol>
           <li>Create a Composio account and paste your API key in <strong>Settings → Apps → Composio</strong>. The <em>User ID</em> is the Composio user whose connected accounts agents should use (<code>default</code> if empty).</li>
-          <li>Under <strong>Connect an app</strong>, pick Gmail, Google Calendar, Slack, Notion, GitHub, Google Drive or type any other app. Sign in in the browser page that opens, then press <strong>Refresh</strong>. You can also connect apps in the Composio dashboard.</li>
-          <li>Turn on <strong>Composio apps</strong> in an agent's Apps page. It gets two tools: <code>composio_search</code> to find an action and <code>composio_execute</code> to run it.</li>
+          <li>Under <strong>Connect an app</strong>, touch the search field to see the apps (type to filter) and pick one. Sign in in the browser page that opens, then press <strong>Refresh</strong>. You can also connect apps in the Composio dashboard.</li>
+          <li>Turn on <strong>Composio apps</strong> in an agent's Apps page. With a project key it gets two tools: <code>composio_search</code> to find an action and <code>composio_execute</code> to run it. With a consumer key it gets Composio Connect's own tools (<code>COMPOSIO_SEARCH_TOOLS</code>, <code>COMPOSIO_MULTI_EXECUTE_TOOL</code>, <code>COMPOSIO_MANAGE_CONNECTIONS</code>…). There is no built-in shared key: each person uses their own Composio account.</li>
         </ol>
 
         <h2 id="skills">Skills</h2>
@@ -208,12 +208,14 @@ description: Write the Friday status report from this week's notes and emails.
         <p>Profile → <strong>Computer</strong> picks where an agent runs <code>run_command</code>, <code>read_file</code>, <code>write_file</code> and <code>list_files</code>. The screen icon in the chat header opens the live terminal and a file browser; you can type your own commands there too.</p>
         <table>
           <tr><th>Computer</th><th>What it is</th><th>Approvals</th></tr>
-          <tr><td>Docker container</td><td>One long-lived container per agent (<code>opencue-&lt;id&gt;</code>, default image <code>ubuntu:24.04</code>) with the agent's workspace mounted at <code>/workspace</code>. Needs Docker.</td><td>No — it's isolated</td></tr>
-          <tr><td>SPACE microVM</td><td>A Firecracker VM on your <a href="https://github.com/perplexityai/SPACE">SPACE</a> server. Linux with KVM, or point Windows at a remote Linux host.</td><td>No — it's isolated</td></tr>
+          <tr><td>Local VM (Docker)</td><td>One long-lived container per agent (<code>opencue-&lt;id&gt;</code>, default image <code>ubuntu:24.04</code>) with the agent's workspace mounted at <code>/workspace</code>. Optional live desktop, memory and CPU limits, and a VM folder that keeps its home across restarts (see below). Needs Docker.</td><td>No — it's isolated</td></tr>
+          <tr><td><a href="https://github.com/perplexityai/SPACE">Perplexity SPACE</a> microVM</td><td>A Firecracker VM on your <a href="https://github.com/perplexityai/SPACE">SPACE</a> server. Linux with KVM, or point Windows at a remote Linux host.</td><td>No — it's isolated</td></tr>
           <tr><td>VMPal</td><td>Virtual machines from VMPal that the agent sees and controls with MCP tools (screen, mouse, keyboard). Pick the machines below.</td><td>Per tool, unless read-only</td></tr>
           <tr><td>This computer</td><td>Your own shell (PowerShell on Windows), starting in the agent's workspace folder.</td><td>Every command and file write</td></tr>
           <tr><td>WSL</td><td>Windows Subsystem for Linux (Windows only).</td><td>Every command and file write</td></tr>
         </table>
+        <h3>Local VM: live desktop, resources and a folder that keeps its state</h3>
+        <p>In an agent's profile → <strong>Computer</strong> → <strong>Local VM (Docker)</strong> you can turn on the <strong>live desktop</strong> (watch and use it in the Desktop tab), give the VM <strong>memory</strong> (1–16 GB) and <strong>CPUs</strong>, and choose the <strong>VM folder</strong>. That folder is the VM's home — desktop settings, browser profile, downloads and anything you install under it — so nothing is lost when you close OpenCue, the VM stops or it is recreated. By default it is a folder of its own inside OpenCue's data directory; pick any other folder to keep it where you want (an external disk, a synced folder…). Changing memory, CPUs, the desktop or the folder recreates the VM the next time it starts; the workspace and the VM folder are kept.</p>
         <h3>VMPal machines</h3>
         <p>VMPal virtual machines can be controlled by agents through MCP. Declare each machine in <strong>Settings → Computers → VMPal</strong> as TOML, the same way Codex declares MCP servers:</p>
         <pre><code>[mcp_servers.vmpal-work]

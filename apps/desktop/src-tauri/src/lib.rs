@@ -270,6 +270,7 @@ pub fn run() {
             commands::composio_toolkits,
             commands::agent_workspace,
             commands::default_workspace,
+            commands::default_vm_folder,
             commands::voice_settings,
             commands::save_voice_settings,
             commands::list_voices,

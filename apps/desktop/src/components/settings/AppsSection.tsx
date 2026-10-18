@@ -30,7 +30,7 @@ export function AppsSection() {
   const [mode, setMode] = useState<Mode>(null);
 
   const load = () => {
-    void api.listMcpServers().then((l) => setServers(l.filter((s) => !s.id.startsWith("vmpal:"))));
+    void api.listMcpServers().then((l) => setServers(l.filter((s) => !s.id.startsWith("vmpal:") && !s.id.startsWith("composio:"))));
     void api.mcpStatus().then(setStatus);
   };
   useEffect(() => {

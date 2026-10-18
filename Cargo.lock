@@ -3440,7 +3440,7 @@ dependencies = [
 
 [[package]]
 name = "opencue-cli"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -3452,7 +3452,7 @@ dependencies = [
 
 [[package]]
 name = "opencue-core"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "async-imap",
@@ -3490,7 +3490,7 @@ dependencies = [
 
 [[package]]
 name = "opencue-desktop"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "anyhow",
  "base64 0.23.1",

@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.3.3`) | ✅ |
+| Latest release (`0.3.x`, currently `0.3.4`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 

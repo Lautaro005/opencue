@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Download, ExternalLink, MonitorCog, Plus, Server, Terminal, Trash2 } from "lucide-react";
+import { Box, Download, ExternalLink, Github, MonitorCog, Plus, Server, Terminal, Trash2 } from "lucide-react";
 import { api, openUrl } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import type { ComposioStatus, ComputerSettings, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
 import { AppPicker } from "./AppPicker";
+
+export const SPACE_REPO = "https://github.com/perplexityai/SPACE";
 
 // ---------- Composio (inside Apps) ----------
 
@@ -59,9 +61,18 @@ export function ComposioCard() {
     >
       <div className="space-y-3 px-4 py-3.5">
         <p className="text-[12.5px] text-muted">{t("settings.composio.hint")}</p>
+        {status?.configured && status.mode === "connect" && (
+          <div className="flex items-center gap-2 rounded-lg bg-hover px-3 py-2 text-[12.5px]">
+            <span className={`size-1.5 shrink-0 rounded-full ${status.error ? "bg-danger" : status.tools > 0 ? "bg-success" : "bg-warning"}`} />
+            <span className="min-w-0 flex-1">
+              <span className="font-medium">{t("settings.composio.connectMode")}</span>
+              <span className="text-muted"> · {status.error ? status.error : status.tools > 0 ? t("settings.composio.toolsReady", { n: status.tools }) : t("settings.composio.connecting")}</span>
+            </span>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <Field label={t("settings.composio.key")} hint={status?.configured ? t("settings.composio.keySaved") : undefined}>
-            <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={status?.configured ? "••••••••" : "ak_…"} />
+            <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={status?.configured ? "••••••••" : "ck_… / ak_…"} />
           </Field>
           <Field label={t("settings.composio.user")} hint={t("settings.composio.userHint")}>
             <Input value={user} onChange={(e) => setUser(e.target.value)} placeholder="default" />
@@ -264,11 +275,16 @@ export function ComputersSection() {
         )}
       </Card>
       <Card
-        title="SPACE"
+        title="Perplexity SPACE"
         action={
-          <button onClick={() => void openUrl("https://space.docs.perplexity.ai/")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
-            {t("settings.computers.spaceDocs")} <ExternalLink size={12} />
-          </button>
+          <span className="flex items-center gap-3">
+            <button onClick={() => void openUrl(SPACE_REPO)} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent" aria-label={t("computer.spaceRepo")} data-tip={t("computer.spaceRepo")}>
+              <Github size={13} /> GitHub
+            </button>
+            <button onClick={() => void openUrl("https://space.docs.perplexity.ai/")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
+              {t("settings.computers.spaceDocs")} <ExternalLink size={12} />
+            </button>
+          </span>
         }
       >
         <div className="flex items-start gap-3 px-4 pt-3.5 text-[12.5px] text-muted">

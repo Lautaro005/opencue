@@ -35,6 +35,13 @@ pub struct ComposioStatus {
     pub user_id: String,
     pub accounts: Vec<ComposioAccount>,
     pub error: Option<String>,
+    /// "none", "project" (an `ak_` key against Composio's API) or "connect" (a `ck_` consumer key
+    /// through Composio Connect's MCP server).
+    #[serde(default)]
+    pub mode: String,
+    /// In "connect" mode: how many tools the server offers (0 while it is still connecting).
+    #[serde(default)]
+    pub tools: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -518,37 +525,144 @@ impl Core {
             .ok()
             .flatten()
             .unwrap_or_default();
+        let none = |user_id: String| ComposioStatus {
+            configured: false,
+            user_id,
+            accounts: vec![],
+            error: None,
+            mode: "none".into(),
+            tools: 0,
+        };
+        let Some(key) = self.secrets.get(COMPOSIO_KEY).filter(|k| !k.is_empty()) else {
+            return none(user_id);
+        };
+        if crate::composio::is_consumer_key(&key) {
+            return self.composio_connect_status(user_id).await;
+        }
         match self.composio().await {
-            Err(_) => ComposioStatus {
-                configured: false,
-                user_id,
-                accounts: vec![],
-                error: None,
-            },
+            Err(_) => none(user_id),
             Ok(c) => match c.accounts().await {
                 Ok(accounts) => ComposioStatus {
                     configured: true,
                     user_id,
                     accounts,
                     error: None,
+                    mode: "project".into(),
+                    tools: 0,
                 },
                 Err(e) => ComposioStatus {
                     configured: true,
                     user_id,
                     accounts: vec![],
                     error: Some(format!("{e:#}")),
+                    mode: "project".into(),
+                    tools: 0,
                 },
             },
         }
     }
 
+    /// Status of a consumer key: the Composio Connect MCP server's state and the apps it says
+    /// are connected.
+    async fn composio_connect_status(&self, user_id: String) -> ComposioStatus {
+        use crate::composio::CONNECT_SERVER_ID;
+        let servers = self.store.list_mcp_servers().await.unwrap_or_default();
+        let Some(server) = servers.into_iter().find(|s| s.id == CONNECT_SERVER_ID) else {
+            return ComposioStatus {
+                configured: true,
+                user_id,
+                accounts: vec![],
+                error: Some("Composio Connect is not set up yet; save the key again.".into()),
+                mode: "connect".into(),
+                tools: 0,
+            };
+        };
+        let status = self
+            .mcp
+            .status(std::slice::from_ref(&server))
+            .await
+            .into_iter()
+            .next();
+        let tools = self.mcp.tools(std::slice::from_ref(&server)).await;
+        let accounts = tools
+            .iter()
+            .flat_map(|t| {
+                crate::composio::connected_from_description(
+                    t.tool.description.as_deref().unwrap_or_default(),
+                )
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .map(|toolkit| ComposioAccount {
+                id: toolkit.clone(),
+                toolkit,
+                status: "ACTIVE".into(),
+            })
+            .collect();
+        ComposioStatus {
+            configured: true,
+            user_id,
+            accounts,
+            error: status.as_ref().and_then(|s| s.error.clone()),
+            mode: "connect".into(),
+            tools: tools.len(),
+        }
+    }
+
+    /// Make the MCP server for a consumer key (or remove it for any other kind of key).
+    async fn sync_composio_connect(self: &Arc<Self>) -> anyhow::Result<()> {
+        use crate::composio::{is_consumer_key, CONNECT_SERVER_ID, CONNECT_URL};
+        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
+        let existing = self
+            .store
+            .list_mcp_servers()
+            .await?
+            .into_iter()
+            .any(|s| s.id == CONNECT_SERVER_ID);
+        if is_consumer_key(&key) {
+            let cfg = McpServerConfig {
+                id: CONNECT_SERVER_ID.into(),
+                name: "composio".into(),
+                transport: McpTransport::Http,
+                command: None,
+                args: vec![],
+                env: Default::default(),
+                url: Some(CONNECT_URL.into()),
+                // The key stays in the keychain; it is filled in when the server connects.
+                headers: [(
+                    "x-consumer-api-key".to_string(),
+                    format!("{}{COMPOSIO_KEY}", crate::mcp::KEYCHAIN_PREFIX),
+                )]
+                .into(),
+                enabled: true,
+            };
+            self.store.upsert_mcp_server(&cfg).await?;
+            self.mcp.disconnect(&cfg.id).await;
+            self.emit(CoreEvent::McpChanged);
+            // Connect now so the status says whether the key works.
+            self.mcp.connect(&cfg).await;
+            self.emit(CoreEvent::McpChanged);
+        } else if existing {
+            self.mcp.disconnect(CONNECT_SERVER_ID).await;
+            self.store.delete_mcp_server(CONNECT_SERVER_ID).await?;
+            self.emit(CoreEvent::McpChanged);
+        }
+        Ok(())
+    }
+
     pub async fn save_composio(
-        &self,
+        self: &Arc<Self>,
         api_key: Option<String>,
         user_id: String,
     ) -> anyhow::Result<ComposioStatus> {
         if let Some(k) = api_key {
-            self.secrets.set(COMPOSIO_KEY, k.trim())?;
+            let k = k.trim();
+            if k.is_empty() {
+                self.secrets.delete(COMPOSIO_KEY)?;
+            } else {
+                self.secrets.set(COMPOSIO_KEY, k)?;
+            }
+            self.sync_composio_connect().await?;
         }
         self.store
             .set_setting("composio_user_id", user_id.trim())
@@ -561,12 +675,48 @@ impl Core {
         &self,
         query: &str,
     ) -> anyhow::Result<Vec<crate::composio::ComposioToolkit>> {
+        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
+        if crate::composio::is_consumer_key(&key) {
+            return Ok(crate::composio::popular_toolkits(query));
+        }
         self.composio().await?.toolkits(query, 60).await
     }
 
     /// Start connecting an app to Composio; returns the sign-in page to open in the browser.
     pub async fn composio_connect(&self, toolkit: &str) -> anyhow::Result<String> {
-        self.composio().await?.connect(toolkit).await
+        use crate::composio::CONNECT_SERVER_ID;
+        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
+        if !crate::composio::is_consumer_key(&key) {
+            return self.composio().await?.connect(toolkit).await;
+        }
+        let toolkit = toolkit.trim().to_lowercase();
+        anyhow::ensure!(!toolkit.is_empty(), "choose an app first");
+        if !self.mcp.is_ready(CONNECT_SERVER_ID).await {
+            let server = self
+                .store
+                .list_mcp_servers()
+                .await?
+                .into_iter()
+                .find(|s| s.id == CONNECT_SERVER_ID)
+                .ok_or_else(|| anyhow::anyhow!("save your Composio key first"))?;
+            self.mcp.connect(&server).await;
+        }
+        let (text, is_error) = self
+            .mcp
+            .call(
+                CONNECT_SERVER_ID,
+                "COMPOSIO_MANAGE_CONNECTIONS",
+                serde_json::json!({ "toolkits": [{ "name": toolkit, "action": "add" }] }),
+            )
+            .await?;
+        anyhow::ensure!(
+            !is_error,
+            "Composio said: {}",
+            text.chars().take(300).collect::<String>()
+        );
+        crate::composio::redirect_url_in(&text).ok_or_else(|| {
+            anyhow::anyhow!("{toolkit} is already connected, or Composio gave no sign-in link")
+        })
     }
 
     // ---------- computers ----------
@@ -692,6 +842,18 @@ impl Core {
             backend: agent.settings.computer.clone(),
             agent_id: &agent.id,
             workspace: self.workspace_for(agent),
+            vm: agent.settings.vm.clone(),
+            vm_dir: match agent
+                .settings
+                .vm
+                .data_dir
+                .as_deref()
+                .map(str::trim)
+                .filter(|d| !d.is_empty())
+            {
+                Some(dir) => std::path::PathBuf::from(dir),
+                None => self.paths().agent_dir(&agent.id).join("vm"),
+            },
             config: cfg,
             space_state: self.paths().agent_dir(&agent.id).join("space.json"),
         }
@@ -882,7 +1044,11 @@ impl Core {
                 .ok()
                 .flatten()
                 .is_some(),
-            composio: agent.settings.composio && self.secrets.get(COMPOSIO_KEY).is_some(),
+            composio: agent.settings.composio
+                && self
+                    .secrets
+                    .get(COMPOSIO_KEY)
+                    .is_some_and(|k| !crate::composio::is_consumer_key(&k)),
         }
     }
 
@@ -916,6 +1082,19 @@ impl Core {
                     acc.address
                 ));
             }
+        }
+        if agent.settings.composio
+            && !caps.composio
+            && self
+                .secrets
+                .get(COMPOSIO_KEY)
+                .is_some_and(|k| crate::composio::is_consumer_key(&k))
+        {
+            s.push_str(
+                "\n\n## Connected apps\nThe user's apps (Gmail, Slack, Notion, GitHub…) work through Composio's tools, named mcp__composio__COMPOSIO_*. \
+                 Always call COMPOSIO_SEARCH_TOOLS first, then run what it returns with COMPOSIO_MULTI_EXECUTE_TOOL. \
+                 If an app is not connected, COMPOSIO_MANAGE_CONNECTIONS gives a sign-in link: show it to the user and wait for them to finish.",
+            );
         }
         if caps.composio {
             s.push_str("\n\n## Connected apps\nUse `composio_search` to find actions for the user's connected apps, then `composio_execute`.");

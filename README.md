@@ -169,6 +169,8 @@ Changes to `site/` deploy the website.
 - [x] **0.3.3**: per-agent working folder, searchable Composio app list (and the right key header), links as pills, real
   model lists for the Claude/Codex/Grok CLIs, and a sturdier agent loop (stable prompt prefix, long results to files,
   compaction, plan recitation, `research` helpers).
+- [x] **0.3.4**: Composio consumer keys through Composio Connect, local VMs with a live desktop, memory/CPU limits and a
+  folder that keeps their state, Perplexity SPACE with its GitHub link, and provider logos on the website.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases
