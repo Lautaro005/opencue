@@ -154,6 +154,10 @@ export function ComputerPage({ agent, onChange }: { agent: Agent; onChange: (s: 
   const setPanel = useStore((s) => s.setPanel);
   const [env, setEnv] = useState<ComputerSettings | null>(null);
   useEffect(() => void api.computerSettings().then(setEnv), []);
+  // Machines chosen before VMPal had its own option: show it as selected.
+  useEffect(() => {
+    if (agent.settings.computer === "none" && (agent.settings.vmpal?.length ?? 0) > 0) onChange({ computer: "vmpal" });
+  }, [agent.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const available = (b: ComputerBackend) => {
     if (!env) return true;
@@ -191,12 +195,12 @@ export function ComputerPage({ agent, onChange }: { agent: Agent; onChange: (s: 
           {t("computer.spaceMissing")}
         </button>
       )}
-      {agent.settings.computer !== "none" && (
+      {agent.settings.computer !== "none" && agent.settings.computer !== "vmpal" && (
         <Button onClick={() => setPanel("computer")} className="w-full">
           {t("computer.open")}
         </Button>
       )}
-      <VmPalPicker agent={agent} onChange={onChange} />
+      {agent.settings.computer === "vmpal" && <VmPalPicker agent={agent} onChange={onChange} />}
     </Page>
   );
 }
@@ -238,6 +242,7 @@ function VmPalPicker({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
         </button>
       </div>
       <Hint>{t("vmpal.hint", { name: agent.name })}</Hint>
+      <Hint>{t("vmpal.allowHint")}</Hint>
       {machines.length === 0 && !adding && <p className="text-[12px] text-faint">{t("vmpal.none")}</p>}
       <ul className="space-y-1">
         {machines.map((m) => (

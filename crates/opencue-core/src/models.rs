@@ -32,6 +32,9 @@ pub struct AgentSettings {
     /// Extract durable facts into memory automatically after each reply (on by default).
     #[serde(default = "yes")]
     pub auto_memory: bool,
+    /// Keep the agent's instructions and soul up to date from the conversation (on by default).
+    #[serde(default = "yes")]
+    pub auto_profile: bool,
     #[serde(default)]
     pub temperature: Option<f32>,
     /// Where `run_command` and the file tools run.

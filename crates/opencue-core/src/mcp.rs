@@ -42,7 +42,7 @@ pub struct McpTool {
 
 impl McpTool {
     pub fn qualified_name(&self) -> String {
-        format!("mcp__{}__{}", sanitize(&self.server_name), self.tool.name)
+        format!("{}{}", tool_prefix(&self.server_name), self.tool.name)
     }
 
     /// Per the MCP spec, tools are assumed destructive unless they say otherwise.
@@ -55,7 +55,14 @@ impl McpTool {
     }
 }
 
+/// `mcp__<server>__`: what every tool of a server starts with. Long names are cut and given a
+/// short hash, so two machines named alike never share tool names (APIs allow 64 characters).
+pub fn tool_prefix(server_name: &str) -> String {
+    format!("mcp__{}__", sanitize(server_name))
+}
+
 pub fn sanitize(name: &str) -> String {
+    const MAX: usize = 24;
     let s: String = name
         .chars()
         .map(|c| {
@@ -66,7 +73,14 @@ pub fn sanitize(name: &str) -> String {
             }
         })
         .collect();
-    s.chars().take(24).collect()
+    if s.chars().count() <= MAX {
+        return s;
+    }
+    let hash = name.bytes().fold(0xcbf29ce4_u32, |h, b| {
+        (h ^ b as u32).wrapping_mul(0x0100_0193)
+    });
+    let head: String = s.chars().take(MAX - 5).collect();
+    format!("{head}-{:04x}", hash & 0xffff)
 }
 
 impl McpManager {
@@ -289,6 +303,15 @@ pub fn parse_config_json(json: &str) -> anyhow::Result<Vec<McpServerConfig>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn long_server_names_stay_unique_and_short() {
+        let a = sanitize("vmpal-e7df9524-8116-4523-9516-b0f8a7c4115e");
+        let b = sanitize("vmpal-e7df9524-8116-4523-9516-aaaaaaaaaaaa");
+        assert!(a.len() <= 24 && b.len() <= 24);
+        assert_ne!(a, b);
+        assert_eq!(sanitize("filesystem"), "filesystem");
+    }
 
     #[test]
     fn parses_claude_desktop_config() {

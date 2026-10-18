@@ -23,13 +23,15 @@ pub enum ProviderKind {
     Anthropic,
     Xai,
     Openrouter,
-    Cheapestinference,
+    #[serde(alias = "cheapestinference")]
+    Cheaperinference,
     Ollama,
     OllamaCloud,
     Lmstudio,
     OpenaiCompatible,
     CodexCli,
     ClaudeCli,
+    GrokCli,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -94,10 +96,10 @@ pub const CATALOG: &[ProviderInfo] = &[
         note: "Hundreds of models behind one key",
     },
     ProviderInfo {
-        kind: ProviderKind::Cheapestinference,
-        label: "CheapestInference",
+        kind: ProviderKind::Cheaperinference,
+        label: "CheaperInference",
         api: ApiStyle::Openai,
-        default_base_url: Some("https://api.cheapestinference.com/v1"),
+        default_base_url: Some("https://api.cheaperinference.com/v1"),
         default_model: None,
         requires_key: true,
         supports_tools: true,
@@ -154,6 +156,16 @@ pub const CATALOG: &[ProviderInfo] = &[
         note: "Uses your installed `codex` CLI and its ChatGPT login. OpenCue tools are not available.",
     },
     ProviderInfo {
+        kind: ProviderKind::GrokCli,
+        label: "Grok via Grok Build CLI",
+        api: ApiStyle::Cli,
+        default_base_url: None,
+        default_model: None,
+        requires_key: false,
+        supports_tools: false,
+        note: "Uses your installed `grok` CLI (xAI Grok Build) and its login. Answers in text; OpenCue tools are not available.",
+    },
+    ProviderInfo {
         kind: ProviderKind::ClaudeCli,
         label: "Claude via Claude Code",
         api: ApiStyle::Cli,
@@ -190,6 +202,8 @@ impl ProviderConfig {
         self.base_url
             .clone()
             .filter(|s| !s.trim().is_empty())
+            // CheaperInference used to be saved under its old, misspelled address.
+            .map(|u| u.replace("cheapestinference", "cheaperinference"))
             .or_else(|| info(self.kind).default_base_url.map(str::to_string))
     }
 }
@@ -277,6 +291,16 @@ pub struct ChatRequest {
     pub temperature: Option<f32>,
     /// Set for agent turns, so CLI providers can hand OpenCue's tools to the CLI over MCP.
     pub agent_id: Option<String>,
+    /// MCP servers (VMPal machines) a CLI provider should also hand to its CLI.
+    pub mcp_extra: Vec<ExtraMcp>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExtraMcp {
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub env: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -326,6 +350,7 @@ pub fn build(
         )),
         ApiStyle::Cli => Arc::new(CliProvider::new(match config.kind {
             ProviderKind::CodexCli => CliKind::Codex,
+            ProviderKind::GrokCli => CliKind::Grok,
             _ => CliKind::Claude,
         })),
     })
@@ -363,4 +388,37 @@ pub(crate) async fn error_for_status(resp: reqwest::Response) -> anyhow::Result<
         "provider returned {status}: {}",
         detail.chars().take(600).collect::<String>()
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_cheapestinference_providers_still_load_and_move_to_the_right_address() {
+        let kind: ProviderKind = serde_json::from_str("\"cheapestinference\"").unwrap();
+        assert_eq!(kind, ProviderKind::Cheaperinference);
+        let cfg = ProviderConfig {
+            id: "p".into(),
+            kind,
+            name: "CheaperInference".into(),
+            base_url: Some("https://api.cheapestinference.com/v1".into()),
+            default_model: None,
+            enabled: true,
+            has_key: true,
+        };
+        assert_eq!(
+            cfg.effective_base_url().as_deref(),
+            Some("https://api.cheaperinference.com/v1")
+        );
+        assert_eq!(
+            info(ProviderKind::Cheaperinference).label,
+            "CheaperInference"
+        );
+    }
+
+    #[test]
+    fn grok_cli_is_in_the_catalog() {
+        assert_eq!(info(ProviderKind::GrokCli).api, ApiStyle::Cli);
+    }
 }

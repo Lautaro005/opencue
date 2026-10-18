@@ -1,19 +1,21 @@
-//! "Backend CLI" providers: run the user's own logged-in `claude` / `codex` binary so their
-//! subscription is used through the official client. OpenCue never sees or stores those tokens.
+//! "Backend CLI" providers: run the user's own logged-in `claude` / `codex` / `grok` binary so
+//! their subscription is used through the official client. OpenCue never sees or stores those
+//! tokens.
 
 use std::process::Stdio;
 
 use async_trait::async_trait;
 use serde_json::Value;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 
-use super::{ChatRequest, ChatResponse, ChatRole, DeltaSink, LlmProvider};
+use super::{ChatRequest, ChatResponse, ChatRole, DeltaSink, ExtraMcp, LlmProvider};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CliKind {
     Claude,
     Codex,
+    Grok,
 }
 
 pub struct CliProvider {
@@ -42,16 +44,86 @@ impl CliProvider {
         match self.kind {
             CliKind::Claude => "claude",
             CliKind::Codex => "codex",
+            CliKind::Grok => "grok",
         }
     }
 
     pub fn locate(&self) -> anyhow::Result<std::path::PathBuf> {
         which::which(self.binary()).map_err(|_| {
             anyhow::anyhow!(
-                "`{}` was not found on PATH. Install it and sign in once from a terminal.",
-                self.binary()
+                "`{}` was not found. Install it and sign in once from a terminal ({}), then try again.",
+                self.binary(),
+                match self.kind {
+                    CliKind::Claude => "`claude`, then /login",
+                    CliKind::Codex => "`codex login`",
+                    CliKind::Grok => "`grok login`, or set XAI_API_KEY",
+                }
             )
         })
+    }
+}
+
+/// Models offered for a CLI provider. The CLIs have no "list models" command, so this is what
+/// each one accepts: aliases and ids for Claude, the visible models in Codex's own cache, and the
+/// default plus any `[model.*]` you defined in Grok's config.
+fn cli_models(kind: CliKind) -> Vec<String> {
+    let mut out = vec!["default".to_string()];
+    match kind {
+        CliKind::Claude => out.extend(
+            [
+                "opus",
+                "sonnet",
+                "haiku",
+                "claude-fable-5-1",
+                "claude-opus-5-5",
+                "claude-sonnet-5-5",
+                "claude-haiku-5-5",
+            ]
+            .map(String::from),
+        ),
+        CliKind::Codex => {
+            let home = std::env::var_os("CODEX_HOME")
+                .map(std::path::PathBuf::from)
+                .or_else(|| directories::UserDirs::new().map(|d| d.home_dir().join(".codex")));
+            let cache =
+                home.and_then(|h| std::fs::read_to_string(h.join("models_cache.json")).ok());
+            if let Some(v) = cache.and_then(|t| serde_json::from_str::<Value>(&t).ok()) {
+                for m in v["models"].as_array().into_iter().flatten() {
+                    let listed = m["visibility"].as_str().is_none_or(|v| v == "list");
+                    if let (true, Some(slug)) = (listed, m["slug"].as_str()) {
+                        out.push(slug.to_string());
+                    }
+                }
+            }
+        }
+        CliKind::Grok => {
+            out.push("grok-build-0.1".into());
+            let cfg = directories::UserDirs::new()
+                .map(|d| d.home_dir().join(".grok").join("config.toml"))
+                .and_then(|p| std::fs::read_to_string(p).ok())
+                .and_then(|t| t.parse::<toml::Table>().ok());
+            if let Some(toml::Value::Table(models)) = cfg.as_ref().and_then(|c| c.get("model")) {
+                out.extend(models.keys().cloned());
+            }
+        }
+    }
+    out.dedup();
+    out
+}
+
+/// Pass OpenCue's extra MCP servers (VMPal machines) to a Claude Code / Codex run.
+fn extra_claude(
+    servers: &mut serde_json::Map<String, Value>,
+    allowed: &mut Vec<String>,
+    extra: &[ExtraMcp],
+) {
+    for x in extra {
+        let key = crate::mcp::sanitize(&x.name);
+        servers.insert(
+            key.clone(),
+            serde_json::json!({ "command": x.command, "args": x.args, "env": x.env }),
+        );
+        allowed.push(format!("mcp__{key}"));
     }
 }
 
@@ -116,14 +188,23 @@ impl LlmProvider for CliProvider {
                 if !req.model.is_empty() && req.model != "default" {
                     cmd.arg("--model").arg(&req.model);
                 }
+                cmd.arg("--no-session-persistence");
+                let mut servers = serde_json::Map::new();
+                let mut allowed: Vec<String> = vec![];
                 if let Some((exe, args)) = req.agent_id.as_deref().and_then(Self::mcp_server) {
-                    let config = serde_json::json!({
-                        "mcpServers": { "opencue": { "command": exe, "args": args } }
-                    });
+                    servers.insert(
+                        "opencue".into(),
+                        serde_json::json!({ "command": exe, "args": args }),
+                    );
+                    allowed.push("mcp__opencue".into());
+                }
+                extra_claude(&mut servers, &mut allowed, &req.mcp_extra);
+                if !servers.is_empty() {
+                    // Variadic flags go last so they can't swallow anything else.
                     cmd.arg("--mcp-config")
-                        .arg(config.to_string())
+                        .arg(serde_json::json!({ "mcpServers": servers }).to_string())
                         .arg("--allowedTools")
-                        .arg("mcp__opencue");
+                        .args(&allowed);
                 }
                 transcript(&req, false)
             }
@@ -145,8 +226,42 @@ impl LlmProvider for CliProvider {
                         .arg("-c")
                         .arg(format!("mcp_servers.opencue.args={}", Value::from(args)));
                 }
+                for x in &req.mcp_extra {
+                    let key = crate::mcp::sanitize(&x.name);
+                    cmd.arg("-c")
+                        .arg(format!(
+                            "mcp_servers.{key}.command={}",
+                            Value::from(x.command.clone())
+                        ))
+                        .arg("-c")
+                        .arg(format!(
+                            "mcp_servers.{key}.args={}",
+                            Value::from(x.args.clone())
+                        ));
+                }
                 cmd.arg("-");
                 transcript(&req, true)
+            }
+            CliKind::Grok => {
+                // Headless: one prompt, plain text out. Tools stay off (no auto-approve), so it
+                // answers in text instead of editing files in the scratch folder.
+                cmd.args(["-p"]);
+                cmd.args([
+                    "--output-format",
+                    "plain",
+                    "--no-alt-screen",
+                    "--no-auto-update",
+                ]);
+                if !req.model.is_empty() && req.model != "default" {
+                    cmd.arg("-m").arg(&req.model);
+                }
+                let mut p = transcript(&req, true);
+                p.insert_str(
+                    0,
+                    "Answer in plain text only, without using tools or touching files.\n\n",
+                );
+                cmd.arg(p);
+                String::new()
             }
         };
 
@@ -155,11 +270,50 @@ impl LlmProvider for CliProvider {
             stdin.write_all(prompt.as_bytes()).await?;
             stdin.shutdown().await?;
         }
-        let stdout = child.stdout.take().expect("piped stdout");
-        let mut lines = BufReader::new(stdout).lines();
+        let mut stdout = child.stdout.take().expect("piped stdout");
         let mut out = ChatResponse::default();
         let mut streamed = String::new();
         let mut final_text: Option<String> = None;
+
+        if self.kind == CliKind::Grok {
+            // Plain text: forward it as it arrives, holding back a cut-off UTF-8 character.
+            let mut pending: Vec<u8> = Vec::new();
+            let mut buf = [0u8; 4096];
+            loop {
+                let n = stdout.read(&mut buf).await?;
+                if n == 0 {
+                    break;
+                }
+                pending.extend_from_slice(&buf[..n]);
+                let valid = match std::str::from_utf8(&pending) {
+                    Ok(_) => pending.len(),
+                    Err(e) => e.valid_up_to(),
+                };
+                if valid > 0 {
+                    let text = String::from_utf8_lossy(&pending[..valid]).to_string();
+                    streamed.push_str(&text);
+                    on_delta(&text);
+                    pending.drain(..valid);
+                }
+            }
+            if !pending.is_empty() {
+                let text = String::from_utf8_lossy(&pending).to_string();
+                streamed.push_str(&text);
+                on_delta(&text);
+            }
+            let output = child.wait_with_output().await?;
+            if !output.status.success() && streamed.trim().is_empty() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!(
+                    "grok exited with {}: {}",
+                    output.status,
+                    stderr.chars().take(600).collect::<String>()
+                );
+            }
+            out.text = streamed.trim().to_string();
+            return Ok(out);
+        }
+        let mut lines = BufReader::new(stdout).lines();
 
         while let Some(line) = lines.next_line().await? {
             let Ok(v) = serde_json::from_str::<Value>(&line) else {
@@ -194,6 +348,7 @@ impl LlmProvider for CliProvider {
                     }
                     _ => {}
                 },
+                CliKind::Grok => {}
                 CliKind::Codex => {
                     let item = v.get("item").or_else(|| v.get("msg"));
                     let is_message = item
@@ -245,15 +400,7 @@ impl LlmProvider for CliProvider {
 
     async fn list_models(&self) -> anyhow::Result<Vec<String>> {
         self.locate()?;
-        Ok(match self.kind {
-            CliKind::Claude => vec![
-                "default".into(),
-                "opus".into(),
-                "sonnet".into(),
-                "haiku".into(),
-            ],
-            CliKind::Codex => vec!["default".into()],
-        })
+        Ok(cli_models(self.kind))
     }
 
     fn supports_tools(&self) -> bool {

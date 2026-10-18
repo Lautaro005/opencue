@@ -78,8 +78,8 @@ creates your first agent. Replay it any time from **Settings → General**.
   </tr>
 </table>
 
-**Bring your own model:** OpenAI, Anthropic, xAI (Grok), OpenRouter, CheapestInference, Ollama (local and cloud),
-LM Studio, any OpenAI-compatible API — or the **Codex** and **Claude Code** CLIs you're already signed in to.
+**Bring your own model:** OpenAI, Anthropic, xAI (Grok), OpenRouter, CheaperInference, Ollama (local and cloud),
+LM Studio, any OpenAI-compatible API — or the **Codex**, **Claude Code** and **Grok** CLIs you're already signed in to.
 
 **Safe by default:** in *Ask first* mode, sending email, commands on your machine, deletions and data-changing tools wait
 for your OK. No account, no telemetry; secrets live in the system keychain.
@@ -89,7 +89,7 @@ Not planned: phone numbers, payments/wallet, QR "scan & create".
 ### ChatGPT and Claude subscriptions, the allowed way
 
 OpenAI and Anthropic don't offer third-party sign-in for consumer subscriptions, and reusing their tokens elsewhere breaks
-their terms. OpenCue runs **your installed, logged-in** `codex` or `claude` binary instead, so your subscription stays in
+their terms. OpenCue runs **your installed, logged-in** `codex`, `claude` or `grok` binary instead, so your subscription stays in
 the official client and OpenCue never sees the tokens. Those agents still get OpenCue's tools — memory, web, skills,
 computer, files, email, Composio — through a local MCP server (`opencue mcp-serve --agent <id>`).
 
@@ -163,6 +163,9 @@ Changes to `site/` deploy the website.
 - [x] **0.3.1**: first-run walkthrough, separate Providers and Models pages (show/hide models, search), model picker
   when creating agents, VMPal machines, `/` commands (`/create-automation`, `/create-skill`, skills), self-building
   memory, *About me*, floating avatar picker and app-drawn dropdowns, menus and dialogs.
+- [x] **0.3.2**: base system prompt, agents that write their own instructions and soul (`SOUL.md`) and greet you by
+  asking about their job, Grok CLI, system notifications, tray menu, VMPal as a computer option and fixes for the Claude
+  and Codex CLIs, resizable panels.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

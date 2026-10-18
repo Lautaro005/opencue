@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, Plus, Shield, Sparkles, Trash2, X } from "lucide-react";
+import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, Ghost, Plus, Shield, Sparkles, Trash2, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import type { Agent, AgentSettings, EmailAccount, McpServerConfig, McpServerStatus, MemoryEntry, ProviderInfo } from "../../lib/types";
@@ -13,8 +13,9 @@ import { AvatarPickerDialog } from "./AvatarPicker";
 import { Row } from "./Section";
 import { AutomationsSection, ComputerPage, EmailPage, SkillsPage, VoicePage } from "./AgentPages";
 import { SharedFiles } from "./SharedFiles";
+import { useResizable } from "../ui/Resizer";
 
-type Page = "main" | "model" | "apps" | "skills" | "instructions" | "memory" | "voice" | "permissions" | "email" | "computer" | "files";
+type Page = "main" | "model" | "apps" | "skills" | "instructions" | "soul" | "memory" | "voice" | "permissions" | "email" | "computer" | "files";
 
 export function AgentProfile({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
@@ -36,6 +37,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
     apps: t("profile.apps"),
     skills: t("profile.skills"),
     instructions: t("profile.instructions"),
+    soul: t("profile.soul"),
     memory: t("profile.memory"),
     voice: t("profile.voice"),
     permissions: t("profile.permissions"),
@@ -44,8 +46,11 @@ export function AgentProfile({ agent }: { agent: Agent }) {
     files: t("files.title"),
   };
 
+  const { width, handle } = useResizable("opencue:panel-width", 360, 300, 640, "left");
+
   return (
-    <aside className="animate-slide flex h-full w-[360px] shrink-0 flex-col border-l border-line bg-panel">
+    <aside style={{ width }} className="animate-slide relative flex h-full shrink-0 flex-col border-l border-line bg-panel">
+      {handle}
       <div className="flex h-13 shrink-0 items-center justify-between gap-2 px-4">
         <div className="flex min-w-0 items-center gap-1">
           {page !== "main" && (
@@ -59,7 +64,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
           <X size={17} />
         </IconButton>
       </div>
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto">
         {page === "main" && (
           <>
             <div className="flex flex-col items-center px-5 pt-2 pb-4">
@@ -88,6 +93,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
               <NavRow icon={<Box size={17} />} label={t("profile.apps")} onClick={() => setPage("apps")} />
               <NavRow icon={<Sparkles size={17} />} label={t("profile.skills")} value={agent.settings.skills ? undefined : t("common.off")} onClick={() => setPage("skills")} />
               <NavRow icon={<FileText size={17} />} label={t("profile.instructions")} onClick={() => setPage("instructions")} />
+              <NavRow icon={<Ghost size={17} />} label={t("profile.soul")} onClick={() => setPage("soul")} />
               <NavRow icon={<Brain size={17} />} label={t("profile.memory")} onClick={() => setPage("memory")} />
               <NavRow icon={<AudioLines size={17} />} label={t("profile.voice")} onClick={() => setPage("voice")} />
               <NavRow icon={<Shield size={17} />} label={t("profile.permissions")} value={agent.settings.approval_mode === "ask" ? t("profile.askShort") : t("profile.autonomousShort")} onClick={() => setPage("permissions")} />
@@ -114,7 +120,8 @@ export function AgentProfile({ agent }: { agent: Agent }) {
         {page === "model" && <ModelSection agent={agent} />}
         {page === "apps" && <AppsSection agent={agent} onChange={patchSettings} />}
         {page === "skills" && <SkillsPage agent={agent} onChange={patchSettings} />}
-        {page === "instructions" && <InstructionsSection agent={agent} />}
+        {page === "instructions" && <ProfileDoc agent={agent} kind="instructions" onChange={patchSettings} />}
+        {page === "soul" && <ProfileDoc agent={agent} kind="soul" onChange={patchSettings} />}
         {page === "memory" && <MemorySection agent={agent} onChange={patchSettings} />}
         {page === "voice" && <VoicePage agent={agent} onChange={patchSettings} />}
         {page === "email" && <EmailPage agent={agent} />}
@@ -285,37 +292,56 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
   );
 }
 
-function InstructionsSection({ agent }: { agent: Agent }) {
+/** INSTRUCTIONS.md or SOUL.md: edited here, and rewritten by the agent as the user talks to it. */
+function ProfileDoc({ agent, kind, onChange: patch }: { agent: Agent; kind: "instructions" | "soul"; onChange: (s: Partial<AgentSettings>) => void }) {
   const { t } = useTranslation();
   const [text, setText] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const messageCount = useStore((s) => s.messages[agent.id]?.length ?? 0);
+  const get = kind === "soul" ? api.getSoul : api.getInstructions;
+  const set = kind === "soul" ? api.setSoul : api.setInstructions;
 
+  const load = useCallback(() => void get(agent.id).then((v) => !timer.current && setText(v)), [agent.id, get]);
   useEffect(() => {
     setText(null);
-    void api.getInstructions(agent.id).then(setText);
-  }, [agent.id]);
+    load();
+  }, [agent.id, kind]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The agent may have rewritten it: reload after each reply, unless the user is mid-edit.
+  useEffect(load, [messageCount, load]);
+  useEffect(() => {
+    const on = (e: Event) => (e as CustomEvent).detail === agent.id && load();
+    window.addEventListener("opencue:profile-changed", on);
+    return () => window.removeEventListener("opencue:profile-changed", on);
+  }, [agent.id, load]);
 
   const onChange = (v: string) => {
     setText(v);
     setSaved(false);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(async () => {
-      await api.setInstructions(agent.id, v);
+      await set(agent.id, v);
+      timer.current = null;
       setSaved(true);
     }, 600);
   };
 
   return (
     <Page action={saved ? <span className="text-[11.5px] text-faint">{t("common.saved")}</span> : null}>
+      <p className="mb-2 text-[12px] text-muted">{kind === "soul" ? t("profile.soulHint") : t("profile.instructionsHint")}</p>
       <Textarea
         value={text ?? ""}
         disabled={text === null}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={t("profile.instructionsPlaceholder", { name: agent.name })}
+        placeholder={kind === "soul" ? t("profile.soulPlaceholder", { name: agent.name }) : t("profile.instructionsPlaceholder", { name: agent.name })}
         rows={16}
         className="min-h-64 resize-y"
       />
+      <div className="mt-3">
+        <Row label={t("profile.autoProfile")} hint={t("profile.autoProfileHint")}>
+          <Toggle checked={agent.settings.auto_profile !== false} onChange={(v) => patch({ auto_profile: v })} label={t("profile.autoProfile")} />
+        </Row>
+      </div>
     </Page>
   );
 }

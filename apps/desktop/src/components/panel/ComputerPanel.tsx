@@ -8,7 +8,7 @@ import type { Agent, ComputerBackend, FileEntry } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { IconButton, Spinner } from "../ui";
 
-export const BACKENDS: ComputerBackend[] = ["none", "docker", "space", "host", "wsl"];
+export const BACKENDS: ComputerBackend[] = ["none", "docker", "space", "vmpal", "host", "wsl"];
 
 function formatSize(n: number) {
   if (n < 1024) return `${n} B`;
@@ -47,11 +47,11 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
           </IconButton>
         </div>
       </div>
-      {backend === "none" ? (
+      {backend === "none" || backend === "vmpal" ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
           <TerminalSquare size={30} className="text-faint" />
-          <p className="text-[13.5px] font-medium">{t("computer.noneTitle", { name: agent.name })}</p>
-          <p className="text-[12.5px] text-muted">{t("computer.noneHint")}</p>
+          <p className="text-[13.5px] font-medium">{backend === "vmpal" ? t("computer.vmpalTitle", { name: agent.name }) : t("computer.noneTitle", { name: agent.name })}</p>
+          <p className="text-[12.5px] text-muted">{backend === "vmpal" ? t("computer.vmpalHint") : t("computer.noneHint")}</p>
           <button onClick={() => setPanel("profile")} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
             {t("computer.choose")}
           </button>

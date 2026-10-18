@@ -6,6 +6,7 @@ import { cx, shortTime } from "../lib/format";
 import { openUrl } from "../lib/api";
 import { AvatarView, GroupAvatar, UserAvatar } from "./AvatarView";
 import { IconButton, Typing, useClickOutside } from "./ui";
+import { useResizable } from "./ui/Resizer";
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -22,9 +23,11 @@ export function Sidebar() {
   useClickOutside(menuRef, () => setMenu(false), menu);
 
   const userName = settings.user_name?.trim() || t("sidebar.you");
+  const { width, handle } = useResizable("opencue:sidebar-width", 280, 220, 460, "right");
 
   return (
-    <aside className="flex h-full w-[280px] shrink-0 flex-col border-r border-line bg-sidebar">
+    <aside style={{ width }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar">
+      {handle}
       <div className="flex h-13 items-center justify-between pl-4 pr-2.5" data-tauri-drag-region>
         <div className="flex items-center gap-2" data-tauri-drag-region>
           <Logo />

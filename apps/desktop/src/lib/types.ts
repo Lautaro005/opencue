@@ -9,6 +9,7 @@ export interface AgentSettings {
   mcp_servers: string[];
   use_global_memory: boolean;
   auto_memory: boolean;
+  auto_profile: boolean;
   temperature: number | null;
   computer: ComputerBackend;
   skills: boolean;
@@ -18,7 +19,7 @@ export interface AgentSettings {
   vmpal: string[];
 }
 
-export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space";
+export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space" | "vmpal";
 
 export interface Avatar {
   face: string;
@@ -126,13 +127,14 @@ export type ProviderKind =
   | "anthropic"
   | "xai"
   | "openrouter"
-  | "cheapestinference"
+  | "cheaperinference"
   | "ollama"
   | "ollama_cloud"
   | "lmstudio"
   | "openai_compatible"
   | "codex_cli"
-  | "claude_cli";
+  | "claude_cli"
+  | "grok_cli";
 
 export interface ProviderInfo {
   kind: ProviderKind;
@@ -212,6 +214,7 @@ export type CoreEvent =
   | { type: "approval_resolved"; approval_id: string; approved: boolean }
   | { type: "threads_changed" }
   | { type: "mcp_changed" }
+  | { type: "profile_changed"; agent_id: string }
   | { type: "automations_changed" }
   | { type: "computer_output"; agent_id: string; text: string; stderr: boolean }
   | { type: "error"; thread_id: string | null; message: string };

@@ -58,7 +58,9 @@ fn provider_from_row(r: &sqlx::sqlite::SqliteRow) -> anyhow::Result<ProviderConf
     Ok(ProviderConfig {
         id: r.get("id"),
         kind: serde_json::from_value(serde_json::Value::String(r.get("kind")))?,
-        name: r.get("name"),
+        name: r
+            .get::<String, _>("name")
+            .replace("CheapestInference", "CheaperInference"),
         base_url: r.get("base_url"),
         default_model: r.get("default_model"),
         enabled: r.get::<i64, _>("enabled") != 0,
@@ -228,6 +230,16 @@ impl Store {
     pub fn set_instructions(&self, agent_id: &str, text: &str) -> anyhow::Result<()> {
         std::fs::create_dir_all(self.paths.agent_dir(agent_id))?;
         std::fs::write(self.paths.instructions_file(agent_id), text)?;
+        Ok(())
+    }
+
+    pub fn soul(&self, agent_id: &str) -> String {
+        std::fs::read_to_string(self.paths.soul_file(agent_id)).unwrap_or_default()
+    }
+
+    pub fn set_soul(&self, agent_id: &str, text: &str) -> anyhow::Result<()> {
+        std::fs::create_dir_all(self.paths.agent_dir(agent_id))?;
+        std::fs::write(self.paths.soul_file(agent_id), text)?;
         Ok(())
     }
 

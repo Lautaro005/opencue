@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Check } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
+import { greetNewAgent } from "../../lib/greet";
 import type { Avatar } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
@@ -43,6 +44,7 @@ export function CreateAgentDialog() {
     setBusy(true);
     try {
       const agent = await api.createAgent({ name: name.trim(), avatar, instructions, provider_id: providerId, model });
+      await greetNewAgent(agent, instructions.trim().length > 0);
       await useStore.getState().refresh();
       useStore.getState().select(agent.id);
       close();

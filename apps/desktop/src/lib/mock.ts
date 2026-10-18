@@ -15,6 +15,7 @@ const defaults = {
   mcp_servers: [],
   use_global_memory: true,
   auto_memory: true,
+  auto_profile: true,
   temperature: null,
   computer: "none" as const,
   skills: true,
@@ -53,6 +54,7 @@ const groups: Group[] = [
   { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
 ];
 
+const souls: Record<string, string> = { a1: "Calm, precise and a little dry. Never pads an answer." };
 const instructions: Record<string, string> = { a1: "You are my travel and admin assistant. Keep answers short." };
 const memory: Record<string, string[]> = { a1: ["Prefers window seats", "Lives in Buenos Aires"], global: ["User's name is Lauti"] };
 
@@ -86,12 +88,13 @@ const catalog: ProviderInfo[] = [
   { kind: "anthropic", label: "Anthropic (Claude)", api: "anthropic", default_base_url: "https://api.anthropic.com", default_model: "claude-sonnet-5-5", requires_key: true, supports_tools: true, note: "API key from console.anthropic.com" },
   { kind: "xai", label: "xAI (Grok)", api: "openai", default_base_url: "https://api.x.ai/v1", default_model: "grok-4", requires_key: true, supports_tools: true, note: "API key from console.x.ai" },
   { kind: "openrouter", label: "OpenRouter", api: "openai", default_base_url: "https://openrouter.ai/api/v1", default_model: "openrouter/auto", requires_key: true, supports_tools: true, note: "Hundreds of models behind one key" },
-  { kind: "cheapestinference", label: "CheapestInference", api: "openai", default_base_url: "https://api.cheapestinference.com/v1", default_model: null, requires_key: true, supports_tools: true, note: "Flat-rate open models" },
+  { kind: "cheaperinference", label: "CheaperInference", api: "openai", default_base_url: "https://api.cheaperinference.com/v1", default_model: null, requires_key: true, supports_tools: true, note: "Flat-rate open models" },
   { kind: "ollama", label: "Ollama (local)", api: "openai", default_base_url: "http://localhost:11434/v1", default_model: "llama3.2", requires_key: false, supports_tools: true, note: "Runs models on this machine" },
   { kind: "ollama_cloud", label: "Ollama Cloud", api: "openai", default_base_url: "https://ollama.com/v1", default_model: null, requires_key: true, supports_tools: true, note: "API key from ollama.com" },
   { kind: "lmstudio", label: "LM Studio", api: "openai", default_base_url: "http://localhost:1234/v1", default_model: null, requires_key: false, supports_tools: true, note: "Start the local server first" },
   { kind: "openai_compatible", label: "Custom (OpenAI-compatible)", api: "openai", default_base_url: null, default_model: null, requires_key: false, supports_tools: true, note: "Any /v1/chat/completions server" },
   { kind: "codex_cli", label: "ChatGPT via Codex CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed codex CLI login" },
+  { kind: "grok_cli", label: "Grok via Grok Build CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed grok CLI login" },
   { kind: "claude_cli", label: "Claude via Claude Code", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed claude CLI login" },
 ];
 
@@ -149,7 +152,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.1-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.2-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -172,6 +175,15 @@ const handlers: Record<string, (a: Args) => unknown> = {
   },
   get_instructions: ({ id }) => instructions[id] ?? "",
   set_instructions: ({ id, text }) => void (instructions[id] = text),
+  get_soul: ({ id }) => souls[id] ?? "",
+  set_soul: ({ id, text }) => void (souls[id] = text),
+  test_notification: () => undefined,
+  greet_agent: ({ id: agentId, text }) => {
+    if (messages.some((m) => m.thread_id === agentId)) return;
+    const m: Message = { id: id(), thread_id: agentId, role: "assistant", agent_id: agentId, content: text, tool_calls: null, tool_call_id: null, tool_name: null, status: "done", input_tokens: 0, output_tokens: 0, created_at: ago(0), attachments: [] };
+    messages.push(m);
+    emit({ type: "message", message: m });
+  },
   list_memory: ({ scope, agentId }) => (memory[scope === "global" ? "global" : agentId] ?? []).map((text, i) => ({ id: i + 1, text })),
   add_memory: ({ scope, agentId, text }) => {
     const k = scope === "global" ? "global" : agentId;

@@ -75,6 +75,32 @@ pub fn set_instructions(state: State<'_, AppState>, id: String, text: String) ->
     state.core.store.set_instructions(&id, &text).map_err(e)
 }
 
+#[tauri::command]
+pub fn get_soul(state: State<'_, AppState>, id: String) -> String {
+    state.core.store.soul(&id)
+}
+
+#[tauri::command]
+pub fn set_soul(state: State<'_, AppState>, id: String, text: String) -> R<()> {
+    state.core.store.set_soul(&id, &text).map_err(e)
+}
+
+/// A new agent's first message, asking what its job will be. Only posts into an empty chat.
+#[tauri::command]
+pub async fn greet_agent(state: State<'_, AppState>, id: String, text: String) -> R<()> {
+    state
+        .core
+        .greet_agent(&id, &text)
+        .await
+        .map(|_| ())
+        .map_err(e)
+}
+
+#[tauri::command]
+pub fn test_notification(app: tauri::AppHandle, title: String, body: String) -> R<()> {
+    crate::notify::show(&app, &title, &body)
+}
+
 fn memory_file(
     state: &AppState,
     scope: &str,

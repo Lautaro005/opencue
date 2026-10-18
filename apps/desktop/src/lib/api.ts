@@ -50,6 +50,13 @@ if (isTauri) {
   listenImpl = mock.listen;
 }
 
+/** What the menu-bar icon asked for: "settings" or "check-updates". */
+export async function onTrayAction(cb: (action: string) => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  const event = await import("@tauri-apps/api/event");
+  return event.listen<string>("tray-action", (e) => cb(e.payload));
+}
+
 export const onCoreEvent = (cb: (ev: CoreEvent) => void) => listenImpl(cb);
 
 export type MemoryScope = "agent" | "global";
@@ -64,6 +71,11 @@ export const api = {
   deleteAgent: (id: string) => invokeImpl<void>("delete_agent", { id }),
   getInstructions: (id: string) => invokeImpl<string>("get_instructions", { id }),
   setInstructions: (id: string, text: string) => invokeImpl<void>("set_instructions", { id, text }),
+  getSoul: (id: string) => invokeImpl<string>("get_soul", { id }),
+  setSoul: (id: string, text: string) => invokeImpl<void>("set_soul", { id, text }),
+  /** A new agent's first message (only posted into an empty chat). */
+  greetAgent: (id: string, text: string) => invokeImpl<void>("greet_agent", { id, text }),
+  testNotification: (title: string, body: string) => invokeImpl<void>("test_notification", { title, body }),
   listMemory: (scope: MemoryScope, agentId?: string) => invokeImpl<MemoryEntry[]>("list_memory", { scope, agentId }),
   addMemory: (scope: MemoryScope, text: string, agentId?: string) => invokeImpl<MemoryEntry>("add_memory", { scope, agentId, text }),
   deleteMemory: (scope: MemoryScope, id: number, agentId?: string) => invokeImpl<void>("delete_memory", { scope, agentId, id }),
