@@ -108,7 +108,10 @@ impl Core {
         }
         std::fs::write(&path, bytes)?;
         for agent_id in self.thread_agents(thread_id).await? {
-            let dir = self.paths().agent_workspace(&agent_id).join("files");
+            let Ok(agent) = self.store.get_agent(&agent_id).await else {
+                continue;
+            };
+            let dir = self.workspace_for(&agent).join("files");
             if std::fs::create_dir_all(&dir).is_ok() {
                 let _ = std::fs::copy(&path, dir.join(&att.name));
             }

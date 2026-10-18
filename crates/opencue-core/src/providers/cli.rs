@@ -69,18 +69,25 @@ impl CliProvider {
 fn cli_models(kind: CliKind) -> Vec<String> {
     let mut out = vec!["default".to_string()];
     match kind {
-        CliKind::Claude => out.extend(
-            [
-                "opus",
-                "sonnet",
-                "haiku",
-                "claude-fable-5-1",
-                "claude-opus-5-5",
-                "claude-sonnet-5-5",
-                "claude-haiku-5-5",
-            ]
-            .map(String::from),
-        ),
+        CliKind::Claude => {
+            out.extend(
+                [
+                    "opus",
+                    "sonnet",
+                    "haiku",
+                    "claude-fable-5-1",
+                    "claude-fable-5",
+                    "claude-opus-5-5",
+                    "claude-opus-5",
+                    "claude-sonnet-5-5",
+                    "claude-sonnet-5",
+                    "claude-haiku-5-5",
+                    "claude-haiku-4-5",
+                ]
+                .map(String::from),
+            );
+            out.extend(claude_extra_models());
+        }
         CliKind::Codex => {
             let home = std::env::var_os("CODEX_HOME")
                 .map(std::path::PathBuf::from)
@@ -97,7 +104,7 @@ fn cli_models(kind: CliKind) -> Vec<String> {
             }
         }
         CliKind::Grok => {
-            out.push("grok-build-0.1".into());
+            out.extend(["grok-4.7", "grok-4.6", "grok-4.5"].map(String::from));
             let cfg = directories::UserDirs::new()
                 .map(|d| d.home_dir().join(".grok").join("config.toml"))
                 .and_then(|p| std::fs::read_to_string(p).ok())
@@ -107,8 +114,83 @@ fn cli_models(kind: CliKind) -> Vec<String> {
             }
         }
     }
-    out.dedup();
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|m| seen.insert(m.clone()));
     out
+}
+
+/// Models Claude Code itself offers beyond the built-in ones: `availableModels` /
+/// `customModels` / `extraModels` in its settings.json and the `ANTHROPIC_*MODEL*` variables.
+fn claude_extra_models() -> Vec<String> {
+    let dir = std::env::var_os("CLAUDE_CONFIG_DIR")
+        .map(std::path::PathBuf::from)
+        .or_else(|| directories::UserDirs::new().map(|d| d.home_dir().join(".claude")));
+    let settings = dir
+        .and_then(|d| std::fs::read_to_string(d.join("settings.json")).ok())
+        .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+        .unwrap_or(Value::Null);
+    let ok = |id: &str| {
+        !id.is_empty()
+            && id.len() <= 80
+            && id
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || "._:/-[]".contains(c))
+    };
+    let mut out = Vec::new();
+    for key in ["availableModels", "customModels", "extraModels"] {
+        for m in settings[key].as_array().into_iter().flatten() {
+            let id = m
+                .as_str()
+                .or_else(|| m["id"].as_str())
+                .or_else(|| m["model"].as_str());
+            if let Some(id) = id.filter(|i| ok(i)) {
+                out.push(id.to_string());
+            }
+        }
+    }
+    let env = |name: &str| {
+        settings["env"][name]
+            .as_str()
+            .map(str::to_string)
+            .or_else(|| std::env::var(name).ok())
+    };
+    for name in [
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_CUSTOM_MODEL_OPTION",
+        "ANTHROPIC_DEFAULT_OPUS_MODEL",
+        "ANTHROPIC_DEFAULT_SONNET_MODEL",
+        "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    ] {
+        if let Some(id) = env(name).map(|s| s.trim().to_string()).filter(|i| ok(i)) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+/// Add how to sign in again when a CLI says its login is gone or expired.
+fn with_login_hint(kind: CliKind, msg: &str) -> String {
+    let lower = msg.to_lowercase();
+    let auth = [
+        "oauth",
+        "authenticate",
+        "not logged in",
+        "login",
+        "unauthorized",
+        "401",
+        "expired",
+    ]
+    .iter()
+    .any(|k| lower.contains(k));
+    if !auth {
+        return msg.to_string();
+    }
+    let how = match kind {
+        CliKind::Claude => "open a terminal, run `claude` and type /login",
+        CliKind::Codex => "open a terminal and run `codex login`",
+        CliKind::Grok => "open a terminal and run `grok login` (or set XAI_API_KEY)",
+    };
+    format!("{msg}\n\nYour sign-in on this computer needs renewing: {how}, then send your message again.")
 }
 
 /// Pass OpenCue's extra MCP servers (VMPal machines) to a Claude Code / Codex run.
@@ -304,11 +386,14 @@ impl LlmProvider for CliProvider {
             let output = child.wait_with_output().await?;
             if !output.status.success() && streamed.trim().is_empty() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
-                anyhow::bail!(
-                    "grok exited with {}: {}",
-                    output.status,
-                    stderr.chars().take(600).collect::<String>()
-                );
+                anyhow::bail!(with_login_hint(
+                    CliKind::Grok,
+                    &format!(
+                        "grok exited with {}: {}",
+                        output.status,
+                        stderr.chars().take(600).collect::<String>()
+                    )
+                ));
             }
             out.text = streamed.trim().to_string();
             return Ok(out);
@@ -343,7 +428,10 @@ impl LlmProvider for CliProvider {
                             .and_then(Value::as_i64)
                             .unwrap_or(0);
                         if v["is_error"].as_bool() == Some(true) {
-                            anyhow::bail!("claude: {}", final_text.unwrap_or_default());
+                            anyhow::bail!(with_login_hint(
+                                CliKind::Claude,
+                                &format!("claude: {}", final_text.unwrap_or_default())
+                            ));
                         }
                     }
                     _ => {}
@@ -387,12 +475,15 @@ impl LlmProvider for CliProvider {
         }
         if !output.status.success() && streamed.is_empty() && final_text.is_none() {
             let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!(
-                "{} exited with {}: {}",
-                self.binary(),
-                output.status,
-                stderr.chars().take(600).collect::<String>()
-            );
+            anyhow::bail!(with_login_hint(
+                self.kind,
+                &format!(
+                    "{} exited with {}: {}",
+                    self.binary(),
+                    output.status,
+                    stderr.chars().take(600).collect::<String>()
+                )
+            ));
         }
         out.text = final_text.filter(|t| !t.is_empty()).unwrap_or(streamed);
         Ok(out)
@@ -405,5 +496,36 @@ impl LlmProvider for CliProvider {
 
     fn supports_tools(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn expired_logins_say_how_to_sign_in_again() {
+        let msg = with_login_hint(
+            CliKind::Claude,
+            "claude: Failed to authenticate: OAuth session expired and could not be refreshed",
+        );
+        assert!(msg.contains("run `claude` and type /login"));
+        assert!(with_login_hint(CliKind::Codex, "codex login required").contains("codex login"));
+        // Other errors are left alone.
+        assert_eq!(
+            with_login_hint(CliKind::Grok, "rate limited"),
+            "rate limited"
+        );
+    }
+
+    #[test]
+    fn claude_models_include_the_current_ids_once() {
+        let models = cli_models(CliKind::Claude);
+        assert_eq!(models[0], "default");
+        assert!(models.contains(&"claude-opus-5-5".to_string()));
+        let mut sorted = models.clone();
+        sorted.sort();
+        sorted.dedup();
+        assert_eq!(sorted.len(), models.len());
     }
 }

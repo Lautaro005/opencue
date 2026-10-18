@@ -55,6 +55,9 @@ pub struct AgentSettings {
     /// Names of the VMPal machines (Settings → Computers) this agent can control.
     #[serde(default)]
     pub vmpal: Vec<String>,
+    /// Folder the agent works in. Empty means its own folder inside OpenCue's data directory.
+    #[serde(default)]
+    pub working_dir: Option<String>,
 }
 
 impl Default for AgentSettings {

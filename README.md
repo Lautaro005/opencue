@@ -166,6 +166,9 @@ Changes to `site/` deploy the website.
 - [x] **0.3.2**: base system prompt, agents that write their own instructions and soul (`SOUL.md`) and greet you by
   asking about their job, Grok CLI, system notifications, tray menu, VMPal as a computer option and fixes for the Claude
   and Codex CLIs, resizable panels.
+- [x] **0.3.3**: per-agent working folder, searchable Composio app list (and the right key header), links as pills, real
+  model lists for the Claude/Codex/Grok CLIs, and a sturdier agent loop (stable prompt prefix, long results to files,
+  compaction, plan recitation, `research` helpers).
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

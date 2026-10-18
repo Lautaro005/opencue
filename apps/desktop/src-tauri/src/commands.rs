@@ -602,6 +602,32 @@ pub async fn reset_computer(state: State<'_, AppState>, agent_id: String) -> R<(
 }
 
 #[tauri::command]
+pub async fn composio_toolkits(
+    state: State<'_, AppState>,
+    query: String,
+) -> R<Vec<opencue_core::composio::ComposioToolkit>> {
+    state.core.composio_toolkits(&query).await.map_err(e)
+}
+
+/// The folder an agent works in right now (its own, or the one the user picked).
+#[tauri::command]
+pub async fn agent_workspace(state: State<'_, AppState>, id: String) -> R<String> {
+    let agent = state.core.store.get_agent(&id).await.map_err(e)?;
+    Ok(state.core.workspace_for(&agent).display().to_string())
+}
+
+/// Where an agent works when no folder is picked.
+#[tauri::command]
+pub fn default_workspace(state: State<'_, AppState>, id: String) -> String {
+    state
+        .core
+        .paths()
+        .agent_workspace(&id)
+        .display()
+        .to_string()
+}
+
+#[tauri::command]
 pub async fn composio_connect(state: State<'_, AppState>, toolkit: String) -> R<String> {
     state.core.composio_connect(&toolkit).await.map_err(e)
 }

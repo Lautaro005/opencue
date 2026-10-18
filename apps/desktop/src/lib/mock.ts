@@ -23,6 +23,7 @@ const defaults = {
   voice_id: null,
   cli_tools: true,
   vmpal: [] as string[],
+  working_dir: null as string | null,
 };
 
 /** Files "uploaded" in the preview, kept as data URLs. */
@@ -73,6 +74,9 @@ const messages: Message[] = [
   msg("a1", "assistant", "El Juzgado 9 respondió que el juicio del 9 de octubre no se realizará.", 199, "a1"),
   msg("a1", "user", "prueba usar el conector de trello y dime si funciona", 130),
   msg("a1", "assistant", "Dale, lo pruebo", 129, "a1"),
+  msg("a1", "user", "cuanto es 4*4/2", 20),
+  msg("a1", "assistant", "4 × 4 ÷ 2 = **8**", 19, "a1"),
+  msg("a1", "assistant", "Estas son las noticias de hoy:\n\n- **Protestas**: hubo cientos de detenciones. [AP](https://apnews.com/article/protests)\n- **Macron** condenó la violencia, según [Le Monde](https://www.lemonde.fr/politique/article.html).\n- Más en https://www.reuters.com/world/europe/ y en [esta nota muy larga de un medio con un nombre larguísimo](https://example.com/a/very/long/path).", 18, "a1"),
   msg("a1", "assistant", "No pude confirmar si funciona: el acceso a Trello falló antes de mostrar tu espacio. No hice ningún cambio. Si querés, lo intento de nuevo más tarde", 125, "a1"),
   msg("a2", "user", "Dale, pruebo", 200),
   msg("a2", "assistant", "Todavía falla antes de leer Trello; el entorno desde el que accedo sigue sin estar disponible, así que no pude completar la prueba", 152, "a2"),
@@ -152,7 +156,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.2-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.3-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -320,6 +324,23 @@ const handlers: Record<string, (a: Args) => unknown> = {
   save_email_account: ({ account, password }) => (emails[account.agent_id] = { ...account, has_password: account.has_password || !!password }),
   delete_email_account: ({ agentId }) => void delete emails[agentId],
   test_email: () => undefined,
+  composio_toolkits: ({ query }) =>
+    [
+      ["gmail", "Gmail", "Read, send and organize email"],
+      ["googlecalendar", "Google Calendar", "Create and manage events"],
+      ["slack", "Slack", "Send messages and read channels"],
+      ["notion", "Notion", "Pages, databases and notes"],
+      ["github", "GitHub", "Repos, issues and pull requests"],
+      ["googledrive", "Google Drive", "Files and folders"],
+      ["trello", "Trello", "Boards, lists and cards"],
+      ["linear", "Linear", "Issues and projects"],
+      ["hubspot", "HubSpot", "CRM contacts and deals"],
+      ["stripe", "Stripe", "Payments and customers"],
+    ]
+      .map(([slug, name, description]) => ({ slug, name, description, logo: "" }))
+      .filter((a) => !query || a.slug.includes(String(query).toLowerCase()) || a.name.toLowerCase().includes(String(query).toLowerCase())),
+  agent_workspace: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/workspace`,
+  default_workspace: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/workspace`,
   composio_status: () => ({ configured: false, user_id: "", accounts: [], error: null }),
   save_composio: ({ userId }) => ({ configured: true, user_id: userId, accounts: [{ id: "ca_1", toolkit: "gmail", status: "ACTIVE" }], error: null }),
   computer_settings: () => computer,

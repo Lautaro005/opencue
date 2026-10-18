@@ -112,6 +112,11 @@ impl Paths {
         self.agent_dir(agent_id).join("SOUL.md")
     }
 
+    /// The agent's running plan, restated at the end of its prompt on every step.
+    pub fn plan_file(&self, agent_id: &str) -> PathBuf {
+        self.agent_dir(agent_id).join("PLAN.md")
+    }
+
     pub fn agent_memory_file(&self, agent_id: &str) -> PathBuf {
         self.agent_dir(agent_id).join("MEMORY.md")
     }

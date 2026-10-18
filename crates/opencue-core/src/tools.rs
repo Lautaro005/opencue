@@ -28,6 +28,8 @@ pub const SHARE_FILE: &str = "share_file";
 pub const CREATE_AUTOMATION: &str = "create_automation";
 pub const UPDATE_INSTRUCTIONS: &str = "update_instructions";
 pub const UPDATE_SOUL: &str = "update_soul";
+pub const UPDATE_PLAN: &str = "update_plan";
+pub const RESEARCH: &str = "research";
 
 pub fn is_phase2(name: &str) -> bool {
     [
@@ -45,6 +47,7 @@ pub fn is_phase2(name: &str) -> bool {
         CREATE_AUTOMATION,
         UPDATE_INSTRUCTIONS,
         UPDATE_SOUL,
+        UPDATE_PLAN,
     ]
     .contains(&name)
 }
@@ -131,6 +134,36 @@ impl Toolbox {
                 "type": "object",
                 "properties": { "text": { "type": "string", "description": "The full new soul." } },
                 "required": ["text"]
+            }),
+        ));
+        specs.push(spec(
+            UPDATE_PLAN,
+            "Keep a short plan for work that takes several steps. Send the COMPLETE list each time, with every step's status; it is shown back to you at the end of every step so you stay on track. Send an empty list when the work is done.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "steps": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "step": { "type": "string" },
+                                "status": { "type": "string", "enum": ["pending", "doing", "done"] }
+                            },
+                            "required": ["step", "status"]
+                        }
+                    }
+                },
+                "required": ["steps"]
+            }),
+        ));
+        specs.push(spec(
+            RESEARCH,
+            "Hand a reading or research job to a helper that starts with a clean context and can only read (web search and pages, your memory, your workspace files). It returns a short report, so your own context stays small. Use it for anything that needs many searches or long pages.",
+            json!({
+                "type": "object",
+                "properties": { "task": { "type": "string", "description": "What to find out, with every detail the helper needs: it can't see this chat." } },
+                "required": ["task"]
             }),
         ));
         if agent.settings.web_access {

@@ -2,6 +2,46 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.3.3 — 2026-10-18
+
+Planned as "0.3.2.01"; Cargo, Tauri and the updater only accept `major.minor.patch`, so it ships as 0.3.3.
+
+### New
+
+- **Working folder** (agent profile → Working folder): shows the folder the agent works in — its own folder inside
+  OpenCue's data by default — and lets you point it anywhere (native folder picker, or type a path; created if missing,
+  back to the default in one click). Commands, files and shared files all use it; Docker mounts it at `/workspace`.
+- **Connect an app, with a real search**: touch the field to see the apps Composio offers (most popular first, with
+  logos), type to narrow them by name, pick one to start its sign-in; arrow keys and Enter work too.
+- **Links are pills**: every link in a chat is a small rounded pill with the site's name (or the link's own words) and
+  an arrow out; the full address shows on hover.
+- **A sturdier agent loop**, from a study of Grok Bot, Manus, Muse and OpenManus:
+  - *Stable prompt prefix*: what changes (today's date, the plan, the conversation summary) now goes last.
+  - *Long results go to files*: a tool result over 12,000 characters is saved in the workspace
+    (`.opencue/outputs/`) and the model gets the start and the path.
+  - *Smart compaction*: when a conversation grows past ~90,000 characters the older part is replaced by a structured
+    summary instead of being dropped; the newest messages stay word for word.
+  - *Plan recitation*: new `update_plan` tool; the plan is shown back at the end of every step.
+  - *Helpers with a clean context*: new `research` tool hands a reading job to a read-only helper (web, memory,
+    workspace files) that returns a short report.
+  - *Loop guard and timings*: the same tool call a third time in one turn is refused with a hint, and every tool call
+    logs its duration.
+
+### Changed
+
+- Claude Code, Codex and Grok list the models they accept: Claude's aliases and ids plus anything in your Claude
+  settings (`availableModels`, `ANTHROPIC_*MODEL*`), the visible models in Codex's cache, Grok 4.7 / 4.6 / 4.5 plus
+  your `[model.*]` entries.
+- When a CLI's sign-in has expired, the error says how to renew it (`claude` → /login, `codex login`, `grok login`).
+
+### Fixed
+
+- **Composio 401**: the key now goes in the header Composio expects for its type — `x-api-key` for project keys
+  (`ak_…`), `x-consumer-api-key` for consumer keys (`ck_…`), `x-user-api-key` for user keys (`uak_…`) — and if one is
+  refused the others are tried. A 401 now says what to check.
+- **Odd-looking replies**: short answers wrapped into a narrow bubble ("4 × 4 ÷ 2" / "= 8") because of a width rule
+  added in 0.3.2. Bubbles size to their text again.
+
 ## 0.3.2 — 2026-10-18
 
 ### New

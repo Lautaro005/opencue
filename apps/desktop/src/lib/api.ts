@@ -19,6 +19,7 @@ import type {
   AutomationInput,
   CommandResult,
   ComposioStatus,
+  ComposioToolkit,
   ComputerSettings,
   EmailAccount,
   FileEntry,
@@ -138,6 +139,9 @@ export const api = {
   computerDesktop: (agentId: string) => invokeImpl<string>("computer_desktop", { agentId }),
   resetComputer: (agentId: string) => invokeImpl<void>("reset_computer", { agentId }),
   composioConnect: (toolkit: string) => invokeImpl<string>("composio_connect", { toolkit }),
+  composioToolkits: (query: string) => invokeImpl<ComposioToolkit[]>("composio_toolkits", { query }),
+  agentWorkspace: (id: string) => invokeImpl<string>("agent_workspace", { id }),
+  defaultWorkspace: (id: string) => invokeImpl<string>("default_workspace", { id }),
   voiceSettings: () => invokeImpl<VoiceSettings>("voice_settings"),
   saveVoiceSettings: (settings: VoiceSettings, apiKey?: string) => invokeImpl<VoiceSettings>("save_voice_settings", { settings, apiKey }),
   listVoices: () => invokeImpl<Voice[]>("list_voices"),
@@ -154,6 +158,14 @@ export async function pickJsonFile(): Promise<string | null> {
   if (!isTauri) return null;
   const { open } = await import("@tauri-apps/plugin-dialog");
   const picked = await open({ multiple: false, filters: [{ name: "JSON", extensions: ["json"] }] });
+  return typeof picked === "string" ? picked : null;
+}
+
+/** A native "choose a folder" window. Returns null when cancelled (or in the browser preview). */
+export async function pickFolder(): Promise<string | null> {
+  if (!isTauri) return null;
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const picked = await open({ directory: true, multiple: false });
   return typeof picked === "string" ? picked : null;
 }
 

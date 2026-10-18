@@ -245,6 +245,9 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
         <h2 id="internet">Internet</h2>
         <p>Agents with web access get <code>web_search</code> (DuckDuckGo and Wikipedia, no API keys) and <code>web_fetch</code> (any page, converted to Markdown). Results are cached in the local database. If you host <a href="https://docs.searxng.org">SearXNG</a>, add its URL in <strong>Settings → Internet</strong> and it is queried first.</p>
 
+        <h2 id="working-folder">Working folder</h2>
+        <p>In an agent's profile, <strong>Working folder</strong> shows where it runs commands and keeps files: by default a folder of its own inside OpenCue's data directory. <strong>Choose folder…</strong> (or type a full path) points it at a project or any folder you want it to work on; the folder is created if it doesn't exist, and <strong>Use the default</strong> goes back. Files you share and files it creates live there, and a Docker computer mounts it at <code>/workspace</code>. In Ask-first mode, commands and file writes on your computer still wait for your approval.</p>
+
         <h2 id="notifications">Notifications</h2>
         <p><strong>Settings → Notifications</strong> turns on system notifications for finished replies and for actions waiting for your approval. By default they appear only when OpenCue isn't in front; you can show just “New message” instead of the text, and send a test. On macOS and Windows allow OpenCue in the system's notification settings if nothing appears. The icon in the menu bar (or tray) opens a menu with Open, Settings, Check for Updates and Quit.</p>
 
