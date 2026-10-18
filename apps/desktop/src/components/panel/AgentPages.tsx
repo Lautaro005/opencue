@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Blocks, Clock, Copy, Mail, Pencil, Play, Plus, Trash2, Webhook, Workflow } from "lucide-react";
+import { Blocks, Clock, Copy, Mail, MonitorCog, Pencil, Play, Plus, Trash2, Webhook, Workflow } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
-import type { Agent, AgentSettings, Automation, ComputerBackend, ComputerSettings, EmailAccount, SkillSummary, Trigger, Voice } from "../../lib/types";
+import type { Agent, AgentSettings, Automation, ComputerBackend, ComputerSettings, EmailAccount, SkillSummary, Trigger, VmPalMachine, Voice } from "../../lib/types";
 import { cx, describeCron, formatTime } from "../../lib/format";
 import { Button, DialogHeader, Field, IconButton, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { BACKENDS } from "./ComputerPanel";
+import { VMPAL_EXAMPLE } from "../settings/Phase2Sections";
 import { Row } from "./Section";
 
 function Page({ children }: { children: ReactNode }) {
@@ -195,7 +196,73 @@ export function ComputerPage({ agent, onChange }: { agent: Agent; onChange: (s: 
           {t("computer.open")}
         </Button>
       )}
+      <VmPalPicker agent={agent} onChange={onChange} />
     </Page>
+  );
+}
+
+/** Pick VMPal machines from the shared list, or paste a new [mcp_servers.…] table right here. */
+function VmPalPicker({ agent, onChange }: { agent: Agent; onChange: (s: Partial<AgentSettings>) => void }) {
+  const { t } = useTranslation();
+  const [machines, setMachines] = useState<VmPalMachine[]>([]);
+  const [adding, setAdding] = useState(false);
+  const [text, setText] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const chosen = agent.settings.vmpal ?? [];
+
+  useEffect(() => void api.vmpalGet().then((v) => setMachines(v.machines)), []);
+
+  const toggle = (name: string, on: boolean) => onChange({ vmpal: on ? [...new Set([...chosen, name])] : chosen.filter((n) => n !== name) });
+
+  const add = async () => {
+    setError(null);
+    try {
+      const before = new Set(machines.map((m) => m.name));
+      const v = await api.addVmpal(text);
+      setMachines(v.machines);
+      const fresh = v.machines.map((m) => m.name).filter((n) => !before.has(n));
+      onChange({ vmpal: [...new Set([...chosen, ...fresh])] });
+      setText("");
+      setAdding(false);
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t border-line pt-3">
+      <div className="flex items-center justify-between">
+        <span className="text-[12.5px] font-medium text-muted">VMPal</span>
+        <button onClick={() => setAdding((v) => !v)} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
+          <Plus size={13} /> {t("vmpal.add")}
+        </button>
+      </div>
+      <Hint>{t("vmpal.hint", { name: agent.name })}</Hint>
+      {machines.length === 0 && !adding && <p className="text-[12px] text-faint">{t("vmpal.none")}</p>}
+      <ul className="space-y-1">
+        {machines.map((m) => (
+          <li key={m.name} className="flex items-center gap-2.5 rounded-xl border border-line px-3 py-2">
+            <MonitorCog size={15} className="shrink-0 text-muted" />
+            <span className="min-w-0 flex-1 truncate text-[13px]">{m.name}</span>
+            <Toggle checked={chosen.includes(m.name)} onChange={(v) => toggle(m.name, v)} label={m.name} />
+          </li>
+        ))}
+      </ul>
+      {adding && (
+        <div className="animate-pop space-y-2 rounded-xl border border-line p-3">
+          <Textarea value={text} onChange={(e) => setText(e.target.value)} rows={6} spellCheck={false} placeholder={VMPAL_EXAMPLE} className="font-mono text-[11.5px]" />
+          {error && <p className="selectable text-[12px] text-danger">{error}</p>}
+          <div className="flex justify-end gap-2">
+            <Button size="sm" onClick={() => (setAdding(false), setError(null))}>
+              {t("common.cancel")}
+            </Button>
+            <Button size="sm" variant="primary" onClick={() => void add()} disabled={!text.trim()}>
+              {t("vmpal.addAndUse")}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

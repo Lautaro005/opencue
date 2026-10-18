@@ -660,6 +660,30 @@ impl Store {
         Ok(())
     }
 
+    /// 0.3.1 builds memory on its own by default. Agents created before that stored the old
+    /// default (off), so switch them on once; the user can still turn it off afterwards.
+    pub async fn enable_auto_memory_once(&self) -> anyhow::Result<()> {
+        const KEY: &str = "auto_memory_default_v031";
+        if self.setting(KEY).await?.is_some() {
+            return Ok(());
+        }
+        for agent in self.list_agents().await? {
+            if !agent.settings.auto_memory {
+                let mut settings = agent.settings.clone();
+                settings.auto_memory = true;
+                self.update_agent(
+                    &agent.id,
+                    AgentPatch {
+                        settings: Some(settings),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            }
+        }
+        self.set_setting(KEY, "done").await
+    }
+
     // ---------- MCP servers ----------
 
     pub async fn list_mcp_servers(&self) -> anyhow::Result<Vec<McpServerConfig>> {

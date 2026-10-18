@@ -25,6 +25,7 @@ pub const SEND_EMAIL: &str = "send_email";
 pub const COMPOSIO_SEARCH: &str = "composio_search";
 pub const COMPOSIO_EXECUTE: &str = "composio_execute";
 pub const SHARE_FILE: &str = "share_file";
+pub const CREATE_AUTOMATION: &str = "create_automation";
 
 pub fn is_phase2(name: &str) -> bool {
     [
@@ -39,6 +40,7 @@ pub fn is_phase2(name: &str) -> bool {
         SEND_EMAIL,
         COMPOSIO_SEARCH,
         COMPOSIO_EXECUTE,
+        CREATE_AUTOMATION,
     ]
     .contains(&name)
 }
@@ -151,6 +153,22 @@ impl Toolbox {
                 }),
             });
         }
+        specs.push(spec(
+            CREATE_AUTOMATION,
+            "Create an automation for yourself: a prompt that runs by itself on a schedule or when an email arrives. Use it when the user asks for something recurring or event-driven (or runs /create-automation).",
+            json!({
+                "type": "object",
+                "properties": {
+                    "name": { "type": "string", "description": "Short title, e.g. 'Morning briefing'." },
+                    "prompt": { "type": "string", "description": "What you should do each time it runs, written as an instruction to yourself." },
+                    "trigger": { "type": "string", "enum": ["schedule", "email"] },
+                    "cron": { "type": "string", "description": "For schedule: 5-field cron in the user's local time, e.g. '0 9 * * 1-5' for weekdays at 9:00." },
+                    "filter": { "type": "string", "description": "For email: only emails matching this text (e.g. 'from:boss@example.com'). Empty means every new email." },
+                    "poll_minutes": { "type": "integer", "minimum": 1, "maximum": 1440, "description": "For email: how often to check. Default 5." }
+                },
+                "required": ["name", "prompt", "trigger"]
+            }),
+        ));
         if caps.skills {
             specs.push(spec(USE_SKILL, "Load a skill's full instructions by name (see the Skills list in your prompt) before doing a task it covers.", json!({
                 "type": "object",
@@ -299,6 +317,12 @@ impl Toolbox {
     pub fn approval_reason(&self, call: &ToolCall) -> Option<String> {
         match call.name.as_str() {
             FORGET => return Some("Deletes a saved memory".into()),
+            CREATE_AUTOMATION => {
+                return Some(format!(
+                    "Creates the automation “{}” that will run on its own",
+                    arg_str(&call.arguments, "name").unwrap_or("untitled")
+                ))
+            }
             SEND_EMAIL => {
                 return Some(format!(
                     "Sends an email to {}",

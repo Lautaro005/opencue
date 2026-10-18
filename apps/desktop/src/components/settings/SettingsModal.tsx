@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { AppWindow, ArrowUpRight, AudioLines, BarChart3, Cpu, Globe, Info, LifeBuoy, Monitor, Settings2, Sparkles, User, X } from "lucide-react";
+import { AppWindow, ArrowUpRight, AudioLines, BarChart3, Cpu, Globe, KeyRound, Info, LifeBuoy, Monitor, Settings2, Sparkles, User, X } from "lucide-react";
 import { useStore, type SettingsSection } from "../../lib/store";
 import { cx } from "../../lib/format";
 import { IconButton, Modal } from "../ui";
@@ -7,12 +7,14 @@ import { AboutSection, AccountSection, GeneralSection, InternetSection, UsageSec
 import { ComputersSection, SkillsSection, VoiceSection } from "./Phase2Sections";
 import { openUrl } from "../../lib/api";
 import { ModelsSection } from "./ModelsSection";
+import { ProvidersSection } from "./ProvidersSection";
 import { AppsSection } from "./AppsSection";
 
 const NAV: ({ id: SettingsSection; icon: React.ReactNode } | "divider")[] = [
   { id: "general", icon: <Settings2 size={16} /> },
   { id: "account", icon: <User size={16} /> },
   { id: "usage", icon: <BarChart3 size={16} /> },
+  { id: "providers", icon: <KeyRound size={16} /> },
   { id: "models", icon: <Cpu size={16} /> },
   "divider",
   { id: "apps", icon: <AppWindow size={16} /> },
@@ -66,6 +68,7 @@ export function SettingsModal() {
           {section === "general" && <GeneralSection />}
           {section === "account" && <AccountSection />}
           {section === "usage" && <UsageSection />}
+          {section === "providers" && <ProvidersSection />}
           {section === "models" && <ModelsSection />}
           {section === "apps" && <AppsSection />}
           {section === "skills" && <SkillsSection />}

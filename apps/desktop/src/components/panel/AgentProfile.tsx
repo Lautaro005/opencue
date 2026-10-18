@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, Plus, RefreshCw, Shield, Sparkles, Trash2, X } from "lucide-react";
+import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, Plus, Shield, Sparkles, Trash2, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import type { Agent, AgentSettings, EmailAccount, McpServerConfig, McpServerStatus, MemoryEntry, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
-import { Button, IconButton, Input, Modal, DialogHeader, Select, Textarea, Toggle, useClickOutside } from "../ui";
-import { AvatarPicker } from "./AvatarPicker";
+import { Button, IconButton, Input, Modal, DialogHeader, Textarea, Toggle } from "../ui";
+import { confirmDialog } from "../../lib/confirm";
+import { ModelPicker } from "../ModelPicker";
+import { AvatarPickerDialog } from "./AvatarPicker";
 import { Row } from "./Section";
 import { AutomationsSection, ComputerPage, EmailPage, SkillsPage, VoicePage } from "./AgentPages";
 import { SharedFiles } from "./SharedFiles";
@@ -20,8 +22,6 @@ export function AgentProfile({ agent }: { agent: Agent }) {
   const providers = useStore((s) => s.providers);
   const [page, setPage] = useState<Page>("main");
   const [picker, setPicker] = useState(false);
-  const pickerRef = useRef<HTMLDivElement>(null);
-  useClickOutside(pickerRef, () => setPicker(false), picker);
   const [name, setName] = useState(agent.name);
   useEffect(() => setName(agent.name), [agent.id, agent.name]);
   const [email, setEmail] = useState<EmailAccount | null | undefined>(undefined);
@@ -63,16 +63,10 @@ export function AgentProfile({ agent }: { agent: Agent }) {
         {page === "main" && (
           <>
             <div className="flex flex-col items-center px-5 pt-2 pb-4">
-              <div className="relative" ref={pickerRef}>
-                <button onClick={() => setPicker((v) => !v)} className="rounded-full transition-transform hover:scale-[1.03]" title={t("profile.pickAvatar")}>
-                  <AvatarView avatar={agent.avatar} size={76} />
-                </button>
-                {picker && (
-                  <div className="animate-pop absolute top-full left-1/2 z-30 mt-2 -translate-x-1/2 rounded-2xl border border-line bg-elevated shadow-pop">
-                    <AvatarPicker value={agent.avatar} onChange={(avatar) => void api.updateAgent(agent.id, { avatar })} />
-                  </div>
-                )}
-              </div>
+              <button onClick={() => setPicker(true)} className="rounded-full transition-transform hover:scale-[1.03]" aria-label={t("profile.pickAvatar")} data-tip={t("profile.pickAvatar")}>
+                <AvatarView avatar={agent.avatar} size={76} />
+              </button>
+              <AvatarPickerDialog open={picker} value={agent.avatar} onChange={(avatar) => void api.updateAgent(agent.id, { avatar })} onClose={() => setPicker(false)} />
               <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -105,8 +99,8 @@ export function AgentProfile({ agent }: { agent: Agent }) {
               <Button
                 variant="danger"
                 className="w-full"
-                onClick={() => {
-                  if (confirm(t("profile.deleteConfirm", { name: agent.name }))) {
+                onClick={async () => {
+                  if (await confirmDialog(t("profile.deleteConfirm", { name: agent.name }), { confirmLabel: t("common.delete") })) {
                     setPanel(null);
                     void api.deleteAgent(agent.id);
                   }
@@ -205,71 +199,26 @@ function ModelSection({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
   const providers = useStore((s) => s.providers);
   const [catalog, setCatalog] = useState<ProviderInfo[]>([]);
-  const [models, setModels] = useState<string[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const provider = providers.find((p) => p.id === agent.provider_id);
   const info = catalog.find((c) => c.kind === provider?.kind);
-
   useEffect(() => void api.providerCatalog().then(setCatalog), []);
 
-  const load = useCallback(async () => {
-    if (!agent.provider_id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      setModels(await api.listModels(agent.provider_id));
-    } catch (e) {
-      setModels([]);
-      setError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [agent.provider_id]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  const current = agent.model ?? "";
-  const options = [{ value: "", label: `${t("profile.modelDefault")}${provider?.default_model ? ` (${provider.default_model})` : ""}` }, ...models.map((m) => ({ value: m, label: m }))];
-  if (current && !models.includes(current)) options.push({ value: current, label: current });
-
   return (
-    <Page
-      action={
-        <IconButton label={t("profile.refreshModels")} onClick={() => void load()} className="size-7">
-          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
-        </IconButton>
-      }
-    >
-      <div className="space-y-2">
-        <Select
-          value={agent.provider_id ?? ""}
-          onChange={(v) => void api.updateAgent(agent.id, { provider_id: v || null, model: null })}
-          options={[{ value: "", label: "—" }, ...providers.filter((p) => p.enabled).map((p) => ({ value: p.id, label: p.name }))]}
-        />
-        {models.length > 0 ? (
-          <Select value={current} onChange={(v) => void api.updateAgent(agent.id, { model: v || null })} options={options} />
-        ) : (
-          <Input
-            key={agent.id + current}
-            defaultValue={current}
-            placeholder={provider?.default_model ?? t("profile.customModel")}
-            onBlur={(e) => e.target.value !== current && void api.updateAgent(agent.id, { model: e.target.value.trim() || null })}
-          />
-        )}
-        {error && <p className="line-clamp-3 text-[11.5px] text-danger">{error}</p>}
-        {info && info.api === "cli" && (
-          <div className="mt-2 flex items-start justify-between gap-3 rounded-xl border border-line px-3 py-2.5">
-            <span>
-              <span className="block text-[13px] font-medium">{t("profile.cliTools")}</span>
-              <span className="block text-[11.5px] text-muted">{t("profile.cliToolsHint")}</span>
-            </span>
-            <Toggle checked={agent.settings.cli_tools !== false} onChange={(v) => void api.updateAgent(agent.id, { settings: { ...agent.settings, cli_tools: v } })} />
-          </div>
-        )}
-      </div>
+    <Page>
+      <ModelPicker
+        providerId={agent.provider_id}
+        model={agent.model}
+        onChange={(provider_id, model) => void api.updateAgent(agent.id, { provider_id, model })}
+      />
+      {info && info.api === "cli" && (
+        <div className="mt-3 flex items-start justify-between gap-3 rounded-xl border border-line px-3 py-2.5">
+          <span>
+            <span className="block text-[13px] font-medium">{t("profile.cliTools")}</span>
+            <span className="block text-[11.5px] text-muted">{t("profile.cliToolsHint")}</span>
+          </span>
+          <Toggle checked={agent.settings.cli_tools !== false} onChange={(v) => void api.updateAgent(agent.id, { settings: { ...agent.settings, cli_tools: v } })} />
+        </div>
+      )}
     </Page>
   );
 }
@@ -291,7 +240,7 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
   }, []);
 
   const s = agent.settings;
-  const enabledServers = servers.filter((x) => x.enabled);
+  const enabledServers = servers.filter((x) => x.enabled && !x.id.startsWith("vmpal:"));
   const toggleServer = (id: string, on: boolean) => {
     const base = s.mcp_all ? enabledServers.map((x) => x.id) : s.mcp_servers;
     const next = on ? [...new Set([...base, id])] : base.filter((x) => x !== id);

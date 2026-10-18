@@ -4,8 +4,14 @@ import { onMessageForVoice } from "./voice";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | null;
-export type SettingsSection = "general" | "account" | "usage" | "models" | "apps" | "skills" | "computers" | "voice" | "internet" | "about";
-export type Dialog = "create-agent" | "create-group" | null;
+export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "skills" | "computers" | "voice" | "internet" | "about";
+export type Dialog = "create-agent" | "create-group" | "walkthrough" | null;
+
+export interface ModelList {
+  list: string[];
+  error: string | null;
+  loading: boolean;
+}
 
 interface State {
   ready: boolean;
@@ -24,6 +30,8 @@ interface State {
   /** tool message id → pending approval */
   approvals: Record<string, ApprovalRequest>;
   toast: string | null;
+  /** Models each provider reports, by provider id. */
+  models: Record<string, ModelList>;
   /** A newer release found by the updater, if any. */
   update: UpdateInfo | null;
 
@@ -38,7 +46,19 @@ interface State {
   send: (threadId: string, text: string, files?: File[]) => Promise<void>;
   setSetting: (key: string, value: string) => Promise<void>;
   refreshProviders: () => Promise<void>;
+  loadModels: (providerId: string, force?: boolean) => Promise<void>;
+  setModelHidden: (providerId: string, model: string, hidden: boolean) => Promise<void>;
   showToast: (text: string) => void;
+}
+
+/** `hidden_models` setting: provider id → models the user turned off. */
+export function parseHidden(raw: string | undefined): Record<string, string[]> {
+  try {
+    const v = raw ? JSON.parse(raw) : {};
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
 }
 
 // Set synchronously so StrictMode's double init can't register two listeners.
@@ -59,6 +79,7 @@ export const useStore = create<State>((set, get) => ({
   working: {},
   approvals: {},
   toast: null,
+  models: {},
   update: null,
 
   init: async () => {
@@ -124,6 +145,27 @@ export const useStore = create<State>((set, get) => ({
   setSetting: async (key, value) => {
     await api.setSetting(key, value);
     set((s) => ({ settings: { ...s.settings, [key]: value } }));
+  },
+
+  loadModels: async (providerId, force = false) => {
+    const cur = get().models[providerId];
+    if (!force && (cur?.loading || (cur && !cur.error && cur.list.length))) return;
+    set((s) => ({ models: { ...s.models, [providerId]: { list: cur?.list ?? [], error: null, loading: true } } }));
+    try {
+      const list = await api.listModels(providerId);
+      set((s) => ({ models: { ...s.models, [providerId]: { list, error: null, loading: false } } }));
+    } catch (e) {
+      set((s) => ({ models: { ...s.models, [providerId]: { list: [], error: String(e), loading: false } } }));
+    }
+  },
+
+  setModelHidden: async (providerId, model, hidden) => {
+    const map = parseHidden(get().settings.hidden_models);
+    const cur = new Set(map[providerId] ?? []);
+    if (hidden) cur.add(model);
+    else cur.delete(model);
+    map[providerId] = [...cur];
+    await get().setSetting("hidden_models", JSON.stringify(map));
   },
 
   showToast: (text) => {

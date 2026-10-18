@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, AtSign, FileText, Loader2, Mic, Paperclip, Plus, Square, X } from "lucide-react";
-import type { Agent } from "../../lib/types";
+import { ArrowUp, AtSign, FileText, Loader2, Mic, Paperclip, Plus, Slash, Sparkles, Square, Workflow, X } from "lucide-react";
+import type { Agent, SkillSummary } from "../../lib/types";
+import { api } from "../../lib/api";
 import { cx, formatBytes } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
 import { useClickOutside } from "../ui";
@@ -27,6 +28,8 @@ export function Composer({
   const [text, setText] = useState("");
   const [plus, setPlus] = useState(false);
   const [mention, setMention] = useState<{ query: string; index: number } | null>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [skills, setSkills] = useState<SkillSummary[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   useClickOutside(plusRef, () => setPlus(false), plus);
@@ -36,6 +39,7 @@ export function Composer({
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => () => cancelRecording(), [threadId]);
+  useEffect(() => void api.listSkills().then(setSkills).catch(() => {}), [threadId]);
   useEffect(() => setFiles([]), [threadId]);
 
   const addFiles = (list: FileList | File[] | null) => {
@@ -84,6 +88,28 @@ export function Composer({
     ref.current?.focus();
   }, [name]);
 
+  // "/" at the start of the message opens the command list: built-ins first, then skills.
+  const slashMatch = text.match(/^\/([\w-]*)$/);
+  const commands: { name: string; description: string; kind: "builtin" | "skill" }[] = [
+    { name: "create-automation", description: t("slash.createAutomation"), kind: "builtin" },
+    { name: "create-skill", description: t("slash.createSkill"), kind: "builtin" },
+    ...skills.map((k) => ({ name: k.name, description: k.description, kind: "skill" as const })),
+  ];
+  const slashQuery = slashMatch?.[1].toLowerCase() ?? "";
+  const slashItems = slashMatch
+    ? [...commands.filter((c) => c.name.toLowerCase().startsWith(slashQuery)), ...commands.filter((c) => !c.name.toLowerCase().startsWith(slashQuery) && c.name.toLowerCase().includes(slashQuery))]
+    : [];
+  const slashOpen = slashItems.length > 0;
+  const pickCommand = (name: string) => {
+    setText(`/${name} `);
+    setSlashIndex(0);
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      el?.focus();
+      el?.setSelectionRange(name.length + 2, name.length + 2);
+    });
+  };
+
   const candidates = members && mention ? members.filter((m) => m.name.toLowerCase().includes(mention.query.toLowerCase())) : [];
 
   const submit = () => {
@@ -119,7 +145,7 @@ export function Composer({
 
   return (
     <div
-      className="px-6 pb-5"
+      className="px-4 pb-4"
       onDragOver={(e) => {
         if (e.dataTransfer.types.includes("Files")) {
           e.preventDefault();
@@ -134,7 +160,28 @@ export function Composer({
       }}
     >
       <input ref={fileInput} type="file" multiple hidden onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }} />
-      <div className="relative mx-auto max-w-[820px]">
+      <div className="relative">
+        {slashOpen && (
+          <div className="animate-pop absolute bottom-full left-0 z-20 mb-2 max-h-72 w-[min(440px,100%)] overflow-y-auto rounded-xl border border-line bg-elevated p-1 shadow-pop">
+            {slashItems.map((c, i) => (
+              <button
+                key={c.name}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pickCommand(c.name);
+                }}
+                onMouseEnter={() => setSlashIndex(i)}
+                className={cx("flex w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-left", i === slashIndex ? "bg-hover" : "")}
+              >
+                <span className="mt-0.5 text-muted">{c.kind === "skill" ? <Sparkles size={14} /> : c.name === "create-automation" ? <Workflow size={14} /> : <Slash size={14} />}</span>
+                <span className="min-w-0">
+                  <span className="block text-[13px] font-medium">/{c.name}</span>
+                  <span className="line-clamp-1 block text-[11.5px] text-muted">{c.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
         {mention && candidates.length > 0 && (
           <div className="animate-pop absolute bottom-full left-10 z-20 mb-2 w-60 rounded-xl border border-line bg-elevated p-1 shadow-pop">
             {candidates.map((a, i) => (
@@ -176,7 +223,7 @@ export function Composer({
           <div className="relative" ref={plusRef}>
             <button
               aria-label={t("chat.add")}
-              title={t("chat.add")}
+              data-tip={t("chat.add")}
               onClick={() => setPlus((v) => !v)}
               className="flex size-8 items-center justify-center rounded-full text-muted hover:bg-hover hover:text-ink"
             >
@@ -214,7 +261,10 @@ export function Composer({
             rows={1}
             value={text}
             placeholder={members ? t("chat.placeholderGroup", { name }) : t("chat.placeholder", { name })}
-            onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
+            onChange={(e) => {
+              setSlashIndex(0);
+              onChange(e.target.value, e.target.selectionStart);
+            }}
             onPaste={(e) => {
               if (e.clipboardData.files.length) {
                 e.preventDefault();
@@ -222,6 +272,23 @@ export function Composer({
               }
             }}
             onKeyDown={(e) => {
+              if (slashOpen) {
+                if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                  e.preventDefault();
+                  const d = e.key === "ArrowDown" ? 1 : -1;
+                  setSlashIndex((slashIndex + d + slashItems.length) % slashItems.length);
+                  return;
+                }
+                if (e.key === "Enter" || e.key === "Tab") {
+                  e.preventDefault();
+                  pickCommand(slashItems[Math.min(slashIndex, slashItems.length - 1)].name);
+                  return;
+                }
+                if (e.key === "Escape") {
+                  setText("");
+                  return;
+                }
+              }
               if (mention && candidates.length > 0) {
                 if (e.key === "ArrowDown" || e.key === "ArrowUp") {
                   e.preventDefault();
@@ -249,7 +316,7 @@ export function Composer({
 
           <button
             aria-label={voice === "recording" ? t("chat.voiceStop") : t("chat.voice")}
-            title={voice === "recording" ? t("chat.voiceStop") : t("chat.voice")}
+            data-tip={voice === "recording" ? t("chat.voiceStop") : t("chat.voice")}
             onClick={() => void toggleVoice()}
             className={cx(
               "flex size-8 items-center justify-center rounded-full",
@@ -261,7 +328,7 @@ export function Composer({
           {busy && !text.trim() && files.length === 0 ? (
             <button
               aria-label={t("chat.stop")}
-              title={t("chat.stop")}
+              data-tip={t("chat.stop")}
               onClick={onStop}
               className="flex size-8 items-center justify-center rounded-full bg-ink text-bg hover:opacity-85"
             >
@@ -270,7 +337,7 @@ export function Composer({
           ) : (
             <button
               aria-label={t("chat.send")}
-              title={t("chat.send")}
+              data-tip={t("chat.send")}
               onClick={submit}
               disabled={!text.trim() && files.length === 0}
               className="flex size-8 items-center justify-center rounded-full bg-accent text-white transition-opacity hover:bg-accent-hover disabled:opacity-30"

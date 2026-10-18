@@ -17,6 +17,7 @@ pub mod secrets;
 pub mod skills;
 pub mod store;
 pub mod tools;
+pub mod vmpal;
 pub mod voice;
 pub mod web;
 
@@ -80,6 +81,9 @@ impl Core {
             paths: paths.clone(),
         };
         store.seed_defaults().await?;
+        if primary {
+            store.enable_auto_memory_once().await?;
+        }
         let (events, _) = broadcast::channel(1024);
         Ok(Arc::new(Self {
             store,
@@ -104,7 +108,11 @@ impl Core {
         let core = self.clone();
         tokio::spawn(async move {
             if let Ok(servers) = core.store.list_mcp_servers().await {
-                for s in servers.into_iter().filter(|s| s.enabled) {
+                // VMPal machines start the first time an agent that picked them talks.
+                for s in servers
+                    .into_iter()
+                    .filter(|s| s.enabled && !vmpal::is_vmpal_id(&s.id))
+                {
                     let core = core.clone();
                     tokio::spawn(async move {
                         core.mcp.connect(&s).await;

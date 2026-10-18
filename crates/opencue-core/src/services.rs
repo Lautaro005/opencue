@@ -913,6 +913,36 @@ impl Core {
                     .ok_or_else(|| anyhow::anyhow!("no skill named {name}"))?;
                 Ok(format!("# Skill: {}\n\n{}", skill.name, skill.body))
             }
+            tools::CREATE_AUTOMATION => {
+                let trigger = match need("trigger")? {
+                    "schedule" => Trigger::Schedule {
+                        cron: need("cron")
+                            .map_err(|_| anyhow::anyhow!("`cron` is required for a schedule"))?
+                            .to_string(),
+                    },
+                    "email" => Trigger::Email {
+                        filter: arg_str(args, "filter").unwrap_or_default().to_string(),
+                        poll_minutes: arg_u64(args, "poll_minutes").unwrap_or(5).clamp(1, 1440)
+                            as u32,
+                    },
+                    other => anyhow::bail!("unsupported trigger `{other}` (use schedule or email)"),
+                };
+                let a = self
+                    .save_automation(AutomationInput {
+                        id: None,
+                        agent_id: agent.id.clone(),
+                        name: need("name")?.to_string(),
+                        trigger,
+                        prompt: need("prompt")?.to_string(),
+                        enabled: true,
+                    })
+                    .await?;
+                Ok(format!(
+                    "Created the automation “{}” ({}). The user can edit it from your profile.",
+                    a.name,
+                    a.trigger.kind()
+                ))
+            }
             tools::SAVE_SKILL => {
                 let body = args.get("body").and_then(Value::as_str).unwrap_or_default();
                 let skill = self

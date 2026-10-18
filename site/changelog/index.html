@@ -30,6 +30,26 @@
     </div>
     <article class="prose">
       <div class="release">
+        <h2 id="v0.3.1">0.3.1 <time datetime="2026-10-17">October 17, 2026</time></h2>
+        <h3>New</h3>
+        <ul>
+          <li><strong>Walkthrough</strong>: on first launch a floating window takes you through your name, a few lines about you, connecting a provider, picking a default model and creating your first agent. Replay it from Settings → General.</li>
+          <li><strong>Providers and Models are separate</strong>. Providers shows a container for every supported provider; Models lists the models of the ready ones with a search bar and a switch to show or hide each one (or all at once). Hidden models vanish from every picker.</li>
+          <li><strong>Choose the model when creating an agent</strong>, right in the Create Agent window.</li>
+          <li><strong>VMPal machines</strong>: add them as TOML (<code>[mcp_servers.vmpal-…]</code>) in Settings → Computers, then pick them per agent — or paste a new one from the agent's Computer page.</li>
+          <li><strong>Slash commands</strong>: type <code>/</code> in the chat to run a skill, or use <code>/create-automation</code> and <code>/create-skill</code> so the agent builds them itself.</li>
+          <li><strong>Memory builds itself</strong>: automatic learning is on by default, shares what every agent should know, avoids duplicates and tidies long memories.</li>
+          <li><strong>About me</strong> in Settings → Account: a description every agent reads as background.</li>
+        </ul>
+        <h3>Changed</h3>
+        <ul>
+          <li>The avatar picker is a floating window that fills its width, with faces on the avatar's color for proper contrast.</li>
+          <li>The chat input is as wide as the header.</li>
+          <li>Dropdowns, confirmations, tooltips and the right-click menu are drawn by the app instead of the system.</li>
+        </ul>
+      </div>
+
+      <div class="release">
         <h2 id="v0.3.0">0.3.0 <time datetime="2026-10-17">October 17, 2026</time></h2>
         <h3>New</h3>
         <ul>

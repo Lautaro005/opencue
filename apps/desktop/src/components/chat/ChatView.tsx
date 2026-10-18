@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { confirmDialog } from "../../lib/confirm";
 import { Eraser, Monitor, MoreHorizontal, SquareUser, Users } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
@@ -72,9 +73,9 @@ export function ChatView() {
               <div className="animate-pop absolute right-0 top-9 z-30 w-56 rounded-xl border border-line bg-elevated p-1 shadow-pop">
                 <button
                   disabled={messageCount === 0}
-                  onClick={() => {
+                  onClick={async () => {
                     setMenu(false);
-                    if (confirm(t("chat.clearConfirm"))) void api.clearThread(selected).then(() => useStore.getState().loadMessages(selected));
+                    if (await confirmDialog(t("chat.clearConfirm"), { confirmLabel: t("chat.clear") })) void api.clearThread(selected).then(() => useStore.getState().loadMessages(selected));
                   }}
                   className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] hover:bg-hover disabled:opacity-40"
                 >

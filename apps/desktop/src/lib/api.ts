@@ -28,6 +28,7 @@ import type {
   VoiceSettings,
   NewAttachment,
   SharedFile,
+  VmPalInfo,
 } from "./types";
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -130,6 +131,10 @@ export const api = {
   listVoices: () => invokeImpl<Voice[]>("list_voices"),
   transcribe: (audioBase64: string, mime: string) => invokeImpl<string>("transcribe", { audioBase64, mime }),
   speak: (text: string, agentId?: string) => invokeImpl<string>("speak", { text, agentId }),
+  vmpalGet: () => invokeImpl<VmPalInfo>("vmpal_get"),
+  saveVmpal: (toml: string) => invokeImpl<VmPalInfo>("save_vmpal", { toml }),
+  addVmpal: (toml: string) => invokeImpl<VmPalInfo>("add_vmpal", { toml }),
+  testVmpal: (name: string) => invokeImpl<McpServerStatus>("test_vmpal", { name }),
   webSearch: (query: string) => invokeImpl<{ title: string; url: string; snippet: string; source: string }[]>("web_search", { query }),
 };
 

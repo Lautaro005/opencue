@@ -45,7 +45,8 @@ Then start it with **`opencue`**. Installs for your user, no admin rights, and u
 Prefer an installer? Grab the `.dmg`, `.AppImage`, `.deb`, `.rpm`, `.exe` or `.msi` from
 [Releases](https://github.com/Lautaro005/opencue/releases/latest).
 
-First run: **Settings → Models** → add a provider (or start Ollama / LM Studio) → **+ → Create agent**.
+First run: a short walkthrough asks your name, connects a provider (or start Ollama / LM Studio), picks a model and
+creates your first agent. Replay it any time from **Settings → General**.
 
 > [!NOTE]
 > The apps aren't notarized or code-signed by Apple or Microsoft yet. A downloaded `.dmg` needs **System Settings →
@@ -56,7 +57,7 @@ First run: **Settings → Models** → add a provider (or start Ollama / LM Stud
 
 <table>
   <tr>
-    <td width="50%" valign="top"><b>🧠 Remember</b><br>Instructions and memory in plain Markdown (<code>INSTRUCTIONS.md</code>, <code>MEMORY.md</code>), a shared memory for all agents, optional auto-learning.</td>
+    <td width="50%" valign="top"><b>🧠 Remember</b><br>Instructions and memory in plain Markdown (<code>INSTRUCTIONS.md</code>, <code>MEMORY.md</code>), a shared memory for all agents that builds itself as you talk, and an <i>About me</i> they all read.</td>
     <td width="50%" valign="top"><b>👥 Work together</b><br>Group chats with <code>@mentions</code>, model-routed replies, hand-offs with <code>send_to_agent</code> and a turn limit.</td>
   </tr>
   <tr>
@@ -65,11 +66,11 @@ First run: **Settings → Models** → add a provider (or start Ollama / LM Stud
   </tr>
   <tr>
     <td valign="top"><b>✉️ Own an inbox</b><br>IMAP/SMTP with auto-detected servers, or Gmail via Composio. Read, search and send — sending asks first.</td>
-    <td valign="top"><b>🖥️ Use a computer</b><br>A Docker container (with an optional desktop you can watch), a SPACE microVM, WSL, or your machine with approval.</td>
+    <td valign="top"><b>🖥️ Use a computer</b><br>A Docker container (with an optional desktop you can watch), a SPACE microVM, WSL, a <b>VMPal</b> virtual machine, or your machine with approval.</td>
   </tr>
   <tr>
     <td valign="top"><b>🧩 Use your apps</b><br>MCP servers (stdio and HTTP, <code>mcp.json</code> import) and 1000+ apps through Composio, connected from inside OpenCue.</td>
-    <td valign="top"><b>✨ Learn skills</b><br>Claude Code–compatible <code>SKILL.md</code>: write them, import them from a URL, or let agents save their own.</td>
+    <td valign="top"><b>✨ Learn skills</b><br>Claude Code–compatible <code>SKILL.md</code>: write them, import them from a URL, or let agents save their own. Run any skill with <code>/</code>, or ask for <code>/create-skill</code> and <code>/create-automation</code>.</td>
   </tr>
   <tr>
     <td valign="top"><b>🎙️ Talk</b><br>ElevenLabs: speak into the mic, hear replies in the voice you pick per agent.</td>
@@ -159,6 +160,9 @@ Changes to `site/` deploy the website.
   website.
 - [x] **0.3**: files in chats and groups, OpenCue tools for CLI agents (MCP), Docker desktop view, auto-update, macOS
   builds, one-line install.
+- [x] **0.3.1**: first-run walkthrough, separate Providers and Models pages (show/hide models, search), model picker
+  when creating agents, VMPal machines, `/` commands (`/create-automation`, `/create-skill`, skills), self-building
+  memory, *About me*, floating avatar picker and app-drawn dropdowns, menus and dialogs.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases
