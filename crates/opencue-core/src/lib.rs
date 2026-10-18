@@ -153,6 +153,23 @@ impl Core {
     }
 
     pub async fn update_agent(&self, id: &str, patch: AgentPatch) -> anyhow::Result<Agent> {
+        let mut patch = patch;
+        // A working folder must be a real folder; make it if it does not exist yet.
+        if let Some(settings) = patch.settings.as_mut() {
+            let dir = settings
+                .working_dir
+                .take()
+                .map(|d| d.trim().to_string())
+                .filter(|d| !d.is_empty());
+            if let Some(dir) = dir {
+                let path = std::path::Path::new(&dir);
+                anyhow::ensure!(path.is_absolute(), "the working folder must be a full path");
+                std::fs::create_dir_all(path)
+                    .map_err(|e| anyhow::anyhow!("can't use {dir} as a working folder: {e}"))?;
+                anyhow::ensure!(path.is_dir(), "{dir} is not a folder");
+                settings.working_dir = Some(dir);
+            }
+        }
         let agent = self.store.update_agent(id, patch).await?;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(agent)
@@ -182,6 +199,11 @@ impl Core {
     pub async fn clear_thread(&self, thread_id: &str) -> anyhow::Result<()> {
         self.stop(thread_id);
         self.store.clear_messages(thread_id).await?;
+        // The summary covered messages that are now gone.
+        let _ = self
+            .store
+            .set_setting(&format!("summary:{thread_id}"), "")
+            .await;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(())
     }

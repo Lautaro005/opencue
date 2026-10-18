@@ -74,7 +74,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
               {m.role === "assistant" && (
                 <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
                   {m.status === "error" ? (
-                    <div className="max-w-[85%] rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
+                    <div className="max-w-full rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
                       <div className="flex items-center gap-1.5 font-medium text-danger">
                         <AlertCircle size={15} /> {t("chat.errorTitle")}
                       </div>
@@ -86,7 +86,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                       )}
                     </div>
                   ) : m.content ? (
-                    <div className="max-w-[85%] rounded-[20px] bg-agent px-4 py-2.5 text-[14px] leading-relaxed text-agent-ink">
+                    <div className="max-w-full rounded-[20px] bg-agent px-4 py-2.5 text-[14px] leading-relaxed text-agent-ink">
                       <Markdown text={m.content} />
                       {m.status === "stopped" && <div className="mt-1 text-[11.5px] text-muted">— {t("chat.stopped")}</div>}
                     </div>
@@ -128,7 +128,7 @@ function AgentRow({ agent, showHeader, isGroup, children }: { agent?: Agent; sho
   return (
     <div className={cx("flex items-start gap-2.5", showHeader && "mt-3")}>
       {isGroup && <div className="w-8 shrink-0">{showHeader && agent && <AvatarView avatar={agent.avatar} name={agent.name} size={30} />}</div>}
-      <div className="flex min-w-0 flex-col items-start gap-1">
+      <div className="flex min-w-0 max-w-[85%] flex-col items-start gap-1">
         {showHeader && isGroup && agent && <span className="ml-1 text-[12px] font-medium text-muted">{agent.name}</span>}
         {children}
       </div>

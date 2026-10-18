@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, Ghost, Plus, Shield, Sparkles, Trash2, X } from "lucide-react";
+import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, FolderOpen, Ghost, Plus, Shield, Sparkles, Trash2, X } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { api } from "../../lib/api";
+import { api, pickFolder } from "../../lib/api";
 import type { Agent, AgentSettings, EmailAccount, McpServerConfig, McpServerStatus, MemoryEntry, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
@@ -15,7 +15,7 @@ import { AutomationsSection, ComputerPage, EmailPage, SkillsPage, VoicePage } fr
 import { SharedFiles } from "./SharedFiles";
 import { useResizable } from "../ui/Resizer";
 
-type Page = "main" | "model" | "apps" | "skills" | "instructions" | "soul" | "memory" | "voice" | "permissions" | "email" | "computer" | "files";
+type Page = "main" | "model" | "apps" | "skills" | "instructions" | "soul" | "memory" | "voice" | "permissions" | "email" | "computer" | "files" | "folder";
 
 export function AgentProfile({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
@@ -44,6 +44,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
     email: t("profile.mails"),
     computer: t("profile.computer"),
     files: t("files.title"),
+    folder: t("profile.workingFolder"),
   };
 
   const { width, handle } = useResizable("opencue:panel-width", 360, 300, 640, "left");
@@ -86,6 +87,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
               <NavRow icon={<Emoji>✉️</Emoji>} label={t("profile.mails")} value={email?.address} onClick={() => setPage("email")} add={email === null} />
               <NavRow icon={<Emoji>🖥️</Emoji>} label={t("profile.computer")} value={agent.settings.computer === "none" ? undefined : t(`computer.backend.${agent.settings.computer}`)} onClick={() => setPage("computer")} add={agent.settings.computer === "none"} />
               <NavRow icon={<Emoji>📎</Emoji>} label={t("files.title")} onClick={() => setPage("files")} />
+              <NavRow icon={<FolderOpen size={17} />} label={t("profile.workingFolder")} value={agent.settings.working_dir ? agent.settings.working_dir.split(/[\\/]/).filter(Boolean).pop() : t("common.default")} onClick={() => setPage("folder")} />
             </Group>
 
             <Group label={t("profile.configurations")}>
@@ -126,6 +128,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
         {page === "voice" && <VoicePage agent={agent} onChange={patchSettings} />}
         {page === "email" && <EmailPage agent={agent} />}
         {page === "computer" && <ComputerPage agent={agent} onChange={patchSettings} />}
+        {page === "folder" && <WorkingFolderPage agent={agent} />}
         {page === "files" && (
           <div className="px-5 py-3">
             <SharedFiles threadId={agent.id} />
@@ -199,6 +202,65 @@ function Page({ children, action }: { children: ReactNode; action?: ReactNode })
       {action && <div className="mb-2 flex justify-end">{action}</div>}
       {children}
     </div>
+  );
+}
+
+/** Where the agent keeps its files and runs commands: its own folder, or one the user picks. */
+function WorkingFolderPage({ agent }: { agent: Agent }) {
+  const { t } = useTranslation();
+  const showToast = useStore((s) => s.showToast);
+  const [current, setCurrent] = useState("");
+  const [fallback, setFallback] = useState("");
+  const [typed, setTyped] = useState("");
+  const custom = !!agent.settings.working_dir;
+
+  useEffect(() => {
+    void api.agentWorkspace(agent.id).then(setCurrent);
+    void api.defaultWorkspace(agent.id).then(setFallback);
+    setTyped(agent.settings.working_dir ?? "");
+  }, [agent.id, agent.settings.working_dir]);
+
+  const save = async (dir: string | null) => {
+    try {
+      await api.updateAgent(agent.id, { settings: { ...agent.settings, working_dir: dir } });
+    } catch (e) {
+      showToast(String(e));
+    }
+  };
+
+  const choose = async () => {
+    const dir = await pickFolder();
+    if (dir) await save(dir);
+  };
+
+  return (
+    <Page>
+      <p className="mb-3 text-[12px] text-muted">{t("profile.workingFolderHint", { name: agent.name })}</p>
+      <div className="rounded-xl border border-line px-3 py-2.5">
+        <div className="mb-1 flex items-center gap-2 text-[12px] text-muted">
+          {custom ? t("profile.folderCustom") : t("profile.folderDefault")}
+        </div>
+        <div className="selectable font-mono text-[12px] break-all">{current}</div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant="primary" onClick={() => void choose()}>
+          <FolderOpen size={15} /> {t("profile.chooseFolder")}
+        </Button>
+        {custom && (
+          <Button onClick={() => void save(null)}>{t("profile.useDefaultFolder")}</Button>
+        )}
+      </div>
+      <div className="mt-4">
+        <div className="mb-1 text-[12px] font-medium text-muted">{t("profile.folderPath")}</div>
+        <div className="flex gap-1.5">
+          <Input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder={fallback} spellCheck={false} className="h-8 font-mono text-[12px]" onKeyDown={(e) => e.key === "Enter" && typed.trim() && void save(typed.trim())} />
+          <Button size="sm" onClick={() => void save(typed.trim())} disabled={!typed.trim() || typed.trim() === (agent.settings.working_dir ?? "")}>
+            {t("common.save")}
+          </Button>
+        </div>
+        <p className="mt-1.5 text-[11.5px] text-faint">{t("profile.folderNote")}</p>
+      </div>
+    </Page>
   );
 }
 

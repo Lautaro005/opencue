@@ -556,6 +556,14 @@ impl Core {
         Ok(self.composio_status().await)
     }
 
+    /// Apps that can be connected, most popular first; `query` narrows them by name.
+    pub async fn composio_toolkits(
+        &self,
+        query: &str,
+    ) -> anyhow::Result<Vec<crate::composio::ComposioToolkit>> {
+        self.composio().await?.toolkits(query, 60).await
+    }
+
     /// Start connecting an app to Composio; returns the sign-in page to open in the browser.
     pub async fn composio_connect(&self, toolkit: &str) -> anyhow::Result<String> {
         self.composio().await?.connect(toolkit).await
@@ -661,6 +669,20 @@ impl Core {
             .await
     }
 
+    /// Where an agent works: the folder the user picked, or its own folder inside OpenCue's data.
+    pub fn workspace_for(&self, agent: &Agent) -> std::path::PathBuf {
+        match agent
+            .settings
+            .working_dir
+            .as_deref()
+            .map(str::trim)
+            .filter(|d| !d.is_empty())
+        {
+            Some(dir) => std::path::PathBuf::from(dir),
+            None => self.paths().agent_workspace(&agent.id),
+        }
+    }
+
     pub(crate) fn computer_for<'a>(
         &self,
         agent: &'a Agent,
@@ -669,7 +691,7 @@ impl Core {
         Computer {
             backend: agent.settings.computer.clone(),
             agent_id: &agent.id,
-            workspace: self.paths().agent_workspace(&agent.id),
+            workspace: self.workspace_for(agent),
             config: cfg,
             space_state: self.paths().agent_dir(&agent.id).join("space.json"),
         }
@@ -916,6 +938,32 @@ impl Core {
                     .get(name)
                     .ok_or_else(|| anyhow::anyhow!("no skill named {name}"))?;
                 Ok(format!("# Skill: {}\n\n{}", skill.name, skill.body))
+            }
+            tools::UPDATE_PLAN => {
+                let steps = args
+                    .get("steps")
+                    .and_then(Value::as_array)
+                    .ok_or_else(|| anyhow::anyhow!("`steps` is required"))?;
+                anyhow::ensure!(steps.len() <= 25, "keep the plan to 25 steps or fewer");
+                let mut body = String::new();
+                for s in steps {
+                    let text = s["step"].as_str().unwrap_or_default().trim();
+                    if text.is_empty() {
+                        continue;
+                    }
+                    let mark = match s["status"].as_str() {
+                        Some("done") => "x",
+                        Some("doing") => "~",
+                        _ => " ",
+                    };
+                    body.push_str(&format!("- [{mark}] {text}\n"));
+                }
+                self.store.set_plan(&agent.id, &body)?;
+                Ok(if body.is_empty() {
+                    "Plan cleared.".into()
+                } else {
+                    format!("Plan saved:\n{body}")
+                })
             }
             tools::UPDATE_INSTRUCTIONS | tools::UPDATE_SOUL => {
                 let text = need("text")?;

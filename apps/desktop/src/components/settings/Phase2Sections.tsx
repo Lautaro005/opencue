@@ -6,6 +6,7 @@ import { useStore } from "../../lib/store";
 import type { ComposioStatus, ComputerSettings, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
+import { AppPicker } from "./AppPicker";
 
 // ---------- Composio (inside Apps) ----------
 
@@ -15,7 +16,6 @@ export function ComposioCard() {
   const [key, setKey] = useState("");
   const [user, setUser] = useState("");
   const [busy, setBusy] = useState(false);
-  const [toolkit, setToolkit] = useState("");
   const [connecting, setConnecting] = useState(false);
   const showToast = useStore((s) => s.showToast);
 
@@ -24,7 +24,6 @@ export function ComposioCard() {
     try {
       await openUrl(await api.composioConnect(slug));
       showToast(t("settings.composio.connectOpened"));
-      setToolkit("");
     } catch (e) {
       showToast(String(e));
     } finally {
@@ -97,11 +96,8 @@ export function ComposioCard() {
                 </button>
               ))}
             </div>
-            <div className="flex gap-2">
-              <Input value={toolkit} onChange={(e) => setToolkit(e.target.value)} placeholder={t("settings.composio.otherApp")} onKeyDown={(e) => e.key === "Enter" && toolkit.trim() && void connect(toolkit)} />
-              <Button size="sm" onClick={() => void connect(toolkit)} disabled={connecting || !toolkit.trim()}>
-                {t("settings.composio.connectButton")}
-              </Button>
+            <AppPicker busy={connecting} onPick={(slug) => void connect(slug)} />
+            <div className="flex justify-end">
               <Button size="sm" onClick={() => void api.composioStatus().then(setStatus)}>
                 {t("settings.composio.refresh")}
               </Button>

@@ -17,6 +17,8 @@ export interface AgentSettings {
   voice_id: string | null;
   cli_tools: boolean;
   vmpal: string[];
+  /** Folder the agent works in; empty/null means its own folder in OpenCue's data. */
+  working_dir: string | null;
 }
 
 export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space" | "vmpal";
@@ -271,6 +273,13 @@ export interface EmailAccount {
   username: string | null;
   last_seen_uid: number;
   has_password: boolean;
+}
+
+export interface ComposioToolkit {
+  slug: string;
+  name: string;
+  description: string;
+  logo: string;
 }
 
 export interface ComposioStatus {

@@ -243,6 +243,20 @@ impl Store {
         Ok(())
     }
 
+    pub fn plan(&self, agent_id: &str) -> String {
+        std::fs::read_to_string(self.paths.plan_file(agent_id)).unwrap_or_default()
+    }
+
+    pub fn set_plan(&self, agent_id: &str, text: &str) -> anyhow::Result<()> {
+        std::fs::create_dir_all(self.paths.agent_dir(agent_id))?;
+        if text.trim().is_empty() {
+            let _ = std::fs::remove_file(self.paths.plan_file(agent_id));
+        } else {
+            std::fs::write(self.paths.plan_file(agent_id), text)?;
+        }
+        Ok(())
+    }
+
     pub fn agent_memory(&self, agent_id: &str) -> MemoryFile {
         MemoryFile::new(self.paths.agent_memory_file(agent_id))
     }

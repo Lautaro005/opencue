@@ -23,10 +23,39 @@ pub struct ComposioAccount {
     pub status: String,
 }
 
+/// An app Composio can connect (Gmail, Slack, Notion…).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ComposioToolkit {
+    pub slug: String,
+    pub name: String,
+    pub description: String,
+    pub logo: String,
+}
+
+/// Composio has several kinds of key and each travels in its own header: project keys (`ak_…`)
+/// in `x-api-key`, user keys (`uak_…`) in `x-user-api-key` and consumer keys (`ck_…`) in
+/// `x-consumer-api-key`. Sending a key in the wrong one is a 401, so the likeliest header goes
+/// first and the others are tried when it is refused.
+fn header_candidates(key: &str) -> &'static [&'static str] {
+    const PROJECT: &[&str] = &["x-api-key", "x-consumer-api-key", "x-user-api-key"];
+    const USER: &[&str] = &["x-user-api-key", "x-consumer-api-key", "x-api-key"];
+    const CONSUMER: &[&str] = &["x-consumer-api-key", "x-api-key", "x-user-api-key"];
+    let key = key.trim();
+    if key.starts_with("uak_") {
+        USER
+    } else if key.starts_with("ck_") {
+        CONSUMER
+    } else {
+        PROJECT
+    }
+}
+
 pub struct Composio {
     http: reqwest::Client,
     api_key: String,
     user_id: String,
+    /// The header that was accepted, once one was.
+    header: std::sync::Mutex<Option<&'static str>>,
 }
 
 impl Composio {
@@ -36,20 +65,42 @@ impl Composio {
                 .timeout(std::time::Duration::from_secs(60))
                 .build()
                 .expect("http client"),
-            api_key,
+            api_key: api_key.trim().to_string(),
             user_id: user_id
                 .filter(|u| !u.trim().is_empty())
                 .unwrap_or_else(|| "default".into()),
+            header: std::sync::Mutex::new(None),
         }
+    }
+
+    /// Send a request, authenticating with whichever header Composio accepts for this key.
+    async fn send(
+        &self,
+        build: impl Fn(&reqwest::Client) -> reqwest::RequestBuilder,
+    ) -> anyhow::Result<reqwest::Response> {
+        let known = *self.header.lock().unwrap();
+        let candidates: Vec<&'static str> = match known {
+            Some(h) => vec![h],
+            None => header_candidates(&self.api_key).to_vec(),
+        };
+        let mut last = None;
+        for header in candidates {
+            let res = build(&self.http)
+                .header(header, &self.api_key)
+                .send()
+                .await?;
+            if res.status() != reqwest::StatusCode::UNAUTHORIZED {
+                *self.header.lock().unwrap() = Some(header);
+                return Ok(res);
+            }
+            last = Some(res);
+        }
+        Ok(last.expect("at least one header was tried"))
     }
 
     async fn get(&self, path: &str, query: &[(&str, String)]) -> anyhow::Result<Value> {
         let res = self
-            .http
-            .get(format!("{BASE}{path}"))
-            .header("x-api-key", &self.api_key)
-            .query(query)
-            .send()
+            .send(|c| c.get(format!("{BASE}{path}")).query(query))
             .await?;
         Self::json(res).await
     }
@@ -63,9 +114,48 @@ impl Composio {
                 .or_else(|| body.get("message"))
                 .and_then(Value::as_str)
                 .unwrap_or("request failed");
+            if status == reqwest::StatusCode::UNAUTHORIZED {
+                anyhow::bail!(
+                    "Composio {status}: {msg}. Check the key: project keys start with ak_ (Platform → Settings → API Keys)."
+                );
+            }
             anyhow::bail!("Composio {status}: {msg}");
         }
         Ok(body)
+    }
+
+    /// The apps Composio can connect, most popular first. A query narrows them by name.
+    pub async fn toolkits(
+        &self,
+        query: &str,
+        limit: usize,
+    ) -> anyhow::Result<Vec<ComposioToolkit>> {
+        let mut q = vec![("limit", limit.clamp(1, 100).to_string())];
+        if !query.trim().is_empty() {
+            q.push(("search", query.trim().to_string()));
+        }
+        let body = self.get("/toolkits", &q).await?;
+        let needle = query.trim().to_lowercase();
+        let mut out: Vec<ComposioToolkit> = body
+            .get("items")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .map(|t| ComposioToolkit {
+                slug: str_at(t, "/slug"),
+                name: str_at(t, "/name"),
+                description: str_at(t, "/meta/description"),
+                logo: str_at(t, "/meta/logo"),
+            })
+            .filter(|t| !t.slug.is_empty())
+            .collect();
+        // If the server ignored the search, narrow here.
+        if !needle.is_empty() {
+            out.retain(|t| {
+                t.slug.to_lowercase().contains(&needle) || t.name.to_lowercase().contains(&needle)
+            });
+        }
+        Ok(out)
     }
 
     pub async fn search_tools(
@@ -119,11 +209,7 @@ impl Composio {
 
     async fn post(&self, path: &str, body: Value) -> anyhow::Result<(reqwest::StatusCode, Value)> {
         let res = self
-            .http
-            .post(format!("{BASE}{path}"))
-            .header("x-api-key", &self.api_key)
-            .json(&body)
-            .send()
+            .send(|c| c.post(format!("{BASE}{path}")).json(&body))
             .await?;
         let status = res.status();
         if status == reqwest::StatusCode::NOT_FOUND {
@@ -197,12 +283,12 @@ impl Composio {
 
     /// Run an action and return its raw `data`.
     pub async fn execute_value(&self, slug: &str, arguments: Value) -> anyhow::Result<Value> {
+        let payload = json!({ "user_id": self.user_id, "arguments": arguments });
         let res = self
-            .http
-            .post(format!("{BASE}/tools/execute/{}", slug.trim()))
-            .header("x-api-key", &self.api_key)
-            .json(&json!({ "user_id": self.user_id, "arguments": arguments }))
-            .send()
+            .send(|c| {
+                c.post(format!("{BASE}/tools/execute/{}", slug.trim()))
+                    .json(&payload)
+            })
             .await?;
         let body = Self::json(res).await?;
         if body.get("successful").and_then(Value::as_bool) == Some(false) {
@@ -249,6 +335,15 @@ pub fn looks_read_only(slug: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn picks_the_header_for_each_kind_of_key() {
+        assert_eq!(super::header_candidates("ak_abc")[0], "x-api-key");
+        assert_eq!(super::header_candidates("ck_abc")[0], "x-consumer-api-key");
+        assert_eq!(super::header_candidates("uak_abc")[0], "x-user-api-key");
+        // An unknown key still gets every header tried.
+        assert!(super::header_candidates("whatever").contains(&"x-consumer-api-key"));
+    }
+
     #[test]
     fn classifies_actions() {
         assert!(super::looks_read_only("GMAIL_FETCH_EMAILS"));

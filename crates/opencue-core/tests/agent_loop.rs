@@ -348,3 +348,99 @@ async fn shared_files_reach_the_workspace_and_agents_share_files_back() {
     assert_eq!(att.name, "notes.txt");
     assert_eq!(bytes, b"hearing on the 9th");
 }
+
+/// A long tool result is saved in the agent's working folder (the one the user picked), and the
+/// model only gets its start plus the path.
+#[cfg(unix)]
+#[tokio::test]
+async fn long_tool_output_goes_to_a_file_in_the_chosen_working_folder() {
+    use opencue_core::computer::ComputerBackend;
+    use opencue_core::models::{AgentPatch, AgentSettings, ApprovalMode};
+
+    const BIG_CALL: &[&str] = &[
+        r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_big_1","function":{"name":"run_command","arguments":"{\"command\":\"head -c 20000 /dev/zero | tr '\\\\0' 'a'\"}"}}]}}]}"#,
+    ];
+    const DONE: &[&str] = &[r#"{"choices":[{"delta":{"content":"Done."}}]}"#];
+
+    let dir = tempfile::tempdir().unwrap();
+    let work = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let (base, _hits) = mock_llm_with(BIG_CALL, DONE).await;
+    let provider = core
+        .save_provider(
+            ProviderConfig {
+                id: String::new(),
+                kind: ProviderKind::OpenaiCompatible,
+                name: "Mock".into(),
+                base_url: Some(base),
+                default_model: Some("mock-1".into()),
+                enabled: true,
+                has_key: false,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let settings = AgentSettings {
+        approval_mode: ApprovalMode::Autonomous,
+        computer: ComputerBackend::Host,
+        auto_memory: false,
+        auto_profile: false,
+        working_dir: Some(work.path().display().to_string()),
+        ..Default::default()
+    };
+    let agent = core
+        .create_agent(NewAgent {
+            name: "Ops".into(),
+            provider_id: Some(provider.id),
+            settings: Some(settings.clone()),
+            ..Default::default()
+        })
+        .await
+        .unwrap();
+    // The folder goes through update_agent's validation too.
+    core.update_agent(
+        &agent.id,
+        AgentPatch {
+            settings: Some(settings),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut events = core.subscribe();
+    core.send_message(&agent.id, "make a lot of output")
+        .await
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(15), async {
+        while let Ok(ev) = events.recv().await {
+            if matches!(ev, CoreEvent::ThreadsChanged) && !core.is_busy(&agent.id) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("run finished");
+
+    let msgs = core.store.messages(&agent.id, 50).await.unwrap();
+    let tool = msgs
+        .iter()
+        .find(|m| m.role == Role::Tool)
+        .expect("tool result");
+    assert!(
+        tool.content.contains(".opencue/outputs/"),
+        "{}",
+        &tool.content.chars().take(200).collect::<String>()
+    );
+    assert!(tool.content.chars().count() < 6_000);
+    let saved = std::fs::read_dir(work.path().join(".opencue").join("outputs"))
+        .expect("spill folder in the working folder")
+        .count();
+    assert_eq!(saved, 1);
+    assert!(!core
+        .paths()
+        .agent_workspace(&agent.id)
+        .join(".opencue")
+        .exists());
+}
