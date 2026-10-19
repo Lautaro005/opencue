@@ -289,6 +289,17 @@ pub async fn read_attachment(state: State<'_, AppState>, id: String) -> R<String
     ))
 }
 
+/// Open a web link in the user's browser. Done here instead of through the plugin's URL scope,
+/// which rejects long sign-in links (OAuth redirects carry paths and query strings).
+#[tauri::command]
+pub fn open_external(url: String) -> R<()> {
+    let ok = url.starts_with("https://") || url.starts_with("http://");
+    if !ok || url.chars().any(|c| c.is_control()) {
+        return Err("only http and https links can be opened".into());
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|err| err.to_string())
+}
+
 /// Open the file with the system's default app.
 #[tauri::command]
 pub async fn open_attachment(state: State<'_, AppState>, id: String) -> R<()> {
@@ -554,6 +565,11 @@ pub async fn catalog_connect(
 }
 
 #[tauri::command]
+pub async fn composio_apps(state: State<'_, AppState>, refresh: bool) -> R<Vec<String>> {
+    Ok(state.core.composio_apps(refresh).await)
+}
+
+#[tauri::command]
 pub async fn catalog_disconnect(state: State<'_, AppState>, slug: String) -> R<()> {
     state.core.catalog_disconnect(&slug).await.map_err(e)
 }
@@ -650,6 +666,16 @@ pub async fn computer_read(
 #[tauri::command]
 pub async fn computer_desktop(state: State<'_, AppState>, agent_id: String) -> R<String> {
     state.core.computer_desktop(&agent_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn stop_computer(state: State<'_, AppState>, agent_id: String) -> R<()> {
+    state.core.stop_computer(&agent_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn computer_running(state: State<'_, AppState>, agent_id: String) -> R<bool> {
+    Ok(state.core.computer_running(&agent_id).await)
 }
 
 #[tauri::command]

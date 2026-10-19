@@ -326,6 +326,44 @@ button {
   }
 }
 
+/* A live agent-to-agent conversation: the same moving border, in green. */
+.live-card {
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    conic-gradient(from var(--ask-angle), var(--success), color-mix(in srgb, var(--success) 14%, transparent) 30%, var(--success) 55%, color-mix(in srgb, var(--success) 14%, transparent) 80%, var(--success)) border-box;
+  animation: ask-spin 3.6s linear infinite;
+}
+.live-card[data-busy="false"] {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-card {
+    animation: none;
+    background: var(--bg);
+    border-color: var(--success);
+  }
+}
+
+/* Apps connected through Composio: small tags with a blue moving border. */
+.composio-tag {
+  --ring: #2f86eb;
+  border: 1.5px solid transparent;
+  border-radius: 999px;
+  background:
+    linear-gradient(var(--elevated), var(--elevated)) padding-box,
+    conic-gradient(from var(--ask-angle), var(--ring), color-mix(in srgb, var(--ring) 14%, transparent) 30%, var(--ring) 55%, color-mix(in srgb, var(--ring) 14%, transparent) 80%, var(--ring)) border-box;
+  animation: ask-spin 4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .composio-tag {
+    animation: none;
+    background: var(--elevated);
+    border-color: var(--ring);
+  }
+}
+
 /* Catalog cards: a border that keeps moving, red / yellow / green by connection state. */
 .app-card {
   --ring: var(--danger);

@@ -466,7 +466,18 @@ impl Core {
                 shared
             },
             idle_minutes: get("vm_idle_minutes").await.parse().unwrap_or(480),
-            runtime: crate::computer::runtime_name(&get("container_runtime").await).to_string(),
+            runtime: {
+                let chosen = get("container_runtime").await;
+                // Nothing chosen yet and only Podman installed: use it instead of failing on Docker.
+                if chosen.trim().is_empty()
+                    && which::which("docker").is_err()
+                    && which::which("podman").is_ok()
+                {
+                    "podman".to_string()
+                } else {
+                    crate::computer::runtime_name(&chosen).to_string()
+                }
+            },
         }
     }
 
@@ -557,6 +568,24 @@ impl Core {
         self.computer_for(&agent, &cfg).reset().await?;
         self.log_computer(agent_id, "[computer restarted]\n", false);
         Ok(())
+    }
+
+    /// Stop an agent's local VM (the shared one when sharing is on). Nothing is lost; the next
+    /// command starts it again.
+    pub async fn stop_computer(&self, agent_id: &str) -> anyhow::Result<()> {
+        let agent = self.store.get_agent(agent_id).await?;
+        let cfg = self.computer_config().await;
+        self.computer_for(&agent, &cfg).stop().await?;
+        self.log_computer(agent_id, "[computer stopped]\n", false);
+        Ok(())
+    }
+
+    pub async fn computer_running(&self, agent_id: &str) -> bool {
+        let Ok(agent) = self.store.get_agent(agent_id).await else {
+            return false;
+        };
+        let cfg = self.computer_config().await;
+        self.computer_for(&agent, &cfg).is_running().await
     }
 
     pub async fn test_space(&self) -> anyhow::Result<usize> {

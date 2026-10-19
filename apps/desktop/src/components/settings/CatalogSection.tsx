@@ -3,7 +3,8 @@ import { useTranslation } from "react-i18next";
 import { api, openUrl } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import type { CatalogStatus } from "../../lib/types";
-import { Button, Field, Input } from "../ui";
+import { RefreshCw } from "lucide-react";
+import { Button, Field, IconButton, Input } from "../ui";
 import { Card } from "./SettingsModal";
 
 /** The catalog apps and their state; reloads when a sign-in finishes. */
@@ -32,17 +33,42 @@ export function CatalogCard() {
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
 
+  // Apps connected through Composio, shown as small tags under the cards.
+  const [viaComposio, setViaComposio] = useState<string[]>([]);
+  const [composioNote, setComposioNote] = useState<string | null>(null);
+  const loadTags = useCallback(async (refresh = false) => {
+    try {
+      setViaComposio(await api.composioApps(refresh));
+    } catch {
+      setViaComposio([]);
+    }
+  }, []);
+  useEffect(() => {
+    void loadTags();
+  }, [loadTags, apps]);
+
   const connect = async (slug: string, id?: string, secret?: string) => {
     setBusy(slug);
+    setComposioNote(null);
     try {
       const url = await api.catalogConnect(slug, id, secret);
       setNeedsClient(null);
       await openUrl(url);
       showToast(t("settings.catalog.opened"));
+      // A sign-in through Composio ends on Composio's page, not here: look for it for a while.
+      const app = apps.find((a) => a.slug === slug);
+      if (app?.needs_client && !id) {
+        for (let i = 0; i < 24; i++) {
+          await new Promise((r) => setTimeout(r, 5000));
+          await loadTags(true);
+          load();
+        }
+      }
     } catch (e) {
       const msg = String(e);
-      if (/client ID/i.test(msg)) setNeedsClient(slug);
-      showToast(msg);
+      if (/Connect Composio first/i.test(msg)) setComposioNote(slug);
+      else if (/client ID/i.test(msg)) setNeedsClient(slug);
+      else showToast(msg);
     } finally {
       setBusy(null);
       load();
@@ -57,15 +83,14 @@ export function CatalogCard() {
         <p className="text-[12.5px] text-muted">{t("settings.catalog.hint")}</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {apps.map((a) => (
-            <div key={a.slug} role="button" tabIndex={0} aria-label={`${a.name}: ${label(a.state)}`} data-state={a.state} onClick={() => busy === null && a.state !== "connected" && void connect(a.slug)} onKeyDown={(e) => e.key === "Enter" && a.state !== "connected" && void connect(a.slug)} className="app-card flex min-h-[92px] cursor-pointer flex-col gap-1 px-3.5 py-3 text-left hover:brightness-105">
-              <span className="flex items-center justify-between gap-2">
-                <span className="text-[14px] font-semibold">{a.name}</span>
-                <span className={`text-[11px] font-medium ${a.state === "connected" ? "text-success" : a.state === "reconnect" ? "text-warning" : "text-danger"}`}>{busy === a.slug ? t("settings.catalog.waiting") : label(a.state)}</span>
-              </span>
+            <div key={a.slug} role="button" tabIndex={0} aria-label={`${a.name}: ${label(a.state)}`} data-state={a.state} onClick={() => busy === null && a.state !== "connected" && void connect(a.slug)} onKeyDown={(e) => e.key === "Enter" && a.state !== "connected" && void connect(a.slug)} className="app-card flex min-h-[104px] cursor-pointer flex-col gap-1 px-3.5 py-3 text-left hover:brightness-105">
+              <span className="text-[14px] font-semibold">{a.name}</span>
               <span className="text-[12px] leading-snug text-muted">{a.description}</span>
-              {a.state !== "disconnected" && (
-                <span className="mt-auto flex justify-end gap-3 pt-1 text-[11.5px]">
-                  {a.state === "reconnect" && a.error && <span className="mr-auto line-clamp-1 text-faint">{a.error}</span>}
+              <span className="mt-auto flex items-end justify-between gap-3 pt-2 text-[11.5px]">
+                <span className={`font-medium ${a.state === "connected" ? "text-success" : a.state === "reconnect" ? "text-warning" : "text-danger"}`}>
+                  {busy === a.slug ? t("settings.catalog.waiting") : a.via_composio ? t("settings.catalog.viaComposio") : label(a.state)}
+                </span>
+                {a.state !== "disconnected" && !a.via_composio && (
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -75,11 +100,37 @@ export function CatalogCard() {
                   >
                     {t("settings.catalog.disconnect")}
                   </button>
-                </span>
-              )}
+                )}
+              </span>
+              {a.state === "reconnect" && a.error && <span className="line-clamp-1 text-[11px] text-faint">{a.error}</span>}
             </div>
           ))}
         </div>
+        {composioNote && (
+          <div className="rounded-xl border border-warning/50 bg-warning-soft px-3 py-2.5 text-[12.5px]">
+            <p>{t("settings.catalog.composioFirst", { name: apps.find((a) => a.slug === composioNote)?.name ?? "" })}</p>
+            <button onClick={() => { setNeedsClient(composioNote); setComposioNote(null); }} className="mt-1 text-accent hover:underline">
+              {t("settings.catalog.ownKey")}
+            </button>
+          </div>
+        )}
+        {viaComposio.length > 0 && (
+          <div>
+            <div className="mb-1.5 flex items-center gap-1 text-[12px] font-medium text-muted">
+              {t("settings.catalog.viaComposioTitle")}
+              <IconButton label={t("settings.catalog.refresh")} onClick={() => void loadTags(true)} className="size-6">
+                <RefreshCw size={12} />
+              </IconButton>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {viaComposio.map((name) => (
+                <span key={name} className="composio-tag px-2.5 py-0.5 text-[11.5px] font-medium">
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         {needsClient && (
           <div className="space-y-2 rounded-xl border border-line p-3">
             <p className="text-[12.5px] text-muted">{t("settings.catalog.clientHint", { name: apps.find((a) => a.slug === needsClient)?.name ?? "" })}</p>

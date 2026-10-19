@@ -24,66 +24,137 @@ pub struct CatalogApp {
     pub name: &'static str,
     pub description: &'static str,
     pub url: &'static str,
+    /// The provider only lets apps you registered yourself sign in (Google, Microsoft, GitHub): a
+    /// client ID is needed, unless Composio, which has its own registered apps, signs you in.
+    pub needs_client: bool,
+    /// The app's name in Composio.
+    pub composio: &'static str,
 }
 
-/// The MCP servers the catalog offers. Gmail, Drive and Calendar are Google's own servers;
-/// Outlook is Microsoft 365's.
+/// The MCP servers the catalog offers. Composio comes first: its hosted server signs in to the apps
+/// that need an OAuth key of their own. Gmail and Drive are Google's own servers; Outlook is
+/// Microsoft 365's.
 pub const APPS: &[CatalogApp] = &[
+    CatalogApp {
+        slug: "composio",
+        name: "Composio",
+        description: "One sign-in for 500+ apps: Gmail, Slack, Calendar…",
+        url: "https://connect.composio.dev/mcp",
+        needs_client: false,
+        composio: "",
+    },
     CatalogApp {
         slug: "gmail",
         name: "Gmail",
         description: "Search, read and draft email",
         url: "https://gmailmcp.googleapis.com/mcp/v1",
+        needs_client: true,
+        composio: "gmail",
     },
     CatalogApp {
         slug: "googledrive",
         name: "Google Drive",
         description: "Search, read and upload files",
         url: "https://drivemcp.googleapis.com/mcp/v1",
-    },
-    CatalogApp {
-        slug: "googlecalendar",
-        name: "Google Calendar",
-        description: "See and manage your schedule",
-        url: "https://calendarmcp.googleapis.com/mcp/v1",
+        needs_client: true,
+        composio: "googledrive",
     },
     CatalogApp {
         slug: "notion",
         name: "Notion",
         description: "Search and edit pages and databases",
         url: "https://mcp.notion.com/mcp",
+        needs_client: false,
+        composio: "notion",
     },
     CatalogApp {
         slug: "trello",
         name: "Trello",
         description: "Read and update boards and cards",
         url: "https://mcp.trello.com/v1",
+        needs_client: false,
+        composio: "trello",
     },
     CatalogApp {
         slug: "github",
         name: "GitHub",
         description: "Repositories, issues and pull requests",
         url: "https://api.githubcopilot.com/mcp/",
+        needs_client: true,
+        composio: "github",
     },
     CatalogApp {
         slug: "supabase",
         name: "Supabase",
         description: "Databases, auth and storage",
         url: "https://mcp.supabase.com/mcp",
+        needs_client: false,
+        composio: "supabase",
     },
     CatalogApp {
         slug: "vercel",
         name: "Vercel",
         description: "Projects and deployments",
         url: "https://mcp.vercel.com/",
+        needs_client: false,
+        composio: "vercel",
     },
     CatalogApp {
         slug: "outlook",
         name: "Outlook",
         description: "Mail and calendar in Microsoft 365",
         url: "https://microsoft365.mcp.claude.com/mcp",
+        needs_client: true,
+        composio: "outlook",
     },
 ];
+
+pub const COMPOSIO: &str = "composio";
+
+/// Apps the account already connected, read from Composio Connect's own tool description
+/// ("User has manually connected the apps: a, b, c.").
+pub fn connected_from_description(description: &str) -> Vec<String> {
+    let Some(i) = description.find("connected the apps:") else {
+        return vec![];
+    };
+    description[i + "connected the apps:".len()..]
+        .split(['.', '\n'])
+        .next()
+        .unwrap_or_default()
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// The sign-in link in the text a `COMPOSIO_MANAGE_CONNECTIONS` call returns (JSON or prose).
+pub fn redirect_url_in(text: &str) -> Option<String> {
+    fn find(v: &serde_json::Value) -> Option<String> {
+        match v {
+            serde_json::Value::Object(m) => m
+                .get("redirect_url")
+                .or_else(|| m.get("redirectUrl"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_string)
+                .or_else(|| m.values().find_map(find)),
+            serde_json::Value::Array(a) => a.iter().find_map(find),
+            _ => None,
+        }
+    }
+    if let Some(u) = serde_json::from_str::<serde_json::Value>(text)
+        .ok()
+        .as_ref()
+        .and_then(find)
+    {
+        return Some(u);
+    }
+    let start = text.find("https://")?;
+    let url: String = text[start..]
+        .chars()
+        .take_while(|c| !c.is_whitespace() && !matches!(c, '"' | '\'' | ')' | '<' | '>' | '\\'))
+        .collect();
+    Some(url.trim_end_matches([',', '.']).to_string())
+}
 
 pub const SERVER_PREFIX: &str = "app:";
 
@@ -165,6 +236,10 @@ pub struct CatalogStatus {
     pub state: String,
     pub error: Option<String>,
     pub tools: usize,
+    /// Needs an OAuth key of your own (Composio can sign you in instead).
+    pub needs_client: bool,
+    /// Connected through Composio rather than directly.
+    pub via_composio: bool,
 }
 
 const PAGE: &str = "<!doctype html><meta charset=utf-8><title>OpenCue</title><body style=\"font-family:system-ui;display:grid;place-items:center;height:100vh;margin:0;background:#111;color:#eee\"><div style=\"text-align:center\"><h2>{TITLE}</h2><p>{BODY}</p></div><script>setTimeout(()=>window.close(),1500)</script>";
@@ -190,12 +265,18 @@ impl Core {
     pub async fn catalog_status(&self) -> Vec<CatalogStatus> {
         let configs: Vec<McpServerConfig> = APPS.iter().map(server_config).collect();
         let status = self.mcp.status(&configs).await;
+        let through_composio = self.composio_apps(false).await;
         APPS.iter()
             .map(|a| {
                 let st = status.iter().find(|s| s.id == server_id(a.slug));
                 let signed_in = self.catalog_credentials(a.slug).exists();
                 let ready = st.is_some_and(|s| s.state == "ready");
-                let state = if ready {
+                let via_composio = !ready
+                    && !a.composio.is_empty()
+                    && through_composio
+                        .iter()
+                        .any(|c| c.eq_ignore_ascii_case(a.composio));
+                let state = if ready || via_composio {
                     "connected"
                 } else if signed_in {
                     "reconnect"
@@ -211,9 +292,66 @@ impl Core {
                         .and_then(|s| s.error.clone())
                         .filter(|_| state == "reconnect"),
                     tools: st.map(|s| s.tools.len()).unwrap_or(0),
+                    needs_client: a.needs_client,
+                    via_composio,
                 }
             })
             .collect()
+    }
+
+    /// The apps connected in the user's Composio account, read from its server's tool descriptions.
+    /// `refresh` reconnects first so apps connected a moment ago show up.
+    pub async fn composio_apps(&self, refresh: bool) -> Vec<String> {
+        let Some(a) = app(COMPOSIO) else {
+            return vec![];
+        };
+        let cfg = server_config(a);
+        if !self.catalog_credentials(COMPOSIO).exists() {
+            return vec![];
+        }
+        if refresh {
+            self.mcp.disconnect(&cfg.id).await;
+            self.mcp.connect(&cfg).await;
+        }
+        if !self.mcp.is_ready(&cfg.id).await {
+            return vec![];
+        }
+        let tools = self.mcp.tools(std::slice::from_ref(&cfg)).await;
+        tools
+            .iter()
+            .flat_map(|t| {
+                connected_from_description(t.tool.description.as_deref().unwrap_or_default())
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    /// Sign in to an app through Composio: its sign-in link, to open in the browser.
+    async fn composio_sign_in(&self, a: &CatalogApp) -> anyhow::Result<String> {
+        let cfg = server_config(app(COMPOSIO).expect("composio is in the catalog"));
+        if !self.mcp.is_ready(&cfg.id).await {
+            self.mcp.connect(&cfg).await;
+        }
+        let (text, is_error) = self
+            .mcp
+            .call(
+                &cfg.id,
+                "COMPOSIO_MANAGE_CONNECTIONS",
+                serde_json::json!({ "toolkits": [{ "name": a.composio, "action": "add" }] }),
+            )
+            .await?;
+        anyhow::ensure!(
+            !is_error,
+            "Composio said: {}",
+            text.chars().take(300).collect::<String>()
+        );
+        redirect_url_in(&text).ok_or_else(|| {
+            anyhow::anyhow!(
+                "{} is already connected through Composio, or Composio gave no sign-in link",
+                a.name
+            )
+        })
     }
 
     /// Composio was removed in 0.3.6: drop what it left behind (its MCP server and key).
@@ -275,6 +413,17 @@ impl Core {
         let a = app(slug).ok_or_else(|| anyhow::anyhow!("unknown app {slug}"))?;
         let id_key = format!("catalog:{slug}:client_id");
         let secret_key = format!("catalog:{slug}:client_secret");
+        let own_key = client_id.as_deref().is_some_and(|s| !s.trim().is_empty())
+            || self.secrets.get(&id_key).is_some();
+        if a.needs_client && !own_key {
+            // These providers don't let OpenCue sign in by itself: Composio's apps can.
+            anyhow::ensure!(
+                self.mcp.is_ready(&server_id(COMPOSIO)).await,
+                "{} needs an OAuth key of its own. Connect Composio first (the first card) and it signs you in, or enter your own client ID.",
+                a.name
+            );
+            return self.composio_sign_in(a).await;
+        }
         if let Some(id) = client_id.filter(|s| !s.trim().is_empty()) {
             self.secrets.set(&id_key, id.trim())?;
             self.secrets
@@ -425,9 +574,9 @@ mod tests {
         assert_eq!(
             slugs,
             [
+                "composio",
                 "gmail",
                 "googledrive",
-                "googlecalendar",
                 "notion",
                 "trello",
                 "github",
@@ -439,6 +588,39 @@ mod tests {
         assert!(APPS.iter().all(|a| a.url.starts_with("https://")));
         assert_eq!(slug_of(&server_id("notion")), Some("notion"));
         assert_eq!(slug_of("composio:connect"), None);
+        // Google, Microsoft and GitHub need a key of their own; Composio signs those in.
+        let own_key: Vec<_> = APPS
+            .iter()
+            .filter(|a| a.needs_client)
+            .map(|a| a.slug)
+            .collect();
+        assert_eq!(own_key, ["gmail", "googledrive", "github", "outlook"]);
+        assert!(APPS
+            .iter()
+            .filter(|a| a.needs_client)
+            .all(|a| !a.composio.is_empty()));
+    }
+
+    #[test]
+    fn composio_answers_are_read() {
+        assert_eq!(
+            connected_from_description(
+                "Manage. User has manually connected the apps: gmail, slack. More."
+            ),
+            ["gmail", "slack"]
+        );
+        assert!(connected_from_description("nothing here").is_empty());
+        assert_eq!(
+            redirect_url_in(
+                r#"{"data":{"results":[{"redirect_url":"https://connect.composio.dev/x?a=1"}]}}"#
+            )
+            .as_deref(),
+            Some("https://connect.composio.dev/x?a=1")
+        );
+        assert_eq!(
+            redirect_url_in("Sign in at https://example.com/auth?x=1.").as_deref(),
+            Some("https://example.com/auth?x=1")
+        );
     }
 
     #[tokio::test]

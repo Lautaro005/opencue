@@ -164,10 +164,10 @@
 }</code></pre>
         <p>In an agent's <strong>Apps</strong> page choose all servers or only some.</p>
         <h3>Catalog</h3>
-        <p><strong>Settings → Apps → Catalog</strong> has cards for Gmail, Google Drive, Google Calendar, Notion, Trello, GitHub, Supabase, Vercel and Outlook. The border shows the state: <strong>red</strong> not connected, <strong>yellow</strong> connect again (the sign-in expired or failed), <strong>green</strong> connected.</p>
+        <p><strong>Settings → Apps → Catalog</strong> has cards for Composio (first), Gmail, Google Drive, Notion, Trello, GitHub, Supabase, Vercel and Outlook. The border shows the state: <strong>red</strong> not connected, <strong>yellow</strong> connect again (the sign-in expired or failed), <strong>green</strong> connected.</p>
         <ol>
           <li>Touch a card. Your browser opens the provider's sign-in page (OAuth); when you finish, OpenCue comes back to the front and the card turns green. Tokens are kept in <code>oauth/&lt;app&gt;.json</code> and refreshed automatically.</li>
-          <li>Some providers (Google, Microsoft, GitHub) don't let apps register themselves. If the card says so, create an OAuth app in the provider's developer console (redirect URL <code>http://127.0.0.1</code>) and enter its <em>client ID</em> (and secret) when asked.</li>
+          <li>Some providers (Gmail, Drive, Outlook, GitHub) don't let apps register themselves. Connect <strong>Composio</strong> first (the first card): touching those cards then signs you in through it, and the apps it connects show as small blue tags under the Catalog. Without Composio, create an OAuth app in the provider's developer console (redirect URL <code>http://127.0.0.1</code>) and enter its <em>client ID</em> (and secret) when asked.</li>
           <li>In an agent's profile → <strong>Apps</strong>, turn on the catalog apps it may use. Agents backed by the Claude Code or Codex CLIs get them through OpenCue's tools. Tools that change data ask first in Ask-first mode.</li>
         </ol>
 
@@ -235,6 +235,7 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
         <p><strong>Settings → Computers → Isolation</strong> chooses <em>Per agent</em> (each agent has its own container, folder and desktop) or <em>Shared</em> (one container, <code>opencue-shared</code>, and one desktop for every agent, kept in OpenCue's <code>shared</code> folder). <em>Stop idle VMs after</em> stops a VM nobody used for that many minutes (default 480, never while an agent is working, 0 never); files and installed apps stay in their folders and the VM starts again on its own. The <strong>Setup</strong> checklist walks through installing Docker, starting it, the one-time desktop download and creating the shared VM.</p>
         <h3>Desktop view (Docker)</h3>
         <p>Turn on <strong>Settings → Computers → Docker → Desktop view</strong> and Docker computers start from an image with a desktop you can watch and use in the <strong>Desktop</strong> tab of the Computer panel (widen it with the arrows icon). Programs the agent starts with <code>run_command</code> appear there (<code>DISPLAY=:1</code>).</p>
+        <p>The square <strong>Stop</strong> button in the Computer panel header stops a local VM (Docker or Podman) without losing its files or installed programs; the next command starts it again.</p>
         <ul>
           <li>Default image: <a href="https://docs.linuxserver.io/images/docker-webtop/">linuxserver.io Webtop</a> (<code>lscr.io/linuxserver/webtop:ubuntu-xfce</code>, web port 3000). Any image that serves a web desktop works — noVNC, KasmVNC or Selkies — set its image and port.</li>
           <li>The port is published on <code>127.0.0.1</code> only, on a random free port.</li>

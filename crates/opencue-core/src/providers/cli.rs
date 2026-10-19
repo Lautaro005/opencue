@@ -273,18 +273,25 @@ impl LlmProvider for CliProvider {
                 cmd.arg("--no-session-persistence");
                 let mut servers = serde_json::Map::new();
                 let mut allowed: Vec<String> = vec![];
+                let mut permission_tool = false;
                 if let Some((exe, args)) = req.agent_id.as_deref().and_then(Self::mcp_server) {
                     servers.insert(
                         "opencue".into(),
                         serde_json::json!({ "command": exe, "args": args }),
                     );
                     allowed.push("mcp__opencue".into());
+                    // The CLI's own tools (Bash, Read…) ask the app instead of failing in a headless run.
+                    permission_tool = true;
                 }
                 extra_claude(&mut servers, &mut allowed, &req.mcp_extra);
                 if !servers.is_empty() {
                     // Variadic flags go last so they can't swallow anything else.
                     // Only these servers: the CLI's own ones (from ~/.claude) can't be allowed in a
                     // headless run, so calling them fails with a permission error nobody can answer.
+                    if permission_tool {
+                        cmd.arg("--permission-prompt-tool")
+                            .arg(format!("mcp__opencue__{}", crate::mcp_server::APPROVE_TOOL));
+                    }
                     cmd.arg("--strict-mcp-config")
                         .arg("--mcp-config")
                         .arg(serde_json::json!({ "mcpServers": servers }).to_string())
