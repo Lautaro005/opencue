@@ -2,6 +2,36 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.3.5 — 2026-10-19
+
+Asked for as "0.3.4.1" (fixes); Cargo, Tauri and the updater only accept `major.minor.patch`, so it ships as 0.3.5.
+
+### New
+
+- **Agents talk to each other in 1:1 chats**, without a group. An agent can call `send_to_agent` (its prompt lists the
+  other agents) and gets the other agent's reply back as the result; the exchange is saved as a conversation of its own.
+  In the chat it shows as a **"Chat with …" pill** that opens that conversation (with a "Back to …" button). The agent
+  that answers can't hand the work on again, so chains can't loop.
+- **`@` in 1:1 chats**: type `@` to pick another agent; the agent you are talking to then asks them and answers you
+  with the result.
+- **Ask / permission card**: when an agent needs a decision or permission it shows a card with a **moving yellow
+  border**, a title, the request and either a text field (plus optional answer buttons) or **Accept / Reject**. Agents
+  get a new `ask_user` tool for it, and the existing approvals use the same card. It works for CLI agents too: in "Ask
+  first" mode their approvals are now asked instead of refused. Notifications cover it as well.
+- **Local VM isolation**: Settings → Computers → *Isolation*: **Shared** (one Docker computer and one desktop for every
+  agent, in OpenCue's `shared` folder) or **Per agent** (as before). *Stop idle VMs after* N minutes (default 480; a
+  running turn is never interrupted; stopping keeps files and installed apps; 0 never stops).
+- **Docker setup checklist** (Settings → Computers → *Setup*): install Docker, start it (with the command for your
+  system), download the desktop image once (with progress) and create/start the shared VM.
+- **Refresh button** next to *Save* in Settings → Apps → Composio: reconnects and reloads the connected apps.
+
+### Fixed
+
+- **Claude Code agents failing on Composio** with "needs permission": the CLI also loaded your own MCP servers (for
+  example a `brain` connector) that cannot be approved in a headless run. Agents now start the CLI with
+  `--strict-mcp-config`, so only OpenCue's tools (and the VMPal machines you picked) are visible, and OpenCue's own
+  Composio tools do the work.
+
 ## 0.3.4 — 2026-10-18
 
 Asked for as "0.3.3.01"; Cargo, Tauri and the updater only accept `major.minor.patch`, so it ships as 0.3.4.

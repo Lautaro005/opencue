@@ -444,3 +444,125 @@ async fn long_tool_output_goes_to_a_file_in_the_chosen_working_folder() {
         .join(".opencue")
         .exists());
 }
+
+const ASK_CALL: &[&str] = &[
+    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_ask","function":{"name":"ask_user","arguments":""}}]}}]}"#,
+    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"question\":\"Which color?\",\"options\":[\"blue\",\"red\"]}"}}]}}]}"#,
+];
+const TALK_CALL: &[&str] = &[
+    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_talk","function":{"name":"send_to_agent","arguments":""}}]}}]}"#,
+    r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"agent\":\"Helper\",\"message\":\"say hi\"}"}}]}}]}"#,
+];
+
+async fn agents_on(
+    core: &Arc<Core>,
+    first: &'static [&'static str],
+    names: &[&str],
+) -> Vec<opencue_core::models::Agent> {
+    let (base, _) = mock_llm_with(first, NOTED_REPLY).await;
+    let provider = core
+        .save_provider(
+            ProviderConfig {
+                id: String::new(),
+                kind: ProviderKind::OpenaiCompatible,
+                name: "Mock".into(),
+                base_url: Some(base),
+                default_model: Some("mock-1".into()),
+                enabled: true,
+                has_key: false,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let mut out = vec![];
+    for name in names {
+        out.push(
+            core.create_agent(NewAgent {
+                name: (*name).into(),
+                provider_id: Some(provider.id.clone()),
+                settings: Some(opencue_core::models::AgentSettings {
+                    auto_memory: false,
+                    auto_profile: false,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+            .await
+            .unwrap(),
+        );
+    }
+    out
+}
+
+async fn finish(
+    core: &Arc<Core>,
+    events: &mut tokio::sync::broadcast::Receiver<CoreEvent>,
+    id: &str,
+) {
+    tokio::time::timeout(Duration::from_secs(20), async {
+        while let Ok(ev) = events.recv().await {
+            if matches!(ev, CoreEvent::ThreadsChanged) && !core.is_busy(id) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("run finished");
+}
+
+#[tokio::test]
+async fn ask_user_waits_for_the_answer() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let agent = agents_on(&core, ASK_CALL, &["Asker"]).await.remove(0);
+    let mut events = core.subscribe();
+    core.send_message(&agent.id, "pick for me").await.unwrap();
+    // Answer the card when it shows up.
+    let asked = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Ok(CoreEvent::QuestionRequested { question }) = events.recv().await {
+                return question;
+            }
+        }
+    })
+    .await
+    .expect("a question was asked");
+    assert_eq!(asked.body, "Which color?");
+    assert_eq!(asked.options, ["blue", "red"]);
+    assert_eq!(asked.thread_id, agent.id);
+    assert!(core.answer_question(&asked.id, "blue").await);
+    finish(&core, &mut events, &agent.id).await;
+    let msgs = core.store.messages(&agent.id, 50).await.unwrap();
+    let tool = msgs.iter().find(|m| m.role == Role::Tool).unwrap();
+    assert_eq!(tool.content, "The user answered: blue");
+}
+
+#[tokio::test]
+async fn an_agent_can_talk_to_another_one_without_a_group() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let agents = agents_on(&core, TALK_CALL, &["Boss", "Helper"]).await;
+    let (boss, helper) = (&agents[0], &agents[1]);
+    let mut events = core.subscribe();
+    core.send_message(&boss.id, "ask Helper to say hi")
+        .await
+        .unwrap();
+    finish(&core, &mut events, &boss.id).await;
+
+    let msgs = core.store.messages(&boss.id, 50).await.unwrap();
+    let tool = msgs.iter().find(|m| m.role == Role::Tool).unwrap();
+    assert!(
+        tool.content.starts_with("[Helper]: Noted"),
+        "the reply comes back as the result: {}",
+        tool.content
+    );
+    // The exchange is kept as a conversation of its own, the same one from both sides.
+    let dm = opencue_core::bridge::dm_thread_id(&boss.id, &helper.id);
+    assert_eq!(dm, opencue_core::bridge::dm_thread_id(&helper.id, &boss.id));
+    let talk = core.store.messages(&dm, 50).await.unwrap();
+    assert_eq!(talk.len(), 2);
+    assert_eq!(talk[0].agent_id.as_deref(), Some(boss.id.as_str()));
+    assert_eq!(talk[0].content, "say hi");
+    assert_eq!(talk[1].agent_id.as_deref(), Some(helper.id.as_str()));
+}

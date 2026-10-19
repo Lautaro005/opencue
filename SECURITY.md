@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.3.4`) | ✅ |
+| Latest release (`0.3.x`, currently `0.3.5`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -44,7 +44,7 @@ In scope:
 - **Prompt injection that bypasses approvals** — content from a web page, email, shared file, webhook payload, tool
   result or MCP / Composio response that makes an agent run an action that should have required approval in "Ask first"
   mode (sending email, running a command or writing a file on the host or WSL, deleting memory, data-changing tools) —
-  including through `opencue mcp-serve`, which must refuse those actions for CLI agents in "Ask first" mode
+  including through `opencue mcp-serve`, which must ask the user (or refuse) for those actions for CLI agents in "Ask first" mode, and agent-to-agent chats, which must not let an agent skip another agent's approvals
 - **Sandbox escapes through OpenCue** — a command in the Docker or SPACE computer reaching the host or another agent's
   workspace because of how OpenCue mounts, names or talks to it; file tools escaping an agent's workspace folder
 - **Secret exposure** — API keys, email passwords, the SPACE token or the Composio key leaking from the OS keychain, the
@@ -94,7 +94,11 @@ Out of scope:
 - **Files** are stored under `files/<random id>/` with names reduced to a plain file name; `share_file` only reads paths
   inside the agent's workspace.
 - **CLI agents** reach OpenCue's tools through `opencue mcp-serve`, a stdio server started by the CLI itself (no network
-  port). Actions that need approval are refused in "Ask first" mode.
+  port), and the Claude CLI is started with `--strict-mcp-config` so it only sees OpenCue's server (plus the VMPal
+  machines you chose), never your other MCP servers. Actions that need approval are asked in the app: `mcp-serve`
+  writes a request into the local database and waits for your answer on the card; nothing is sent over the network.
+- **Agent-to-agent chats** (`send_to_agent` in 1:1 chats) run the other agent under its own settings and approvals;
+  the agent that answers cannot start further conversations.
 - **Updates** are downloaded from GitHub Releases and installed only if their minisign signature matches the public key
   built into the app. The install scripts download only from the official GitHub release over HTTPS.
 - **VMPal**: machines are MCP servers started from the `[mcp_servers.<name>]` TOML the user saves in Settings →

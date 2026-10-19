@@ -13,6 +13,7 @@ export function Composer({
   threadId,
   name,
   members,
+  mentionable,
   busy,
   onSend,
   onStop,
@@ -20,6 +21,8 @@ export function Composer({
   threadId: string;
   name: string;
   members: Agent[] | null;
+  /** Agents that can be @mentioned in a 1:1 chat (the agent asks them for help). */
+  mentionable?: Agent[];
   busy: boolean;
   onSend: (text: string, files?: File[]) => void;
   onStop: () => void;
@@ -110,7 +113,8 @@ export function Composer({
     });
   };
 
-  const candidates = members && mention ? members.filter((m) => m.name.toLowerCase().includes(mention.query.toLowerCase())) : [];
+  const pool = members ?? mentionable ?? null;
+  const candidates = pool && mention ? pool.filter((m) => m.name.toLowerCase().includes(mention.query.toLowerCase())) : [];
 
   const submit = () => {
     const v = text.trim();
@@ -138,7 +142,7 @@ export function Composer({
 
   const onChange = (v: string, caret: number) => {
     setText(v);
-    if (!members) return;
+    if (!pool) return;
     const m = v.slice(0, caret).match(/(?:^|\s)@([\w\-]*)$/);
     setMention(m ? { query: m[1], index: 0 } : null);
   };
@@ -231,7 +235,7 @@ export function Composer({
             </button>
             {plus && (
               <div className="animate-pop absolute bottom-10 left-0 z-20 w-60 rounded-xl border border-line bg-elevated p-1 shadow-pop">
-                {members?.map((a) => (
+                {pool?.map((a) => (
                   <button
                     key={a.id}
                     onClick={() => {

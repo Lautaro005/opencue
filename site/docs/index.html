@@ -102,7 +102,7 @@
         </table>
         <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client.</p>
         <h3>OpenCue tools for CLI agents</h3>
-        <p>CLI agents get OpenCue's own tools — memory, web, skills, their computer, files, email and Composio — through MCP: OpenCue hands the CLI a server started as <code>opencue mcp-serve --agent &lt;id&gt;</code>. Turn it off per agent in profile → <strong>Model</strong> → <em>OpenCue tools</em>. The CLI can't show OpenCue's approval cards, so in <em>Ask first</em> mode actions that need approval (sending email, commands on your computer, deleting memories…) are refused and the agent tells you instead. Your own MCP servers configured in OpenCue aren't passed on; configure those in the CLI itself.</p>
+        <p>CLI agents get OpenCue's own tools — memory, web, skills, their computer, files, email and Composio — through MCP: OpenCue hands the CLI a server started as <code>opencue mcp-serve --agent &lt;id&gt;</code>. Turn it off per agent in profile → <strong>Model</strong> → <em>OpenCue tools</em>. In <em>Ask first</em> mode actions that need approval (sending email, commands on your computer, deleting memories…) are put to you on the yellow card in the chat. Claude Code is started with only OpenCue's server, so your other MCP servers (configured in the CLI) aren't visible to the agent, and your own MCP servers configured in OpenCue aren't passed on.</p>
 
         <h2 id="profile">Profile &amp; avatar</h2>
         <p>Click an agent's face in its profile to change it in a floating window: ten faces, twelve shapes and a color row. The profile is organized like this:</p>
@@ -122,6 +122,8 @@
         </ul>
         <p><strong>About me</strong> (<strong>Settings → Account</strong>) is a description of yourself that every agent reads as background, together with your name. It stays on your computer and goes only to the model provider you chose.</p>
 
+        <h2 id="agents-talk">Agents talking to each other</h2>
+        <p>No group needed: in a 1:1 chat an agent can ask another one with <code>send_to_agent</code> (it knows the other agents' names) and gets the reply back. The chat shows a <strong>Chat with …</strong> pill that opens their conversation, with a <em>Back to …</em> button. Type <code>@</code> in the composer to pick the agent you want it to ask. The agent that answers can't pass the work on again.</p>
         <h2 id="groups">Group chats</h2>
         <p>Create one with <strong>+ → Create group chat</strong>. The first member is the owner.</p>
         <ul>
@@ -148,6 +150,7 @@
           <li>Deleting a memory</li>
           <li>MCP tools not marked read-only, and Composio actions that may change data</li>
         </ul>
+        <p>The request appears as a card with a moving yellow border and <strong>Accept</strong> / <strong>Reject</strong>. Agents can also ask you things with <code>ask_user</code>: a text field (and optional answer buttons) on the same kind of card. CLI agents get the same cards.</p>
         <p><strong>Fully autonomous</strong> runs everything without asking. Use it only with tools and content you trust.</p>
 
         <h2 id="apps">Apps, MCP &amp; Composio</h2>
@@ -229,6 +232,8 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
           <li>In <strong>Settings → Computers → SPACE</strong>, paste the API URL (for example <code>http://host:8080/v1</code>), the template to boot and the API token, then <strong>Test connection</strong>.</li>
         </ol>
         <p>Each agent gets its own sandbox, created on first use and woken up when it was suspended.</p>
+        <h3>Isolation, idle stop and setup (Docker)</h3>
+        <p><strong>Settings → Computers → Isolation</strong> chooses <em>Per agent</em> (each agent has its own container, folder and desktop) or <em>Shared</em> (one container, <code>opencue-shared</code>, and one desktop for every agent, kept in OpenCue's <code>shared</code> folder). <em>Stop idle VMs after</em> stops a VM nobody used for that many minutes (default 480, never while an agent is working, 0 never); files and installed apps stay in their folders and the VM starts again on its own. The <strong>Setup</strong> checklist walks through installing Docker, starting it, the one-time desktop download and creating the shared VM.</p>
         <h3>Desktop view (Docker)</h3>
         <p>Turn on <strong>Settings → Computers → Docker → Desktop view</strong> and Docker computers start from an image with a desktop you can watch and use in the <strong>Desktop</strong> tab of the Computer panel (widen it with the arrows icon). Programs the agent starts with <code>run_command</code> appear there (<code>DISPLAY=:1</code>).</p>
         <ul>

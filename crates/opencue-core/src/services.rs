@@ -58,6 +58,12 @@ pub struct ComputerSettings {
     pub has_space_token: bool,
     pub os: String,
     pub docker_available: bool,
+    /// One Docker computer for every agent ("shared") or one each.
+    #[serde(default)]
+    pub shared_vm: bool,
+    /// Minutes of inactivity before a Docker computer is stopped; 0 never.
+    #[serde(default)]
+    pub idle_minutes: u32,
     pub wsl_available: bool,
     pub webhook_port: u16,
 }
@@ -670,6 +676,20 @@ impl Core {
         Ok(self.composio_status().await)
     }
 
+    /// Reload what Composio has: reconnect the Connect server (so its tools and connected apps are
+    /// read again) or ask the REST API for the accounts.
+    pub async fn refresh_composio(self: &Arc<Self>) -> ComposioStatus {
+        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
+        if crate::composio::is_consumer_key(&key) {
+            if let Err(e) = self.sync_composio_connect().await {
+                let mut st = self.composio_status().await;
+                st.error = Some(format!("{e:#}"));
+                return st;
+            }
+        }
+        self.composio_status().await
+    }
+
     /// Apps that can be connected, most popular first; `query` narrows them by name.
     pub async fn composio_toolkits(
         &self,
@@ -738,6 +758,13 @@ impl Core {
             space_url: Some(get("space_url").await).filter(|s| !s.is_empty()),
             space_template: get("space_template").await,
             space_token: self.secrets.get(SPACE_KEY),
+            shared: {
+                let shared = get("vm_isolation").await == "shared";
+                self.shared_vm
+                    .store(shared, std::sync::atomic::Ordering::Relaxed);
+                shared
+            },
+            idle_minutes: get("vm_idle_minutes").await.parse().unwrap_or(480),
         }
     }
 
@@ -753,6 +780,8 @@ impl Core {
             has_space_token: cfg.space_token.is_some(),
             os: std::env::consts::OS.to_string(),
             docker_available: which::which("docker").is_ok(),
+            shared_vm: cfg.shared,
+            idle_minutes: cfg.idle_minutes,
             wsl_available: cfg!(windows) && which::which("wsl.exe").is_ok(),
             webhook_port: self.webhook_port().await,
         }
@@ -787,6 +816,17 @@ impl Core {
         self.store
             .set_setting("desktop_port", &s.desktop_port.to_string())
             .await?;
+        self.store
+            .set_setting(
+                "vm_isolation",
+                if s.shared_vm { "shared" } else { "per_agent" },
+            )
+            .await?;
+        self.store
+            .set_setting("vm_idle_minutes", &s.idle_minutes.to_string())
+            .await?;
+        self.shared_vm
+            .store(s.shared_vm, std::sync::atomic::Ordering::Relaxed);
         if let Some(t) = space_token {
             self.secrets.set(SPACE_KEY, t.trim())?;
         }
@@ -821,6 +861,11 @@ impl Core {
 
     /// Where an agent works: the folder the user picked, or its own folder inside OpenCue's data.
     pub fn workspace_for(&self, agent: &Agent) -> std::path::PathBuf {
+        if self.shared_vm.load(std::sync::atomic::Ordering::Relaxed)
+            && agent.settings.computer == crate::computer::ComputerBackend::Docker
+        {
+            return self.paths().shared_dir().join("workspace");
+        }
         match agent
             .settings
             .working_dir
@@ -838,25 +883,123 @@ impl Core {
         agent: &'a Agent,
         cfg: &'a ComputerConfig,
     ) -> Computer<'a> {
-        Computer {
+        let shared =
+            cfg.shared && agent.settings.computer == crate::computer::ComputerBackend::Docker;
+        let computer = Computer {
             backend: agent.settings.computer.clone(),
             agent_id: &agent.id,
+            shared,
             workspace: self.workspace_for(agent),
-            vm: agent.settings.vm.clone(),
-            vm_dir: match agent
-                .settings
-                .vm
-                .data_dir
-                .as_deref()
-                .map(str::trim)
-                .filter(|d| !d.is_empty())
-            {
-                Some(dir) => std::path::PathBuf::from(dir),
-                None => self.paths().agent_dir(&agent.id).join("vm"),
+            // The shared computer follows the global settings, not whichever agent starts it.
+            vm: if shared {
+                Default::default()
+            } else {
+                agent.settings.vm.clone()
+            },
+            vm_dir: if shared {
+                self.paths().shared_dir().join("vm")
+            } else {
+                match agent
+                    .settings
+                    .vm
+                    .data_dir
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|d| !d.is_empty())
+                {
+                    Some(dir) => std::path::PathBuf::from(dir),
+                    None => self.paths().agent_dir(&agent.id).join("vm"),
+                }
             },
             config: cfg,
             space_state: self.paths().agent_dir(&agent.id).join("space.json"),
+        };
+        self.computer_used
+            .lock()
+            .unwrap()
+            .insert(computer.container_name(), std::time::Instant::now());
+        computer
+    }
+
+    /// Stop Docker computers nobody has used for a while. Files and installed programs stay in
+    /// their folders, so the next command just starts the computer again.
+    pub(crate) fn start_idle_monitor(self: &Arc<Self>) {
+        if !self.primary
+            || self
+                .idle_started
+                .swap(true, std::sync::atomic::Ordering::SeqCst)
+        {
+            return;
         }
+        let core = self.clone();
+        tokio::spawn(async move {
+            // Loads the shared-VM switch so workspaces resolve correctly from the start.
+            core.computer_config().await;
+            loop {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                let minutes = core.computer_config().await.idle_minutes;
+                if minutes == 0 || !core.runs.lock().unwrap().is_empty() {
+                    continue;
+                }
+                for name in crate::computer::running_containers().await {
+                    let idle = {
+                        let mut used = core.computer_used.lock().unwrap();
+                        used.entry(name.clone())
+                            .or_insert_with(std::time::Instant::now)
+                            .elapsed()
+                    };
+                    if idle >= Duration::from_secs(minutes as u64 * 60) {
+                        crate::computer::stop_container(&name).await;
+                    }
+                }
+            }
+        });
+    }
+
+    /// Checklist for Settings → Computers: Docker installed, started, image downloaded, VM created.
+    pub async fn docker_setup(&self) -> crate::computer::DockerSetup {
+        let cfg = self.computer_config().await;
+        let container = if cfg.shared {
+            "opencue-shared"
+        } else {
+            "opencue-"
+        };
+        crate::computer::docker_setup(cfg.desktop_image(), container).await
+    }
+
+    /// Download the desktop image (one time); progress goes to the Computers log.
+    pub async fn docker_prepare(&self) -> anyhow::Result<()> {
+        let cfg = self.computer_config().await;
+        let sink = |stderr: bool, text: &str| {
+            self.emit(CoreEvent::ComputerOutput {
+                agent_id: "docker-setup".into(),
+                text: text.to_string(),
+                stderr,
+            })
+        };
+        crate::computer::pull_image(cfg.desktop_image(), &sink, &CancellationToken::new()).await
+    }
+
+    /// Create and start the shared Docker computer (the per-agent ones start on first use).
+    pub async fn docker_start_shared(&self) -> anyhow::Result<()> {
+        let cfg = self.computer_config().await;
+        anyhow::ensure!(cfg.shared, "turn on the shared VM first");
+        let computer = Computer {
+            backend: crate::computer::ComputerBackend::Docker,
+            agent_id: "shared",
+            shared: true,
+            workspace: self.paths().shared_dir().join("workspace"),
+            vm: Default::default(),
+            vm_dir: self.paths().shared_dir().join("vm"),
+            config: &cfg,
+            space_state: self.paths().shared_dir().join("space.json"),
+        };
+        computer.start().await?;
+        self.computer_used
+            .lock()
+            .unwrap()
+            .insert(computer.container_name(), std::time::Instant::now());
+        Ok(())
     }
 
     fn log_computer(&self, agent_id: &str, text: &str, stderr: bool) {

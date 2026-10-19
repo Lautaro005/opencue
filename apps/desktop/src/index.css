@@ -297,3 +297,31 @@ button {
     animation: none;
   }
 }
+
+/* A card the agent is waiting on: a yellow border that keeps moving. */
+@property --ask-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes ask-spin {
+  to {
+    --ask-angle: 360deg;
+  }
+}
+.ask-card {
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--warning-soft), var(--warning-soft)) padding-box,
+    conic-gradient(from var(--ask-angle), var(--warning), color-mix(in srgb, var(--warning) 12%, transparent) 28%, var(--warning) 52%, color-mix(in srgb, var(--warning) 12%, transparent) 78%, var(--warning)) border-box;
+  animation: ask-spin 3.2s linear infinite;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 10%, transparent);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ask-card {
+    animation: none;
+    border-color: var(--warning);
+    background: var(--warning-soft);
+  }
+}

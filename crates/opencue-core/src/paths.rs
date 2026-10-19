@@ -146,6 +146,11 @@ impl Paths {
         self.agent_dir(agent_id).join("workspace")
     }
 
+    /// Workspace and VM home of the Docker computer that all agents share.
+    pub fn shared_dir(&self) -> PathBuf {
+        self.root.join("shared")
+    }
+
     pub fn secrets_fallback_file(&self) -> PathBuf {
         self.root.join("secrets.json")
     }

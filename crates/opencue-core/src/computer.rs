@@ -71,6 +71,12 @@ pub struct ComputerConfig {
     pub space_url: Option<String>,
     pub space_template: String,
     pub space_token: Option<String>,
+    /// One Docker computer (and desktop) for every agent instead of one each.
+    #[serde(default)]
+    pub shared: bool,
+    /// Minutes without use after which a Docker computer is stopped; 0 never stops it.
+    #[serde(default)]
+    pub idle_minutes: u32,
 }
 
 /// linuxserver.io's Webtop: maintained, multi-arch, serves an XFCE desktop to the browser.
@@ -130,6 +136,8 @@ const MAX_CAPTURE: usize = 200_000;
 pub struct Computer<'a> {
     pub backend: ComputerBackend,
     pub agent_id: &'a str,
+    /// The Docker container is shared by every agent.
+    pub shared: bool,
     pub workspace: PathBuf,
     pub vm: VmOptions,
     /// Where the VM's home is kept on this machine.
@@ -141,6 +149,9 @@ pub struct Computer<'a> {
 
 impl Computer<'_> {
     pub fn container_name(&self) -> String {
+        if self.shared {
+            return "opencue-shared".into();
+        }
         format!(
             "opencue-{}",
             self.agent_id.chars().take(12).collect::<String>()
@@ -218,6 +229,11 @@ impl Computer<'_> {
             self.vm_dir.display(),
             self.workspace.display()
         )
+    }
+
+    /// Create and start the Docker container if it isn't running.
+    pub async fn start(&self) -> anyhow::Result<()> {
+        self.ensure_container().await
     }
 
     async fn ensure_container(&self) -> anyhow::Result<()> {
@@ -823,6 +839,109 @@ impl SpaceClient {
     }
 }
 
+/// Where the Docker setup stands, for the checklist in Settings → Computers.
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct DockerSetup {
+    /// The `docker` command exists.
+    pub installed: bool,
+    /// The Docker engine answers (Docker Desktop / the daemon is started).
+    pub running: bool,
+    /// The desktop image is already downloaded.
+    pub image_ready: bool,
+    /// "none" | "stopped" | "running" for the computer named `container`.
+    pub vm: String,
+}
+
+pub async fn docker_setup(image: &str, container: &str) -> DockerSetup {
+    let mut s = DockerSetup {
+        vm: "none".into(),
+        ..Default::default()
+    };
+    s.installed = which::which("docker").is_ok();
+    if !s.installed {
+        return s;
+    }
+    let ok = |args: Vec<String>| async move {
+        tokio::process::Command::new("docker")
+            .args(args)
+            .stdin(Stdio::null())
+            .output()
+            .await
+            .ok()
+    };
+    s.running = ok(vec!["info".into()])
+        .await
+        .is_some_and(|o| o.status.success());
+    if !s.running {
+        return s;
+    }
+    s.image_ready = ok(vec!["image".into(), "inspect".into(), image.into()])
+        .await
+        .is_some_and(|o| o.status.success());
+    if let Some(o) = ok(vec![
+        "inspect".into(),
+        "-f".into(),
+        "{{.State.Running}}".into(),
+        container.into(),
+    ])
+    .await
+    .filter(|o| o.status.success())
+    {
+        s.vm = if String::from_utf8_lossy(&o.stdout).trim() == "true" {
+            "running".into()
+        } else {
+            "stopped".into()
+        };
+    }
+    s
+}
+
+/// Download an image, reporting progress through `sink`.
+pub async fn pull_image(
+    image: &str,
+    sink: Sink<'_>,
+    cancel: &CancellationToken,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        which::which("docker").is_ok(),
+        "Docker is not installed. Install Docker Desktop or Docker Engine first."
+    );
+    let mut cmd = tokio::process::Command::new("docker");
+    cmd.args(["pull", image]);
+    let res = run_process(cmd, Duration::from_secs(60 * 60), sink, cancel).await?;
+    anyhow::ensure!(res.exit_code == 0, "docker pull failed");
+    Ok(())
+}
+
+/// Names of the running containers OpenCue created.
+pub async fn running_containers() -> Vec<String> {
+    let Ok(out) = tokio::process::Command::new("docker")
+        .args([
+            "ps",
+            "--filter",
+            "label=opencue=agent",
+            "--format",
+            "{{.Names}}",
+        ])
+        .output()
+        .await
+    else {
+        return vec![];
+    };
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty())
+        .collect()
+}
+
+pub async fn stop_container(name: &str) {
+    let _ = tokio::process::Command::new("docker")
+        .args(["stop", name])
+        .output()
+        .await;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -833,6 +952,7 @@ mod tests {
             Computer {
                 backend: ComputerBackend::Host,
                 agent_id: "a1",
+                shared: false,
                 workspace: dir.join("ws"),
                 vm: VmOptions::default(),
                 vm_dir: dir.join("vm"),
