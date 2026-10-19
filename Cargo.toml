@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/opencue-core", "crates/opencue-cli", "apps/desktop/src-tauri"]
 
 [workspace.package]
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 license-file = "LICENSE"
 repository = "https://github.com/Lautaro005/opencue"

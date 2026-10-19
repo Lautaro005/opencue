@@ -73,20 +73,10 @@ export function EmailPage({ agent }: { agent: Agent }) {
   return (
     <Page>
       <Hint>{t("email.hint", { name: agent.name })}</Hint>
-      <Field label={t("email.provider")}>
-        <Select
-          value={acc.kind}
-          onChange={(v) => set({ kind: v as EmailAccount["kind"] })}
-          options={[
-            { value: "imap", label: t("email.imap") },
-            { value: "composio_gmail", label: t("email.composioGmail") },
-          ]}
-        />
-      </Field>
       <Field label={t("email.address")}>
         <Input value={acc.address} onChange={(e) => set({ address: e.target.value })} placeholder="agent@example.com" />
       </Field>
-      {acc.kind === "imap" ? (
+      {(
         <>
           <Field label={t("email.password")} hint={acc.has_password ? t("email.passwordSaved") : t("email.passwordHint")}>
             <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={acc.has_password ? "••••••••" : ""} />
@@ -119,8 +109,6 @@ export function EmailPage({ agent }: { agent: Agent }) {
             </div>
           )}
         </>
-      ) : (
-        <Hint>{t("email.composioHint")}</Hint>
       )}
       {status && <p className={cx("text-[12px]", status.ok ? "text-success" : "text-danger")}>{status.text}</p>}
       <div className="flex gap-2">
@@ -229,7 +217,7 @@ const CPU_CHOICES = [1, 2, 4, 8];
 function LocalVmOptions({ agent }: { agent: Agent }) {
   const { t } = useTranslation();
   const showToast = useStore((s) => s.showToast);
-  const vm = agent.settings.vm ?? { desktop: null, memory_mb: null, cpus: null, data_dir: null };
+  const vm = agent.settings.vm ?? { desktop: null, memory_mb: null, cpus: null, data_dir: null, runtime: null };
   const [fallback, setFallback] = useState("");
   const [typed, setTyped] = useState(vm.data_dir ?? "");
   useEffect(() => void api.defaultVmFolder(agent.id).then(setFallback), [agent.id]);
@@ -253,6 +241,18 @@ function LocalVmOptions({ agent }: { agent: Agent }) {
         <span className="text-[12.5px] font-medium text-muted">{t("computer.vm.title")}</span>
         <Hint>{t("computer.vm.hint", { name: agent.name })}</Hint>
       </div>
+      <Row label={t("computer.vm.runtime")} hint={t("computer.vm.runtimeHint")}>
+        <Select
+          value={vm.runtime ?? "default"}
+          onChange={(v) => void save({ runtime: v === "default" ? null : (v as "docker" | "podman") })}
+          options={[
+            { value: "default", label: t("computer.vm.runtimeDefault") },
+            { value: "docker", label: "Docker" },
+            { value: "podman", label: "Podman" },
+          ]}
+          className="w-44"
+        />
+      </Row>
       <Row label={t("computer.vm.desktop")} hint={t("computer.vm.desktopHint")}>
         <Select
           value={vm.desktop === null ? "default" : vm.desktop ? "on" : "off"}

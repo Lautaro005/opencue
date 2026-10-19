@@ -317,6 +317,16 @@ pub fn stop_thread(state: State<'_, AppState>, thread_id: String) {
 }
 
 #[tauri::command]
+pub async fn reset_thread(state: State<'_, AppState>, thread_id: String) -> R<()> {
+    state.core.reset_thread(&thread_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub fn set_call_mode(state: State<'_, AppState>, thread_id: String, on: bool) {
+    state.core.set_call_mode(&thread_id, on);
+}
+
+#[tauri::command]
 pub async fn clear_thread(state: State<'_, AppState>, thread_id: String) -> R<()> {
     state.core.clear_thread(&thread_id).await.map_err(e)
 }
@@ -417,7 +427,7 @@ use opencue_core::computer::{CommandResult, FileEntry};
 use opencue_core::email::EmailAccount;
 use opencue_core::skills::{Skill, SkillSummary};
 use opencue_core::voice::Voice;
-use opencue_core::{ComposioStatus, ComputerSettings, VoiceSettings};
+use opencue_core::{ComputerSettings, VoiceSettings};
 
 #[tauri::command]
 pub fn list_skills(state: State<'_, AppState>) -> Vec<SkillSummary> {
@@ -519,25 +529,33 @@ pub async fn test_email(state: State<'_, AppState>, agent_id: String) -> R<()> {
     state.core.test_email(&agent_id).await.map_err(e)
 }
 
-// ---------- Composio ----------
+// ---------- catalog (apps that sign in with OAuth) ----------
 
 #[tauri::command]
-pub async fn composio_status(state: State<'_, AppState>) -> R<ComposioStatus> {
-    Ok(state.core.composio_status().await)
-}
-
-#[tauri::command]
-pub async fn save_composio(
+pub async fn catalog_status(
     state: State<'_, AppState>,
-    api_key: Option<String>,
-    user_id: String,
-) -> R<ComposioStatus> {
-    state.core.save_composio(api_key, user_id).await.map_err(e)
+) -> R<Vec<opencue_core::catalog::CatalogStatus>> {
+    Ok(state.core.catalog_status().await)
+}
+
+/// Returns the sign-in page to open in the browser; the app finishes the connection itself.
+#[tauri::command]
+pub async fn catalog_connect(
+    state: State<'_, AppState>,
+    slug: String,
+    client_id: Option<String>,
+    client_secret: Option<String>,
+) -> R<String> {
+    state
+        .core
+        .catalog_connect(&slug, client_id, client_secret)
+        .await
+        .map_err(e)
 }
 
 #[tauri::command]
-pub async fn refresh_composio(state: State<'_, AppState>) -> R<ComposioStatus> {
-    Ok(state.core.refresh_composio().await)
+pub async fn catalog_disconnect(state: State<'_, AppState>, slug: String) -> R<()> {
+    state.core.catalog_disconnect(&slug).await.map_err(e)
 }
 
 // ---------- questions from agents ----------
@@ -639,14 +657,6 @@ pub async fn reset_computer(state: State<'_, AppState>, agent_id: String) -> R<(
     state.core.reset_computer(&agent_id).await.map_err(e)
 }
 
-#[tauri::command]
-pub async fn composio_toolkits(
-    state: State<'_, AppState>,
-    query: String,
-) -> R<Vec<opencue_core::composio::ComposioToolkit>> {
-    state.core.composio_toolkits(&query).await.map_err(e)
-}
-
 /// The folder an agent works in right now (its own, or the one the user picked).
 #[tauri::command]
 pub async fn agent_workspace(state: State<'_, AppState>, id: String) -> R<String> {
@@ -675,11 +685,6 @@ pub fn default_workspace(state: State<'_, AppState>, id: String) -> String {
         .agent_workspace(&id)
         .display()
         .to_string()
-}
-
-#[tauri::command]
-pub async fn composio_connect(state: State<'_, AppState>, toolkit: String) -> R<String> {
-    state.core.composio_connect(&toolkit).await.map_err(e)
 }
 
 #[tauri::command]

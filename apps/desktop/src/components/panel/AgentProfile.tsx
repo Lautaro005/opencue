@@ -13,6 +13,7 @@ import { AvatarPickerDialog } from "./AvatarPicker";
 import { Row } from "./Section";
 import { AutomationsSection, ComputerPage, EmailPage, SkillsPage, VoicePage } from "./AgentPages";
 import { SharedFiles } from "./SharedFiles";
+import { useCatalog } from "../settings/CatalogSection";
 import { useResizable } from "../ui/Resizer";
 
 type Page = "main" | "model" | "apps" | "skills" | "instructions" | "soul" | "memory" | "voice" | "permissions" | "email" | "computer" | "files" | "folder";
@@ -297,6 +298,7 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
   const openSettings = useStore((s) => s.openSettings);
   const [servers, setServers] = useState<McpServerConfig[]>([]);
   const [status, setStatus] = useState<McpServerStatus[]>([]);
+  const { apps: catalog } = useCatalog();
 
   useEffect(() => {
     const load = () => {
@@ -309,7 +311,7 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
   }, []);
 
   const s = agent.settings;
-  const enabledServers = servers.filter((x) => x.enabled && !x.id.startsWith("vmpal:") && !x.id.startsWith("composio:"));
+  const enabledServers = servers.filter((x) => x.enabled && !x.id.startsWith("vmpal:"));
   const toggleServer = (id: string, on: boolean) => {
     const base = s.mcp_all ? enabledServers.map((x) => x.id) : s.mcp_servers;
     const next = on ? [...new Set([...base, id])] : base.filter((x) => x !== id);
@@ -321,9 +323,25 @@ function AppsSection({ agent, onChange }: { agent: Agent; onChange: (s: Partial<
       <Row label={t("profile.webAccess")}>
         <Toggle checked={s.web_access} onChange={(v) => onChange({ web_access: v })} label={t("profile.webAccess")} />
       </Row>
-      <Row label={t("profile.composio")} hint={t("profile.composioHint")}>
-        <Toggle checked={s.composio} onChange={(v) => onChange({ composio: v })} label={t("profile.composio")} />
-      </Row>
+      <div className="mt-2 mb-1 text-[12px] font-medium text-muted">{t("profile.catalog")}</div>
+      <div className="space-y-0.5">
+        {catalog.map((a) => (
+          <div key={a.slug} className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-hover">
+            <span className={cx("size-1.5 shrink-0 rounded-full", a.state === "connected" ? "bg-success" : a.state === "reconnect" ? "bg-warning" : "bg-danger")} />
+            <span className="min-w-0 flex-1 truncate text-[13px]">{a.name}</span>
+            {a.state !== "connected" ? (
+              <button onClick={() => openSettings("apps")} className="text-[11px] text-muted hover:text-accent">
+                {t(`settings.catalog.state.${a.state}`)}
+              </button>
+            ) : null}
+            <Toggle
+              checked={s.catalog.includes(a.slug)}
+              onChange={(v) => onChange({ catalog: v ? [...new Set([...s.catalog, a.slug])] : s.catalog.filter((x) => x !== a.slug) })}
+              label={a.name}
+            />
+          </div>
+        ))}
+      </div>
       <div className="mt-2 mb-1 text-[12px] font-medium text-muted">MCP</div>
       {enabledServers.length === 0 ? (
         <button onClick={() => openSettings("apps")} className="mt-1 text-left text-[12px] text-muted hover:text-accent">

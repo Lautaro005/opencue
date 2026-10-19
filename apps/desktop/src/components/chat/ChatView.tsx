@@ -1,11 +1,10 @@
-import { useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { confirmDialog } from "../../lib/confirm";
-import { Eraser, Monitor, MoreHorizontal, SquareUser, Users } from "lucide-react";
+import { Monitor, Phone, SquareUser, Users } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { AvatarView, GroupAvatar } from "../AvatarView";
-import { IconButton, Typing, useClickOutside } from "../ui";
+import { IconButton, Typing } from "../ui";
 import { Logo } from "../Sidebar";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
@@ -26,9 +25,8 @@ export function ChatView() {
   const working = useStore((s) => (selected ? s.working[selected] ?? NO_WORKERS : NO_WORKERS));
   const messageCount = useStore((s) => (selected ? s.messages[selected]?.length ?? 0 : 0));
   const dm = useStore((s) => s.dm);
-  const [menu, setMenu] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useClickOutside(menuRef, () => setMenu(false), menu);
+  const startCall = useStore((s) => s.startCall);
+  const calling = useStore((s) => s.call?.threadId === s.selected);
 
   const agent = selected ? agents[selected] : undefined;
   const group = selected ? groups[selected] : undefined;
@@ -71,25 +69,11 @@ export function ChatView() {
           </span>
         </button>
         <div className="ml-auto flex items-center gap-0.5">
-          <div className="relative" ref={menuRef}>
-            <IconButton label="More" onClick={() => setMenu((v) => !v)} active={menu}>
-              <MoreHorizontal size={18} />
+          {agent && (
+            <IconButton label={t("call.start")} active={calling} onClick={() => startCall(agent.id)}>
+              <Phone size={18} />
             </IconButton>
-            {menu && (
-              <div className="animate-pop absolute right-0 top-9 z-30 w-56 rounded-xl border border-line bg-elevated p-1 shadow-pop">
-                <button
-                  disabled={messageCount === 0}
-                  onClick={async () => {
-                    setMenu(false);
-                    if (await confirmDialog(t("chat.clearConfirm"), { confirmLabel: t("chat.clear") })) void api.clearThread(selected).then(() => useStore.getState().loadMessages(selected));
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13.5px] hover:bg-hover disabled:opacity-40"
-                >
-                  <Eraser size={15} className="text-muted" /> {t("chat.clear")}
-                </button>
-              </div>
-            )}
-          </div>
+          )}
           {agent && (
             <IconButton label={t("computer.title")} active={panel === "computer"} onClick={() => setPanel(panel === "computer" ? null : "computer")}>
               <Monitor size={18} />

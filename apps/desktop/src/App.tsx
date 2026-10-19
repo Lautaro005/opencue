@@ -10,6 +10,7 @@ import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/Creat
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
 import { ConfirmHost, ContextMenuHost, TooltipHost } from "./components/ui/Overlays";
+import { CallWindow } from "./components/CallWindow";
 import { Walkthrough } from "./components/dialogs/Walkthrough";
 import { checkForUpdate, onTrayAction } from "./lib/api";
 
@@ -87,6 +88,7 @@ export default function App() {
       <ConfirmHost />
       <TooltipHost />
       <ContextMenuHost />
+      <CallWindow />
       {toast && (
         <div role="status" className="animate-pop fixed bottom-24 left-1/2 z-[60] flex max-w-[560px] -translate-x-1/2 items-start gap-3 rounded-xl border border-line bg-elevated px-4 py-2.5 text-[13px] shadow-pop">
           <span className="selectable line-clamp-4 flex-1">{toast}</span>

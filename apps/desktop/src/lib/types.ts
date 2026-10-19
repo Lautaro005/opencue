@@ -13,7 +13,8 @@ export interface AgentSettings {
   temperature: number | null;
   computer: ComputerBackend;
   skills: boolean;
-  composio: boolean;
+  /** Catalog apps (by slug) this agent can use. */
+  catalog: string[];
   voice_id: string | null;
   cli_tools: boolean;
   vmpal: string[];
@@ -29,6 +30,8 @@ export interface VmOptions {
   cpus: number | null;
   /** Folder that keeps the VM's home; null uses a folder inside OpenCue's data. */
   data_dir: string | null;
+  /** "docker" | "podman"; null follows Settings → Computers. */
+  runtime: "docker" | "podman" | null;
 }
 
 export type ComputerBackend = "none" | "host" | "docker" | "wsl" | "space" | "vmpal";
@@ -236,12 +239,23 @@ export interface DockerSetup {
   vm: "none" | "stopped" | "running";
 }
 
+export interface CatalogStatus {
+  slug: string;
+  name: string;
+  description: string;
+  /** red: disconnected, yellow: reconnect, green: connected */
+  state: "disconnected" | "reconnect" | "connected";
+  error: string | null;
+  tools: number;
+}
+
 export type CoreEvent =
   | { type: "message"; message: Message }
   | { type: "delta"; thread_id: string; message_id: string; agent_id: string; text: string }
   | { type: "busy"; thread_id: string; agent_id: string; busy: boolean }
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_resolved"; approval_id: string; approved: boolean }
+  | { type: "catalog_changed"; slug: string; connected: boolean; error: string | null }
   | { type: "question_requested"; question: Question }
   | { type: "question_resolved"; question_id: string; answer: string }
   | { type: "threads_changed" }
@@ -289,7 +303,7 @@ export interface AutomationInput {
   enabled: boolean;
 }
 
-export type EmailKind = "imap" | "composio_gmail";
+export type EmailKind = "imap";
 
 export interface EmailAccount {
   agent_id: string;
@@ -305,23 +319,6 @@ export interface EmailAccount {
   has_password: boolean;
 }
 
-export interface ComposioToolkit {
-  slug: string;
-  name: string;
-  description: string;
-  logo: string;
-}
-
-export interface ComposioStatus {
-  configured: boolean;
-  user_id: string;
-  accounts: { id: string; toolkit: string; status: string }[];
-  error: string | null;
-  /** "none", "project" (ak_ key) or "connect" (ck_ key through Composio Connect). */
-  mode: "none" | "project" | "connect";
-  tools: number;
-}
-
 export interface ComputerSettings {
   docker_image: string;
   docker_desktop: boolean;
@@ -332,6 +329,9 @@ export interface ComputerSettings {
   has_space_token: boolean;
   os: string;
   docker_available: boolean;
+  podman_available: boolean;
+  /** The container engine behind Local VMs. */
+  runtime: "docker" | "podman";
   /** One Docker computer for every agent instead of one each. */
   shared_vm: boolean;
   /** Minutes of inactivity before a Docker computer stops; 0 never. */

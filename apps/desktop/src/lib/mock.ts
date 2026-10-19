@@ -19,12 +19,12 @@ const defaults = {
   temperature: null,
   computer: "none" as const,
   skills: true,
-  composio: false,
+  catalog: [] as string[],
   voice_id: null,
   cli_tools: true,
   vmpal: [] as string[],
   working_dir: null as string | null,
-  vm: { desktop: null, memory_mb: null, cpus: null, data_dir: null } as { desktop: boolean | null; memory_mb: number | null; cpus: number | null; data_dir: string | null },
+  vm: { desktop: null, memory_mb: null, cpus: null, data_dir: null, runtime: null } as { desktop: boolean | null; memory_mb: number | null; cpus: number | null; data_dir: string | null; runtime: "docker" | "podman" | null },
 };
 
 /** Files "uploaded" in the preview, kept as data URLs. */
@@ -180,7 +180,18 @@ const automations: Automation[] = [
 const emails: Record<string, EmailAccount> = {
   a2: { agent_id: "a2", kind: "imap", address: "recordatorios@example.com", display_name: "Recordatorios", imap_host: "imap.example.com", imap_port: 993, smtp_host: "smtp.example.com", smtp_port: 465, username: null, last_seen_uid: 0, has_password: true },
 };
-const computer = { docker_desktop: false, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, shared_vm: false, idle_minutes: 480, wsl_available: false, webhook_port: 7777 };
+const catalogApps: { slug: string; name: string; description: string; state: "disconnected" | "reconnect" | "connected" }[] = [
+  { slug: "gmail", name: "Gmail", description: "Search, read and draft email", state: "connected" },
+  { slug: "googledrive", name: "Google Drive", description: "Search, read and upload files", state: "disconnected" },
+  { slug: "googlecalendar", name: "Google Calendar", description: "See and manage your schedule", state: "reconnect" },
+  { slug: "notion", name: "Notion", description: "Search and edit pages and databases", state: "connected" },
+  { slug: "trello", name: "Trello", description: "Read and update boards and cards", state: "disconnected" },
+  { slug: "github", name: "GitHub", description: "Repositories, issues and pull requests", state: "disconnected" },
+  { slug: "supabase", name: "Supabase", description: "Databases, auth and storage", state: "disconnected" },
+  { slug: "vercel", name: "Vercel", description: "Projects and deployments", state: "disconnected" },
+  { slug: "outlook", name: "Outlook", description: "Mail and calendar in Microsoft 365", state: "disconnected" },
+];
+const computer = { docker_desktop: false, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, podman_available: true, runtime: "docker", shared_vm: false, idle_minutes: 480, wsl_available: false, webhook_port: 7777 };
 const dockerState = { installed: true, running: true, image_ready: false, vm: "none" as const };
 let vmpalToml = "";
 const vmpalMachines = () => [...vmpalToml.matchAll(/^\[mcp_servers\.([^\]\s]+)\]/gm)].map((m) => ({ name: m[1], command: "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine", args: ["--mcp", "E7D-preview"], env: {} }));
@@ -188,7 +199,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.5-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.6-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -284,7 +295,6 @@ const handlers: Record<string, (a: Args) => unknown> = {
     return "about:blank";
   },
   reset_computer: () => undefined,
-  composio_connect: ({ toolkit }) => `https://app.composio.dev/?connect=${encodeURIComponent(toolkit)}`,
   stop_thread: ({ threadId }) => void busy.delete(threadId),
   clear_thread: ({ threadId }) => {
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].thread_id === threadId) messages.splice(i, 1);
@@ -300,7 +310,6 @@ const handlers: Record<string, (a: Args) => unknown> = {
   docker_start_shared: () => {
     (dockerState as { vm: string }).vm = "running";
   },
-  refresh_composio: () => ({ configured: true, user_id: "", accounts: [{ id: "gmail", toolkit: "gmail", status: "ACTIVE" }, { id: "trello", toolkit: "trello", status: "ACTIVE" }], error: null, mode: "connect", tools: 7 }),
   provider_catalog: () => catalog,
   list_providers: () => providers,
   save_provider: ({ provider, apiKey }) => {
@@ -366,26 +375,27 @@ const handlers: Record<string, (a: Args) => unknown> = {
   save_email_account: ({ account, password }) => (emails[account.agent_id] = { ...account, has_password: account.has_password || !!password }),
   delete_email_account: ({ agentId }) => void delete emails[agentId],
   test_email: () => undefined,
-  composio_toolkits: ({ query }) =>
-    [
-      ["gmail", "Gmail", "Read, send and organize email"],
-      ["googlecalendar", "Google Calendar", "Create and manage events"],
-      ["slack", "Slack", "Send messages and read channels"],
-      ["notion", "Notion", "Pages, databases and notes"],
-      ["github", "GitHub", "Repos, issues and pull requests"],
-      ["googledrive", "Google Drive", "Files and folders"],
-      ["trello", "Trello", "Boards, lists and cards"],
-      ["linear", "Linear", "Issues and projects"],
-      ["hubspot", "HubSpot", "CRM contacts and deals"],
-      ["stripe", "Stripe", "Payments and customers"],
-    ]
-      .map(([slug, name, description]) => ({ slug, name, description, logo: "" }))
-      .filter((a) => !query || a.slug.includes(String(query).toLowerCase()) || a.name.toLowerCase().includes(String(query).toLowerCase())),
+  catalog_status: () => catalogApps.map((a) => ({ ...a, tools: a.state === "connected" ? 9 : 0, error: a.state === "reconnect" ? "The sign-in expired" : null })),
+  catalog_connect: ({ slug }) => {
+    const a = catalogApps.find((x) => x.slug === slug);
+    if (a) setTimeout(() => {
+      a.state = "connected";
+      emit({ type: "catalog_changed", slug: String(slug), connected: true, error: null });
+    }, 1200);
+    return `https://accounts.example.com/oauth?app=${slug}`;
+  },
+  catalog_disconnect: ({ slug }) => {
+    const a = catalogApps.find((x) => x.slug === slug);
+    if (a) a.state = "disconnected";
+  },
+  reset_thread: ({ threadId }) => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].thread_id === threadId) messages.splice(i, 1);
+    emit({ type: "threads_changed" });
+  },
+  set_call_mode: () => undefined,
   agent_workspace: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/workspace`,
   default_vm_folder: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/vm`,
   default_workspace: ({ id }) => `/Users/you/Library/Application Support/opencue/agents/${id}/workspace`,
-  composio_status: () => ({ configured: false, user_id: "", accounts: [], error: null, mode: "none", tools: 0 }),
-  save_composio: ({ apiKey, userId }) => ({ configured: true, user_id: userId, accounts: [{ id: "gmail", toolkit: "gmail", status: "ACTIVE" }], error: null, mode: String(apiKey ?? "").startsWith("ck_") ? "connect" : "project", tools: String(apiKey ?? "").startsWith("ck_") ? 7 : 0 }),
   computer_settings: () => computer,
   save_computer_settings: ({ settings }) => Object.assign(computer, settings),
   test_space: () => 0,

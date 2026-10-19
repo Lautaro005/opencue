@@ -2,6 +2,40 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.3.6 — 2026-10-19
+
+### New
+
+- **Podman as an alternative to Docker** for Local VMs: a switch in Settings → Computers → *Container engine*. The
+  setup checklist follows it (install Podman; on macOS and Windows create and start the Podman machine; download the
+  desktop; create the VM), short image names are spelled out for Podman (`docker.io/library/…`), and each agent can
+  choose its own engine in its Computer page (default: follow the setting).
+- **Catalog** (Settings → Apps → Catalog) replaces Composio: Gmail, Google Drive, Google Calendar, Notion, Trello,
+  GitHub, Supabase, Vercel and Outlook, each a card with a name and a description and a **moving border: red** (not
+  connected), **yellow** (connect again) or **green** (connected). Touching a card opens the browser to sign in with
+  OAuth and the app comes back to the front when it is done. Tokens are kept in `oauth/<app>.json` (mode `0600`) and
+  refreshed by themselves. For providers that don't register apps automatically (Google, Microsoft, GitHub) the card
+  asks for a client ID you registered. In an agent's profile → Apps, a **Catalog apps** list turns each app on or off;
+  CLI agents (Claude Code, Codex) get the apps through OpenCue's tools.
+- **The terminal opens by itself**: when an agent runs a command on its computer (Docker/Podman VM, SPACE, WSL, this
+  computer) the Computer panel opens on the terminal and shows the commands as they run (General → *Open the computer
+  when an agent uses it*).
+- **Right-click an agent or group** in the sidebar: Rename (in place), Pin / Unpin (pinned chats go first), Clear chat,
+  Reset chat (also forgets the summary, the plan and the agent's chats with other agents) and Delete.
+- **Voice calls**: the phone icon in an agent's header replaces the "⋯" menu and opens a phone-sized floating window
+  (draggable). You just talk: the app listens (voice-activity detection), transcribes, sends it to the agent, reads the
+  reply aloud and listens again; talking over the agent interrupts it. Mute, speaker and hang up buttons, a timer and
+  live captions. While a call lasts the agent is told to answer like speech. It uses ElevenLabs (Settings → Voice) or,
+  without a key, the system's speech recognition and voice when the webview offers them.
+
+### Removed
+
+- **Composio** (its Apps card, the `composio_*` tools, the Gmail-through-Composio email kind and its key). Its MCP server
+  and key are deleted on first start.
+- **The system keychain**: it asked for permission over and over. API keys, email passwords and tokens now live in a
+  `0600` `secrets.json` in the data folder. **Keys saved in the keychain by earlier versions are not read any more:
+  enter them again** (Settings → Providers, Voice, Computers, and each agent's email).
+
 ## 0.3.5 — 2026-10-19
 
 Asked for as "0.3.4.1" (fixes); Cargo, Tauri and the updater only accept `major.minor.patch`, so it ships as 0.3.5.

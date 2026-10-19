@@ -20,7 +20,7 @@ Follow the official documentation: <https://space.docs.perplexity.ai/>. When the
 ## Connect from OpenCue
 
 1. **Settings → Computers → SPACE**: paste the API URL, the template (defaults to `seed:latest`) and the token, then
-   **Test connection**. The token is stored in the system keychain.
+   **Test connection**. The token is stored on this computer (`secrets.json`, mode `0600`).
 2. In an agent's profile → **Computer**, choose **SPACE microVM**.
 3. Open the Computer panel (screen icon in the chat header) to watch commands and browse files.
 

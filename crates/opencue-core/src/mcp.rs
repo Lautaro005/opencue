@@ -30,13 +30,9 @@ struct Slot {
 #[derive(Default, Clone)]
 pub struct McpManager {
     slots: Arc<RwLock<HashMap<String, Slot>>>,
-    /// Where keychain-held secrets are read from (see [`KEYCHAIN_PREFIX`]).
-    secrets: Option<Arc<crate::secrets::Secrets>>,
+    /// Where catalog apps keep their OAuth tokens.
+    oauth_dir: Option<std::path::PathBuf>,
 }
-
-/// A header value written `keychain:<name>` is replaced by that secret when the server connects,
-/// so the key itself never sits in the database.
-pub const KEYCHAIN_PREFIX: &str = "keychain:";
 
 /// A tool exposed to agents as `mcp__<server>__<tool>`.
 #[derive(Debug, Clone)]
@@ -90,24 +86,11 @@ pub fn sanitize(name: &str) -> String {
 }
 
 impl McpManager {
-    pub fn new(secrets_fallback: std::path::PathBuf) -> Self {
+    pub fn new(oauth_dir: std::path::PathBuf) -> Self {
         Self {
             slots: Arc::default(),
-            secrets: Some(Arc::new(crate::secrets::Secrets::new(secrets_fallback))),
+            oauth_dir: Some(oauth_dir),
         }
-    }
-
-    fn resolve_headers(&self, cfg: &McpServerConfig) -> BTreeMap<String, String> {
-        cfg.headers
-            .iter()
-            .map(|(k, v)| {
-                let value = v
-                    .strip_prefix(KEYCHAIN_PREFIX)
-                    .and_then(|name| self.secrets.as_ref()?.get(name))
-                    .unwrap_or_else(|| v.clone());
-                (k.clone(), value)
-            })
-            .collect()
     }
 
     pub async fn connect(&self, cfg: &McpServerConfig) {
@@ -117,12 +100,11 @@ impl McpManager {
             slot.state = "connecting".into();
             slot.error = None;
         }
-        let resolved = McpServerConfig {
-            headers: self.resolve_headers(cfg),
-            ..cfg.clone()
-        };
-        let result =
-            tokio::time::timeout(std::time::Duration::from_secs(60), open(&resolved)).await;
+        let result = tokio::time::timeout(
+            std::time::Duration::from_secs(60),
+            open(cfg, self.oauth_dir.as_deref()),
+        )
+        .await;
         let mut slots = self.slots.write().await;
         let slot = slots.entry(cfg.id.clone()).or_default();
         match result {
@@ -237,7 +219,10 @@ impl McpManager {
     }
 }
 
-async fn open(cfg: &McpServerConfig) -> anyhow::Result<Connection> {
+async fn open(
+    cfg: &McpServerConfig,
+    oauth_dir: Option<&std::path::Path>,
+) -> anyhow::Result<Connection> {
     let client: Client = match cfg.transport {
         McpTransport::Stdio => {
             let program = cfg
@@ -265,6 +250,22 @@ async fn open(cfg: &McpServerConfig) -> anyhow::Result<Connection> {
                 .as_deref()
                 .filter(|u| !u.is_empty())
                 .ok_or_else(|| anyhow::anyhow!("missing URL"))?;
+            if let (Some(slug), Some(dir)) = (crate::catalog::slug_of(&cfg.id), oauth_dir) {
+                // A catalog app: requests are signed with the tokens from its browser sign-in.
+                let manager = crate::catalog::authorized_manager(
+                    url,
+                    crate::catalog::credentials_path(dir, slug),
+                )
+                .await?;
+                let client =
+                    rmcp::transport::auth::AuthClient::new(reqwest::Client::new(), manager);
+                let config = StreamableHttpClientTransportConfig::with_uri(url.to_string());
+                let client: Client =
+                    ().serve(StreamableHttpClientTransport::with_client(client, config))
+                        .await?;
+                let tools = client.list_all_tools().await?;
+                return Ok(Connection { client, tools });
+            }
             let mut config = StreamableHttpClientTransportConfig::with_uri(url.to_string());
             let mut headers = HashMap::new();
             for (k, v) in &cfg.headers {

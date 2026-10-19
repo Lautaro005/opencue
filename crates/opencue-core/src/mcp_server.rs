@@ -1,5 +1,5 @@
 //! OpenCue as an MCP server over stdio, so agents backed by the `claude` / `codex` CLIs can use
-//! OpenCue's own tools (memory, web, skills, computer, files, email, Composio). The CLI provider
+//! OpenCue's own tools (memory, web, skills, computer, files, email, connected apps). The CLI provider
 //! starts it as `opencue mcp-serve --agent <id>`; the desktop binary and `opencue-cli` both serve it.
 
 use std::sync::Arc;

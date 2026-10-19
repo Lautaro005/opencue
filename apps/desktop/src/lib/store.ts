@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { api, onCoreEvent, filesToAttachments, type UpdateInfo } from "./api";
 import { onMessageForVoice } from "./voice";
+import i18n from "../i18n";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | null;
@@ -34,6 +35,8 @@ interface State {
   /** The conversation between two agents being looked at, if any (the chat it came from is `a`). */
   dm: { a: string; b: string } | null;
   toast: string | null;
+  /** The voice call in progress, if any. */
+  call: { threadId: string; agentId: string } | null;
   /** Models each provider reports, by provider id. */
   models: Record<string, ModelList>;
   /** A newer release found by the updater, if any. */
@@ -44,6 +47,8 @@ interface State {
   init: () => Promise<void>;
   refresh: () => Promise<void>;
   select: (id: string | null) => void;
+  startCall: (agentId: string) => void;
+  endCall: () => void;
   openDm: (a: string, b: string) => void;
   closeDm: () => void;
   setPanel: (p: Panel) => void;
@@ -89,6 +94,7 @@ export const useStore = create<State>((set, get) => ({
   questions: {},
   dm: null,
   toast: null,
+  call: null,
   models: {},
   update: null,
   updateCheckNonce: 0,
@@ -140,6 +146,8 @@ export const useStore = create<State>((set, get) => ({
     void get().loadMessages(dmThreadId(a, b));
   },
   closeDm: () => set({ dm: null }),
+  startCall: (agentId) => set({ call: { threadId: agentId, agentId } }),
+  endCall: () => set({ call: null }),
   setPanel: (panel) => set({ panel }),
   setDialog: (dialog) => set({ dialog }),
   openSettings: (s = "general") => set({ settingsSection: s }),
@@ -284,8 +292,22 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
     case "automations_changed":
       window.dispatchEvent(new CustomEvent("opencue:automations-changed"));
       break;
-    case "computer_output":
+    case "computer_output": {
+      // A command started on the open agent's computer: show the terminal / VM next to the chat.
+      const s = get();
+      if (ev.text.startsWith("$ ") && s.selected === ev.agent_id && s.panel !== "computer" && s.settings.auto_open_computer !== "false") {
+        set(() => ({ panel: "computer" as Panel }));
+        window.dispatchEvent(new CustomEvent("opencue:computer-focus"));
+      }
       window.dispatchEvent(new CustomEvent("opencue:computer-output", { detail: ev }));
       break;
+    }
+    case "catalog_changed": {
+      window.dispatchEvent(new CustomEvent("opencue:catalog-changed"));
+      get().showToast(ev.connected ? i18n.t("settings.catalog.connected", { name: ev.slug }) : i18n.t("settings.catalog.failed", { error: ev.error ?? "" }));
+      // The sign-in finished in the browser: bring the app back to the front.
+      void import("@tauri-apps/api/window").then((w) => w.getCurrentWindow().setFocus()).catch(() => {});
+      break;
+    }
   }
 }

@@ -1,21 +1,19 @@
-//! API keys live in the OS credential store (Keychain / Credential Manager / Secret Service).
-//! On systems without one (headless Linux, minimal WMs) we fall back to a 0600 JSON file and say so.
+//! API keys and tokens live in a `0600` JSON file (`secrets.json`) inside OpenCue's data folder.
+//! They are not kept in the system keychain: it asked for permission over and over.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-const SERVICE: &str = "opencue";
-
 pub struct Secrets {
-    fallback: PathBuf,
+    file: PathBuf,
     lock: Mutex<()>,
 }
 
 impl Secrets {
-    pub fn new(fallback: PathBuf) -> Self {
+    pub fn new(file: PathBuf) -> Self {
         Self {
-            fallback,
+            file,
             lock: Mutex::new(()),
         }
     }
@@ -24,66 +22,42 @@ impl Secrets {
         if value.is_empty() {
             return self.delete(name);
         }
-        match keyring::Entry::new(SERVICE, name).and_then(|e| e.set_password(value)) {
-            Ok(()) => {
-                // Drop any stale fallback copy.
-                let _ = self.file_remove(name);
-                Ok(())
-            }
-            Err(err) => {
-                tracing::warn!(
-                    "keyring unavailable ({err}); storing secret in {}",
-                    self.fallback.display()
-                );
-                self.file_set(name, value)
-            }
-        }
+        let _guard = self.lock.lock().unwrap();
+        let mut map = self.read()?;
+        map.insert(name.to_string(), value.to_string());
+        self.write(&map)
     }
 
     pub fn get(&self, name: &str) -> Option<String> {
-        if let Ok(v) = keyring::Entry::new(SERVICE, name).and_then(|e| e.get_password()) {
-            return Some(v);
-        }
-        self.file_read().ok()?.remove(name)
+        self.read().ok()?.remove(name)
     }
 
     pub fn delete(&self, name: &str) -> anyhow::Result<()> {
-        if let Ok(entry) = keyring::Entry::new(SERVICE, name) {
-            let _ = entry.delete_credential();
+        let _guard = self.lock.lock().unwrap();
+        let mut map = self.read()?;
+        if map.remove(name).is_some() {
+            self.write(&map)?;
         }
-        self.file_remove(name)
+        Ok(())
     }
 
-    fn file_read(&self) -> anyhow::Result<BTreeMap<String, String>> {
-        match std::fs::read_to_string(&self.fallback) {
+    fn read(&self) -> anyhow::Result<BTreeMap<String, String>> {
+        match std::fs::read_to_string(&self.file) {
             Ok(s) => Ok(serde_json::from_str(&s)?),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(BTreeMap::new()),
             Err(e) => Err(e.into()),
         }
     }
 
-    fn file_write(&self, map: &BTreeMap<String, String>) -> anyhow::Result<()> {
-        std::fs::write(&self.fallback, serde_json::to_string_pretty(map)?)?;
+    fn write(&self, map: &BTreeMap<String, String>) -> anyhow::Result<()> {
+        if let Some(dir) = self.file.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(&self.file, serde_json::to_string_pretty(map)?)?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(&self.fallback, std::fs::Permissions::from_mode(0o600))?;
-        }
-        Ok(())
-    }
-
-    fn file_set(&self, name: &str, value: &str) -> anyhow::Result<()> {
-        let _guard = self.lock.lock().unwrap();
-        let mut map = self.file_read()?;
-        map.insert(name.to_string(), value.to_string());
-        self.file_write(&map)
-    }
-
-    fn file_remove(&self, name: &str) -> anyhow::Result<()> {
-        let _guard = self.lock.lock().unwrap();
-        let mut map = self.file_read()?;
-        if map.remove(name).is_some() {
-            self.file_write(&map)?;
+            std::fs::set_permissions(&self.file, std::fs::Permissions::from_mode(0o600))?;
         }
         Ok(())
     }
@@ -91,4 +65,31 @@ impl Secrets {
 
 pub fn provider_key_name(provider_id: &str) -> String {
     format!("provider:{provider_id}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn keeps_secrets_in_a_private_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Secrets::new(dir.path().join("secrets.json"));
+        assert_eq!(s.get("a"), None);
+        s.set("a", "1").unwrap();
+        s.set("b", "2").unwrap();
+        assert_eq!(s.get("a").as_deref(), Some("1"));
+        s.delete("a").unwrap();
+        assert_eq!(s.get("a"), None);
+        assert_eq!(s.get("b").as_deref(), Some("2"));
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(dir.path().join("secrets.json"))
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o600);
+        }
+    }
 }

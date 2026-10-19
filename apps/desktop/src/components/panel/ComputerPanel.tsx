@@ -27,6 +27,12 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
   useEffect(() => {
     if (backend !== "docker" && tab === "desktop") setTab("terminal");
   }, [backend, tab]);
+  // An agent just ran a command: show the terminal so the commands can be followed.
+  useEffect(() => {
+    const focus = () => setTab("terminal");
+    window.addEventListener("opencue:computer-focus", focus);
+    return () => window.removeEventListener("opencue:computer-focus", focus);
+  }, []);
 
   return (
     <aside className={cx("animate-slide flex h-full shrink-0 flex-col border-l border-line bg-panel transition-[width]", wide ? "w-[min(960px,70vw)]" : "w-[460px]")}>

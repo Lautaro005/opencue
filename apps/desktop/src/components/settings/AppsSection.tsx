@@ -7,7 +7,7 @@ import type { McpServerConfig, McpServerStatus } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, Field, Input, Textarea, Toggle } from "../ui";
 import { PageTitle } from "./SettingsModal";
-import { ComposioCard } from "./Phase2Sections";
+import { CatalogCard } from "./CatalogSection";
 
 type Mode = null | "stdio" | "http" | "paste";
 
@@ -30,7 +30,7 @@ export function AppsSection() {
   const [mode, setMode] = useState<Mode>(null);
 
   const load = () => {
-    void api.listMcpServers().then((l) => setServers(l.filter((s) => !s.id.startsWith("vmpal:") && !s.id.startsWith("composio:"))));
+    void api.listMcpServers().then((l) => setServers(l.filter((s) => !s.id.startsWith("vmpal:") )));
     void api.mcpStatus().then(setStatus);
   };
   useEffect(() => {
@@ -121,7 +121,7 @@ export function AppsSection() {
       )}
 
       <div className="mt-8">
-        <ComposioCard />
+        <CatalogCard />
       </div>
     </>
   );

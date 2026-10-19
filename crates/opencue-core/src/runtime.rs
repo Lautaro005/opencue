@@ -502,10 +502,7 @@ impl Core {
                 .into_iter()
                 .filter(|s| {
                     s.enabled
-                        && if s.id == crate::composio::CONNECT_SERVER_ID {
-                            // Composio Connect follows the agent's "Composio apps" switch.
-                            agent.settings.composio
-                        } else if crate::vmpal::is_vmpal_id(&s.id) {
+                        && if crate::vmpal::is_vmpal_id(&s.id) {
                             // VMPal machines are opt-in per agent, never part of "all servers".
                             agent
                                 .settings
@@ -517,6 +514,8 @@ impl Core {
                         }
                 })
                 .collect();
+            let mut servers = servers;
+            servers.extend(self.catalog_servers(&agent.settings.catalog).await);
             Toolbox::build(
                 &agent,
                 group,
@@ -573,6 +572,13 @@ impl Core {
                     &caps,
                 )
                 .await;
+            if self.call_threads.lock().unwrap().contains(thread_id) {
+                system.push_str(
+                    "\n\n## Voice call\nThe user is talking to you on a voice call: what you write is read aloud. \
+                     Answer the way you would speak: short, natural sentences, no Markdown, lists, tables, code blocks or links, \
+                     and don't read out long details (offer to send them in the chat instead). If something needs a longer answer, say the short version first.",
+                );
+            }
             if let Some(hint) = &mention_hint {
                 system.push_str(&format!("\n\n{hint}"));
             }
@@ -1283,7 +1289,15 @@ impl Core {
     async fn external_toolbox(&self, agent: &Agent) -> Toolbox {
         let global_mem = self.global_memory_enabled().await && agent.settings.use_global_memory;
         let caps = self.capabilities(agent).await;
-        let mut toolbox = Toolbox::build(agent, None, global_mem, &caps, vec![]);
+        // The catalog apps the agent chose are served to the CLI through OpenCue's tools.
+        let servers = self.catalog_servers(&agent.settings.catalog).await;
+        let mut toolbox = Toolbox::build(
+            agent,
+            None,
+            global_mem,
+            &caps,
+            self.mcp.tools(&servers).await,
+        );
         // The helper needs a provider that calls tools; a CLI agent has none.
         toolbox.specs.retain(|t| t.name != tools::RESEARCH);
         toolbox

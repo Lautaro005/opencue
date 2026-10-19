@@ -22,8 +22,6 @@ pub const LIST_FILES: &str = "list_files";
 pub const READ_EMAILS: &str = "read_emails";
 pub const SEARCH_INBOX: &str = "search_inbox";
 pub const SEND_EMAIL: &str = "send_email";
-pub const COMPOSIO_SEARCH: &str = "composio_search";
-pub const COMPOSIO_EXECUTE: &str = "composio_execute";
 pub const SHARE_FILE: &str = "share_file";
 pub const CREATE_AUTOMATION: &str = "create_automation";
 pub const UPDATE_INSTRUCTIONS: &str = "update_instructions";
@@ -43,8 +41,6 @@ pub fn is_phase2(name: &str) -> bool {
         READ_EMAILS,
         SEARCH_INBOX,
         SEND_EMAIL,
-        COMPOSIO_SEARCH,
-        COMPOSIO_EXECUTE,
         CREATE_AUTOMATION,
         UPDATE_INSTRUCTIONS,
         UPDATE_SOUL,
@@ -59,7 +55,6 @@ pub struct Capabilities {
     pub skills: bool,
     pub computer: ComputerBackend,
     pub email: bool,
-    pub composio: bool,
 }
 
 /// Everything an agent may call in one turn.
@@ -349,21 +344,6 @@ impl Toolbox {
                 "required": ["to", "subject", "body"]
             })));
         }
-        if caps.composio {
-            specs.push(spec(COMPOSIO_SEARCH, "Find Composio actions for connected apps (Gmail, Slack, Notion, GitHub, Calendar…). Returns action slugs and their parameters.", json!({
-                "type": "object",
-                "properties": {
-                    "query": { "type": "string", "description": "What you want to do, e.g. 'create calendar event'." },
-                    "toolkit": { "type": "string", "description": "Optional app slug, e.g. 'googlecalendar'." }
-                },
-                "required": ["query"]
-            })));
-            specs.push(spec(COMPOSIO_EXECUTE, "Run a Composio action by slug with its arguments (see composio_search). Actions that change data may need the user's approval.", json!({
-                "type": "object",
-                "properties": { "slug": { "type": "string" }, "arguments": { "type": "object" } },
-                "required": ["slug", "arguments"]
-            })));
-        }
         for t in &mcp {
             specs.push(ToolSpec {
                 name: t.qualified_name(),
@@ -418,11 +398,6 @@ impl Toolbox {
             }
             WRITE_FILE if self.computer.touches_host() => {
                 return Some("Writes a file on your computer".into())
-            }
-            COMPOSIO_EXECUTE => {
-                let slug = arg_str(&call.arguments, "slug").unwrap_or_default();
-                return (!crate::composio::looks_read_only(slug))
-                    .then(|| format!("Runs {slug} on a connected app"));
             }
             _ => {}
         }
