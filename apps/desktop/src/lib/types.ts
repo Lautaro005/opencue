@@ -247,6 +247,10 @@ export interface CatalogStatus {
   state: "disconnected" | "reconnect" | "connected";
   error: string | null;
   tools: number;
+  /** The provider needs an OAuth key of your own; Composio can sign you in instead. */
+  needs_client: boolean;
+  /** Connected through Composio rather than directly. */
+  via_composio: boolean;
 }
 
 export type CoreEvent =

@@ -11,6 +11,9 @@ use crate::Core;
 
 const PROTOCOL: &str = "2025-06-18";
 
+/// The tool `claude --permission-prompt-tool` asks before its own tools run.
+pub const APPROVE_TOOL: &str = "approve";
+
 /// Answer one JSON-RPC message. Notifications (no `id`) get no answer.
 pub async fn handle(core: &Arc<Core>, agent_id: &str, msg: &Value) -> Option<Value> {
     let id = msg.get("id").cloned()?;
@@ -31,16 +34,32 @@ pub async fn handle(core: &Arc<Core>, agent_id: &str, msg: &Value) -> Option<Val
         })),
         "ping" => Ok(json!({})),
         "tools/list" => match core.external_tools(agent_id).await {
-            Ok(specs) => Ok(json!({
-                "tools": specs
+            Ok(specs) => {
+                let mut tools = specs
                     .into_iter()
-                    .map(|t| json!({
-                        "name": t.name,
-                        "description": t.description,
-                        "inputSchema": t.parameters,
-                    }))
-                    .collect::<Vec<_>>()
-            })),
+                    .map(|t| {
+                        json!({
+                            "name": t.name,
+                            "description": t.description,
+                            "inputSchema": t.parameters,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                tools.push(json!({
+                    "name": APPROVE_TOOL,
+                    "description": "Internal: the app's permission prompt for the CLI's own tools. Never call it yourself.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "tool_name": { "type": "string" },
+                            "input": { "type": "object" },
+                            "tool_use_id": { "type": "string" }
+                        },
+                        "required": ["tool_name", "input"]
+                    }
+                }));
+                Ok(json!({ "tools": tools }))
+            }
             Err(e) => Err((-32603, format!("{e:#}"))),
         },
         "tools/call" => {
@@ -53,7 +72,12 @@ pub async fn handle(core: &Arc<Core>, agent_id: &str, msg: &Value) -> Option<Val
                 .cloned()
                 .filter(Value::is_object)
                 .unwrap_or_else(|| json!({}));
-            let (text, is_error) = match core.call_external_tool(agent_id, name, args).await {
+            let called = if name == APPROVE_TOOL {
+                core.approve_native_tool(agent_id, args).await
+            } else {
+                core.call_external_tool(agent_id, name, args).await
+            };
+            let (text, is_error) = match called {
                 Ok(t) => (t, false),
                 Err(e) => (format!("{e:#}"), true),
             };

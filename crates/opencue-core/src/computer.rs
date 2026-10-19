@@ -400,6 +400,36 @@ impl Computer<'_> {
         Ok(format!("http://{}/", addr.trim()))
     }
 
+    /// Stop the container without removing it (the workspace and installed programs stay);
+    /// the next command starts it again.
+    pub async fn stop(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            self.backend == ComputerBackend::Docker,
+            "only local VMs can be stopped from here"
+        );
+        let out = tokio::process::Command::new(self.rt())
+            .args(["stop", &self.container_name()])
+            .output()
+            .await?;
+        let err = String::from_utf8_lossy(&out.stderr);
+        anyhow::ensure!(
+            out.status.success() || err.contains("No such container"),
+            "could not stop the VM: {}",
+            err.trim()
+        );
+        Ok(())
+    }
+
+    /// Whether this computer's container is running right now.
+    pub async fn is_running(&self) -> bool {
+        if self.backend != ComputerBackend::Docker {
+            return false;
+        }
+        running_containers(self.rt())
+            .await
+            .contains(&self.container_name())
+    }
+
     /// Remove the Docker container (the workspace folder is kept); the next command recreates it.
     pub async fn reset(&self) -> anyhow::Result<()> {
         anyhow::ensure!(

@@ -69,7 +69,7 @@ creates your first agent. Replay it any time from **Settings → General**.
     <td valign="top"><b>🖥️ Use a computer</b><br>A Docker container (with an optional desktop you can watch), a SPACE microVM, WSL, a <b>VMPal</b> virtual machine, or your machine with approval.</td>
   </tr>
   <tr>
-    <td valign="top"><b>🧩 Use your apps</b><br>MCP servers (stdio and HTTP, <code>mcp.json</code> import) and a catalog of apps (Gmail, Drive, Calendar, Notion, Trello, GitHub, Supabase, Vercel, Outlook) you sign in to with OAuth.</td>
+    <td valign="top"><b>🧩 Use your apps</b><br>MCP servers (stdio and HTTP, <code>mcp.json</code> import) and a catalog of apps (Composio, Gmail, Drive, Notion, Trello, GitHub, Supabase, Vercel, Outlook) you sign in to with OAuth.</td>
     <td valign="top"><b>✨ Learn skills</b><br>Claude Code–compatible <code>SKILL.md</code>: write them, import them from a URL, or let agents save their own. Run any skill with <code>/</code>, or ask for <code>/create-skill</code> and <code>/create-automation</code>.</td>
   </tr>
   <tr>
@@ -177,6 +177,8 @@ Changes to `site/` deploy the website.
 - [x] **0.3.6**: Podman as an alternative to Docker, a Catalog of OAuth apps instead of Composio (red/yellow/green cards),
   a terminal that opens by itself, a right-click menu on agents and groups (rename, pin, clear, reset, delete), voice
   calls in a phone-sized window, and secrets in a private file instead of the keychain.
+- [x] **0.3.7**: permission cards for Claude Code agents, a stop button for VMs, Podman without Docker, Composio in the
+  Catalog (with the apps it connects), a live green card for agent-to-agent chats and logos from your assets on the site.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

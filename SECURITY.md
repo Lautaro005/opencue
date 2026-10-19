@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.3.6`) | ✅ |
+| Latest release (`0.3.x`, currently `0.3.7`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -98,6 +98,8 @@ Out of scope:
   port), and the Claude CLI is started with `--strict-mcp-config` so it only sees OpenCue's server (plus the VMPal
   machines you chose), never your other MCP servers. Actions that need approval are asked in the app: `mcp-serve`
   writes a request into the local database and waits for your answer on the card; nothing is sent over the network.
+  The CLI's own tools (Bash, Read, Edit…) are routed to the same card through `--permission-prompt-tool`, so in "Ask
+  first" mode nothing runs on the host until you accept; in "Fully autonomous" mode they are allowed.
 - **Agent-to-agent chats** (`send_to_agent` in 1:1 chats) run the other agent under its own settings and approvals;
   the agent that answers cannot start further conversations.
 - **Updates** are downloaded from GitHub Releases and installed only if their minisign signature matches the public key

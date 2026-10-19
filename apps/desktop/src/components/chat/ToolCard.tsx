@@ -1,12 +1,12 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { BookmarkPlus, Brain, ChevronRight, FileText, FolderOpen, Globe, HelpCircle, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
-import type { ApprovalRequest, Message, ToolCall } from "../../lib/types";
+import type { Agent, ApprovalRequest, Message, ToolCall } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/format";
-import { useStore } from "../../lib/store";
+import { dmThreadId, useStore } from "../../lib/store";
 import { AvatarView } from "../AvatarView";
-import { Spinner } from "../ui";
+import { Spinner, Typing } from "../ui";
 import { AskCard } from "./AskCard";
 
 function describe(name: string, args: Record<string, unknown> | undefined, t: (k: string, o?: Record<string, unknown>) => string) {
@@ -75,7 +75,6 @@ export function ToolCard({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const agents = useStore((s) => s.agents);
-  const openDm = useStore((s) => s.openDm);
   const name = message.tool_name ?? call?.name ?? "tool";
   const d = describe(name, call?.arguments, t);
   const status = message.status;
@@ -85,18 +84,7 @@ export function ToolCard({
   if (name === "send_to_agent" && !isGroup && agentId) {
     const wanted = String(call?.arguments?.agent ?? "").replace(/^@/, "").trim().toLowerCase();
     const target = Object.values(agents).find((a) => a.name.toLowerCase() === wanted);
-    if (target) {
-      return (
-        <button
-          onClick={() => openDm(agentId, target.id)}
-          className="animate-pop inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-bg py-1.5 pr-3 pl-2 text-[13px] text-muted hover:bg-hover hover:text-ink"
-        >
-          {status === "running" ? <Spinner size={14} /> : <AvatarView avatar={target.avatar} name={target.name} size={20} />}
-          <span className="truncate">{t("chat.chatWith", { name: target.name })}</span>
-          <ChevronRight size={14} className="shrink-0 text-faint" />
-        </button>
-      );
-    }
+    if (target) return <LiveChat fromId={agentId} target={target} running={status === "running"} />;
   }
 
   return (
@@ -139,5 +127,53 @@ export function ToolCard({
       />
     )}
     </>
+  );
+}
+
+const NO_MESSAGES: Message[] = [];
+const NO_WORKERS: string[] = [];
+
+/** Talking to another agent from a 1:1 chat: a green, moving-border card that follows their conversation live. */
+function LiveChat({ fromId, target, running }: { fromId: string; target: Agent; running: boolean }) {
+  const { t } = useTranslation();
+  const agents = useStore((s) => s.agents);
+  const openDm = useStore((s) => s.openDm);
+  const loadMessages = useStore((s) => s.loadMessages);
+  const threadId = dmThreadId(fromId, target.id);
+  const messages = useStore((s) => s.messages[threadId]) ?? NO_MESSAGES;
+  const working = useStore((s) => s.working[threadId] ?? NO_WORKERS);
+  const endRef = useRef<HTMLDivElement>(null);
+  // Loading the thread is what makes its messages stream in here as they are written.
+  useEffect(() => void loadMessages(threadId), [threadId, loadMessages]);
+  const talk = messages.filter((m) => m.role === "assistant" && (m.content || m.status === "streaming"));
+  useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [talk.length, talk[talk.length - 1]?.content]);
+  const busy = running || working.length > 0;
+
+  return (
+    <div className="live-card animate-pop w-full max-w-[520px] overflow-hidden text-[12.5px]" data-busy={busy}>
+      <button onClick={() => openDm(fromId, target.id)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-hover/50">
+        {busy ? <Spinner size={14} /> : <AvatarView avatar={target.avatar} name={target.name} size={20} />}
+        <span className="min-w-0 truncate font-medium text-ink">{t("chat.chatWith", { name: target.name })}</span>
+        <ChevronRight size={14} className="ml-auto shrink-0 text-faint" />
+      </button>
+      {talk.length > 0 && (
+        <div className="selectable max-h-64 space-y-2 overflow-y-auto border-t border-line/70 px-3 py-2.5">
+          {talk.map((m) => {
+            const who = m.agent_id ? agents[m.agent_id] : undefined;
+            return (
+              <div key={m.id} className="flex gap-2">
+                {who && <AvatarView avatar={who.avatar} name={who.name} size={18} />}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-medium text-muted">{who?.name}</div>
+                  <div className="whitespace-pre-wrap break-words text-[12.5px] leading-snug">{m.content || <Typing />}</div>
+                </div>
+              </div>
+            );
+          })}
+          {busy && talk[talk.length - 1]?.status !== "streaming" && <Typing />}
+          <div ref={endRef} />
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ChevronRight, ExternalLink, File, Folder, FolderOpen, Maximize2, Minimize2, MonitorPlay, RefreshCw, RotateCcw, Settings2, TerminalSquare, X } from "lucide-react";
+import { ArrowLeft, ChevronRight, ExternalLink, File, Folder, FolderOpen, Maximize2, Minimize2, MonitorPlay, RefreshCw, RotateCcw, Settings2, Square, TerminalSquare, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, openUrl } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
@@ -27,6 +27,28 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
   useEffect(() => {
     if (backend !== "docker" && tab === "desktop") setTab("terminal");
   }, [backend, tab]);
+  // The local VM can be stopped from here; the button follows whether it is running.
+  const [running, setRunning] = useState(false);
+  const showToast = useStore((s) => s.showToast);
+  useEffect(() => {
+    if (backend !== "docker") return;
+    let live = true;
+    const poll = () => void api.computerRunning(agent.id).then((r) => live && setRunning(r)).catch(() => {});
+    poll();
+    const timer = window.setInterval(poll, 4000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [backend, agent.id]);
+  const stop = async () => {
+    try {
+      await api.stopComputer(agent.id);
+      setRunning(false);
+    } catch (e) {
+      showToast(String(e));
+    }
+  };
   // An agent just ran a command: show the terminal so the commands can be followed.
   useEffect(() => {
     const focus = () => setTab("terminal");
@@ -43,6 +65,11 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
           {tab === "desktop" && (
             <IconButton label={wide ? t("computer.narrow") : t("computer.widen")} onClick={() => setWide((v) => !v)}>
               {wide ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </IconButton>
+          )}
+          {backend === "docker" && (
+            <IconButton label={t("computer.stop")} onClick={() => void stop()} disabled={!running} className={running ? "text-danger" : undefined}>
+              <Square size={14} fill="currentColor" />
             </IconButton>
           )}
           <IconButton label={t("computer.configure")} onClick={() => setPanel("profile")}>

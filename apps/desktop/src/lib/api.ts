@@ -107,6 +107,7 @@ export const api = {
   dockerStartShared: () => invokeImpl<void>("docker_start_shared"),
   catalogStatus: () => invokeImpl<CatalogStatus[]>("catalog_status"),
   catalogConnect: (slug: string, clientId?: string, clientSecret?: string) => invokeImpl<string>("catalog_connect", { slug, clientId, clientSecret }),
+  composioApps: (refresh = false) => invokeImpl<string[]>("composio_apps", { refresh }),
   catalogDisconnect: (slug: string) => invokeImpl<void>("catalog_disconnect", { slug }),
   resetThread: (threadId: string) => invokeImpl<void>("reset_thread", { threadId }),
   setCallMode: (threadId: string, on: boolean) => invokeImpl<void>("set_call_mode", { threadId, on }),
@@ -147,6 +148,8 @@ export const api = {
   computerLog: (agentId: string) => invokeImpl<string>("computer_log", { agentId }),
   computerDesktop: (agentId: string) => invokeImpl<string>("computer_desktop", { agentId }),
   resetComputer: (agentId: string) => invokeImpl<void>("reset_computer", { agentId }),
+  stopComputer: (agentId: string) => invokeImpl<void>("stop_computer", { agentId }),
+  computerRunning: (agentId: string) => invokeImpl<boolean>("computer_running", { agentId }),
   agentWorkspace: (id: string) => invokeImpl<string>("agent_workspace", { id }),
   defaultWorkspace: (id: string) => invokeImpl<string>("default_workspace", { id }),
   defaultVmFolder: (id: string) => invokeImpl<string>("default_vm_folder", { id }),
@@ -179,8 +182,7 @@ export async function pickFolder(): Promise<string | null> {
 
 export async function openUrl(url: string) {
   if (isTauri) {
-    const { openUrl } = await import("@tauri-apps/plugin-opener");
-    await openUrl(url);
+    await invokeImpl<void>("open_external", { url });
   } else {
     window.open(url, "_blank", "noopener");
   }

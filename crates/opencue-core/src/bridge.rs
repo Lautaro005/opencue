@@ -297,6 +297,30 @@ impl Core {
                 let core = self.clone();
                 tokio::spawn(async move {
                     let args: Value = serde_json::from_str(&payload).unwrap_or_default();
+                    // A CLI agent's tool call isn't in the chat by itself: add the same
+                    // "Chat with …" card an API agent gets, so the conversation can be followed.
+                    let mut card = None;
+                    if !thread.is_empty() && !is_dm_thread(&thread) {
+                        let call = crate::models::ToolCall {
+                            id: new_id(),
+                            name: "send_to_agent".into(),
+                            arguments: args.clone(),
+                        };
+                        let mut m = crate::runtime::message(
+                            &thread,
+                            crate::models::Role::Tool,
+                            Some(&agent_id),
+                            "",
+                        );
+                        m.tool_call_id = Some(call.id.clone());
+                        m.tool_name = Some(call.name.clone());
+                        m.tool_calls = Some(vec![call]);
+                        m.status = "running".into();
+                        if core.store.insert_message(&m).await.is_ok() {
+                            core.emit(CoreEvent::Message { message: m.clone() });
+                            card = Some(m);
+                        }
+                    }
                     let result = match core.store.get_agent(&agent_id).await {
                         Ok(from) => {
                             let to = args
@@ -312,6 +336,21 @@ impl Core {
                         }
                         Err(e) => Err(e),
                     };
+                    if let Some(mut m) = card {
+                        match &result {
+                            Ok(text) => {
+                                m.content = text.clone();
+                                m.status = "done".into();
+                            }
+                            Err(e) => {
+                                m.content = format!("Error: {e:#}");
+                                m.status = "error".into();
+                            }
+                        }
+                        if core.store.update_message(&m).await.is_ok() {
+                            core.emit(CoreEvent::Message { message: m });
+                        }
+                    }
                     let text = result.unwrap_or_else(|e| format!("Error: {e:#}"));
                     let _ =
                         sqlx::query("UPDATE bridge SET status = 'done', result = ? WHERE id = ?")

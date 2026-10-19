@@ -1351,6 +1351,50 @@ impl Core {
         Ok(truncate(text, MAX_TOOL_OUTPUT))
     }
 
+    /// The CLI's own tools (Bash, Read, Edit…) ask here before they run: the user answers with the
+    /// yellow permission card, and the CLI gets the allow/deny verdict it expects from its
+    /// `--permission-prompt-tool`.
+    pub async fn approve_native_tool(
+        self: &Arc<Self>,
+        agent_id: &str,
+        arguments: Value,
+    ) -> anyhow::Result<String> {
+        let agent = self.store.get_agent(agent_id).await?;
+        let tool = arguments
+            .get("tool_name")
+            .and_then(Value::as_str)
+            .unwrap_or("a tool");
+        let input = arguments.get("input").cloned().unwrap_or(json!({}));
+        let allow =
+            |input: &Value| json!({ "behavior": "allow", "updatedInput": input }).to_string();
+        if agent.settings.approval_mode != ApprovalMode::Ask || tool == "TodoWrite" {
+            return Ok(allow(&input));
+        }
+        let detail = ["command", "file_path", "path", "pattern", "url", "query"]
+            .iter()
+            .find_map(|k| input.get(*k).and_then(Value::as_str))
+            .map(str::to_string)
+            .unwrap_or_else(|| input.to_string());
+        let detail: String = detail.chars().take(600).collect();
+        let reason = match tool {
+            "Bash" => format!("Runs a command on your computer:\n{detail}"),
+            "Write" | "Edit" | "MultiEdit" | "NotebookEdit" => {
+                format!("Changes a file on your computer:\n{detail}")
+            }
+            "Read" | "Glob" | "Grep" | "LS" => format!("Reads from your computer:\n{detail}"),
+            other => format!("Uses {other}:\n{detail}"),
+        };
+        if self.ask_permission("", &agent, "", &reason, None).await? {
+            Ok(allow(&input))
+        } else {
+            Ok(json!({
+                "behavior": "deny",
+                "message": "The user rejected this action. Don't do it; adapt or tell them what you can do instead."
+            })
+            .to_string())
+        }
+    }
+
     /// Learn from the exchange without the user having to: durable facts go to memory (about the
     /// user, for every agent, to the shared one), and a long memory gets merged into a tidy one.
     async fn extract_memories(

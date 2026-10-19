@@ -2,6 +2,32 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.3.7 — 2026-10-19
+
+### Fixed
+
+- **Permission cards for Claude Code agents.** The CLI's own tools (Bash, Read, Edit…) used to fail with "no permission"
+  in a headless run. They now ask the app (`--permission-prompt-tool`), so the yellow card with Accept / Reject shows in
+  the chat and the command runs when you accept. In *Fully autonomous* mode they are allowed without asking.
+- **Podman with no Docker.** The Computer page offered "Local VM (Docker)" as unavailable and would not let you pick it
+  when only Podman was installed. It now reads "Local VM (Docker or Podman)", is available with either, and with
+  nothing chosen yet OpenCue uses Podman when Docker is not installed.
+- **Catalog sign-in errors** ("Not allowed to open url …"): web links now open through the app itself, so long OAuth
+  links with paths and query strings work.
+- **Agent chats from Claude Code agents** now show the "Chat with …" card (before, only API-model agents did).
+
+### New
+
+- **Stop button for VMs** in the Computer panel header (local VMs): stops the container without losing files or
+  installed programs; the next command starts it again.
+- **Live agent conversation**: when an agent talks to another in a 1:1 chat, the card has a moving **green** border and
+  shows the conversation as it happens; click its title to open the full view.
+- **Composio in the Catalog**, as the first card (Google Calendar left the list; it works through Composio). Gmail,
+  Google Drive, GitHub and Outlook need an OAuth key of your own: if Composio is connected, touching them signs you in
+  through Composio; if not, the card says to connect Composio first (or enter your own client ID). The apps connected
+  through Composio show as small tags with a blue moving border under the Catalog.
+- Catalog cards show their **status at the bottom**, under the description.
+
 ## 0.3.6 — 2026-10-19
 
 ### New

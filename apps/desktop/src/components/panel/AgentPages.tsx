@@ -150,7 +150,7 @@ export function ComputerPage({ agent, onChange }: { agent: Agent; onChange: (s: 
   const available = (b: ComputerBackend) => {
     if (!env) return true;
     if (b === "wsl") return env.wsl_available;
-    if (b === "docker") return env.docker_available;
+    if (b === "docker") return env.docker_available || env.podman_available;
     return true;
   };
 
