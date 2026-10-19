@@ -9,6 +9,7 @@ import { Typing } from "../ui";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 import { AttachmentList } from "./Attachments";
+import { QuestionCards } from "./AskCard";
 
 const EMPTY: Message[] = [];
 
@@ -24,6 +25,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
   const messages = useStore((s) => s.messages[threadId] ?? EMPTY);
   const agents = useStore((s) => s.agents);
   const approvals = useStore((s) => s.approvals);
+  const questionCount = useStore((s) => Object.keys(s.questions).length);
   const openSettings = useStore((s) => s.openSettings);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
@@ -42,7 +44,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
-  }, [messages]);
+  }, [messages, questionCount]);
 
   const onScroll = () => {
     const el = scroller.current;
@@ -100,12 +102,13 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
               )}
               {m.role === "tool" && (
                 <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
-                  <ToolCard message={m} call={m.tool_call_id ? calls[m.tool_call_id] : undefined} approval={approvals[m.id]} agentName={agent?.name ?? ""} />
+                  <ToolCard message={m} call={m.tool_call_id ? calls[m.tool_call_id] : undefined} approval={approvals[m.id]} agentName={agent?.name ?? ""} agentId={m.agent_id} isGroup={isGroup} />
                 </AgentRow>
               )}
             </Fragment>
           );
         })}
+        <QuestionCards threadId={threadId} />
       </div>
     </div>
   );

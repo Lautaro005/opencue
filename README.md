@@ -171,6 +171,9 @@ Changes to `site/` deploy the website.
   compaction, plan recitation, `research` helpers).
 - [x] **0.3.4**: Composio consumer keys through Composio Connect, local VMs with a live desktop, memory/CPU limits and a
   folder that keeps their state, Perplexity SPACE with its GitHub link, and provider logos on the website.
+- [x] **0.3.5**: agents that talk to each other in 1:1 chats (`send_to_agent`, `@` and a "Chat with …" pill), the
+  yellow ask/permission card (`ask_user`), shared or per-agent Docker VMs with an idle stop and a setup checklist, a
+  Composio refresh button and a fix for Claude Code agents hitting permission errors on Composio.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

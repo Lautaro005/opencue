@@ -119,6 +119,36 @@ function threads() {
 }
 
 async function simulateReply(threadId: string, text: string) {
+  // Preview-only triggers for the cards that need a real agent to show up.
+  if (/^\/(ask|permission)\b/.test(text)) {
+    const permission = text.startsWith("/permission");
+    emit({
+      type: "question_requested",
+      question: {
+        id: id(),
+        thread_id: threadId,
+        agent_id: threadId,
+        kind: permission ? "permission" : "question",
+        title: "",
+        body: permission ? "Run COMPOSIO_SEARCH_TOOLS on Trello to find the cards in the brain column of cue-agents." : "Which Trello board should I read, cue-agents or personal?",
+        options: permission ? [] : ["cue-agents", "personal"],
+      },
+    });
+    return;
+  }
+  if (text.startsWith("/dm")) {
+    const other = agents.find((a) => a.id !== threadId);
+    if (!other) return;
+    const dm = threadId <= other.id ? `dm_${threadId}_${other.id}` : `dm_${other.id}_${threadId}`;
+    const call = { id: id(), name: "send_to_agent", arguments: { agent: other.name, message: "Give me three SEO ideas." } };
+    const a = msg(threadId, "assistant", "", 0, threadId, { tool_calls: [call] });
+    const t = msg(threadId, "tool", "[" + other.name + "]: 1. Long-tail posts. 2. Comparison pages. 3. FAQ schema.", 0, threadId, { tool_call_id: call.id, tool_name: "send_to_agent" });
+    messages.push(a, t);
+    messages.push(msg(dm, "assistant", "Give me three SEO ideas.", 0, threadId), msg(dm, "assistant", "1. Long-tail posts. 2. Comparison pages. 3. FAQ schema.", 0, other.id));
+    emit({ type: "message", message: { ...a } });
+    emit({ type: "message", message: { ...t } });
+    return;
+  }
   const g = groups.find((x) => x.id === threadId);
   const agentId = g ? g.members[0].agent_id : threadId;
   busy.add(threadId);
@@ -150,14 +180,15 @@ const automations: Automation[] = [
 const emails: Record<string, EmailAccount> = {
   a2: { agent_id: "a2", kind: "imap", address: "recordatorios@example.com", display_name: "Recordatorios", imap_host: "imap.example.com", imap_port: 993, smtp_host: "smtp.example.com", smtp_port: 465, username: null, last_seen_uid: 0, has_password: true },
 };
-const computer = { docker_desktop: false, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, wsl_available: false, webhook_port: 7777 };
+const computer = { docker_desktop: false, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, shared_vm: false, idle_minutes: 480, wsl_available: false, webhook_port: 7777 };
+const dockerState = { installed: true, running: true, image_ready: false, vm: "none" as const };
 let vmpalToml = "";
 const vmpalMachines = () => [...vmpalToml.matchAll(/^\[mcp_servers\.([^\]\s]+)\]/gm)].map((m) => ({ name: m[1], command: "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine", args: ["--mcp", "E7D-preview"], env: {} }));
 const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.4-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.5-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -260,6 +291,16 @@ const handlers: Record<string, (a: Args) => unknown> = {
     emit({ type: "threads_changed" });
   },
   resolve_approval: () => true,
+  answer_question: () => true,
+  pending_questions: () => [],
+  docker_setup: () => dockerState,
+  docker_prepare: () => {
+    dockerState.image_ready = true;
+  },
+  docker_start_shared: () => {
+    (dockerState as { vm: string }).vm = "running";
+  },
+  refresh_composio: () => ({ configured: true, user_id: "", accounts: [{ id: "gmail", toolkit: "gmail", status: "ACTIVE" }, { id: "trello", toolkit: "trello", status: "ACTIVE" }], error: null, mode: "connect", tools: 7 }),
   provider_catalog: () => catalog,
   list_providers: () => providers,
   save_provider: ({ provider, apiKey }) => {

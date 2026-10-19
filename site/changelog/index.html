@@ -30,6 +30,21 @@
     </div>
     <article class="prose">
       <div class="release">
+        <h2 id="v0.3.5">0.3.5 <time datetime="2026-10-19">October 19, 2026</time></h2>
+        <h3>New</h3>
+        <ul>
+          <li><strong>Agents talk to each other</strong> in 1:1 chats, no group needed: an agent asks another one and gets the reply back. The chat shows a <em>Chat with …</em> pill that opens their conversation. Type <code>@</code> to pick the agent you want it to ask.</li>
+          <li><strong>Ask and permission cards</strong>: a yellow, animated frame with the request and a text field or Accept / Reject. Agents get an <code>ask_user</code> tool, and CLI agents now ask instead of being refused in Ask-first mode.</li>
+          <li><strong>Shared or per-agent Docker VMs</strong>, an idle stop that keeps files and apps, and a setup checklist: install Docker, start it, download the desktop, create the VM.</li>
+          <li>A <strong>refresh button</strong> next to Save in Composio reloads the connected apps.</li>
+        </ul>
+        <h3>Fixed</h3>
+        <ul>
+          <li>Claude Code agents no longer hit permission errors on Composio: the CLI only sees OpenCue's tools, not your other MCP servers.</li>
+        </ul>
+      </div>
+
+      <div class="release">
         <h2 id="v0.3.4">0.3.4 <time datetime="2026-10-18">October 18, 2026</time></h2>
         <h3>New</h3>
         <ul>

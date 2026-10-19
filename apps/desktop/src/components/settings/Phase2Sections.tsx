@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Download, ExternalLink, Github, MonitorCog, Plus, Server, Terminal, Trash2 } from "lucide-react";
+import { Box, Check, Copy, Download, ExternalLink, Github, MonitorCog, Plus, RefreshCw, Server, Terminal, Trash2 } from "lucide-react";
 import { api, openUrl } from "../../lib/api";
 import { useStore } from "../../lib/store";
-import type { ComposioStatus, ComputerSettings, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
+import type { ComposioStatus, ComputerSettings, DockerSetup, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
 import { AppPicker } from "./AppPicker";
@@ -19,7 +19,19 @@ export function ComposioCard() {
   const [user, setUser] = useState("");
   const [busy, setBusy] = useState(false);
   const [connecting, setConnecting] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const showToast = useStore((s) => s.showToast);
+
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      setStatus(await api.refreshComposio());
+    } catch (e) {
+      showToast(String(e));
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const connect = async (slug: string) => {
     setConnecting(true);
@@ -82,6 +94,9 @@ export function ComposioCard() {
           <Button size="sm" variant="primary" onClick={() => void save()} disabled={busy}>
             {t("common.save")}
           </Button>
+          <Button size="sm" onClick={() => void refresh()} disabled={refreshing || !status?.configured} aria-label={t("settings.composio.refreshApps")} data-tip={t("settings.composio.refreshApps")}>
+            <RefreshCw size={14} className={refreshing ? "animate-spin" : undefined} />
+          </Button>
           {status?.error && <span className="line-clamp-2 text-[12px] text-danger">{status.error}</span>}
         </div>
         {status?.configured && (
@@ -108,11 +123,6 @@ export function ComposioCard() {
               ))}
             </div>
             <AppPicker busy={connecting} onPick={(slug) => void connect(slug)} />
-            <div className="flex justify-end">
-              <Button size="sm" onClick={() => void api.composioStatus().then(setStatus)}>
-                {t("settings.composio.refresh")}
-              </Button>
-            </div>
           </div>
         )}
       </div>
@@ -274,6 +284,7 @@ export function ComputersSection() {
           </div>
         )}
       </Card>
+      <DockerSetupCard s={s} save={save} />
       <Card
         title="Perplexity SPACE"
         action={
@@ -335,6 +346,150 @@ export function ComputersSection() {
       <p className="flex items-center gap-1.5 text-[12px] text-faint">
         <Box size={13} /> {t("settings.computers.perAgent")}
       </p>
+    </>
+  );
+}
+
+// ---------- Docker setup (isolation, idle stop, checklist) ----------
+
+function DockerSetupCard({ s, save }: { s: ComputerSettings; save: (next: ComputerSettings) => Promise<void> }) {
+  const { t } = useTranslation();
+  const showToast = useStore((st) => st.showToast);
+  const [setup, setSetup] = useState<DockerSetup | null>(null);
+  const [busy, setBusy] = useState<"" | "pull" | "vm">("");
+  const [log, setLog] = useState("");
+  const [copied, setCopied] = useState(false);
+  const load = () => void api.dockerSetup().then(setSetup);
+  useEffect(load, [s.shared_vm]);
+  useEffect(() => {
+    const onOut = (e: Event) => {
+      const ev = (e as CustomEvent<{ agent_id: string; text: string }>).detail;
+      if (ev.agent_id === "docker-setup") setLog((l) => (l + ev.text).slice(-6000));
+    };
+    window.addEventListener("opencue:computer-output", onOut);
+    return () => window.removeEventListener("opencue:computer-output", onOut);
+  }, []);
+
+  const startCmd = s.os === "macos" ? "open -a Docker" : s.os === "windows" ? "Start Docker Desktop" : "sudo systemctl start docker";
+  const run = async (kind: "pull" | "vm") => {
+    setBusy(kind);
+    try {
+      if (kind === "pull") await api.dockerPrepare();
+      else await api.dockerStartShared();
+    } catch (e) {
+      showToast(String(e));
+    } finally {
+      setBusy("");
+      load();
+    }
+  };
+
+  const steps: { done: boolean; title: string; body?: React.ReactNode }[] = [
+    {
+      done: !!setup?.installed,
+      title: t("settings.computers.stepInstall"),
+      body: !setup?.installed && (
+        <button onClick={() => void openUrl("https://docs.docker.com/get-docker/")} className="text-[12.5px] text-accent hover:underline">
+          docs.docker.com/get-docker
+        </button>
+      ),
+    },
+    {
+      done: !!setup?.running,
+      title: t("settings.computers.stepStart"),
+      body: !setup?.running && (
+        <div className="flex w-fit items-center gap-3 rounded-lg bg-hover px-3 py-2 font-mono text-[12.5px]">
+          {startCmd}
+          <button
+            aria-label={t("common.copy")}
+            onClick={() => {
+              void navigator.clipboard?.writeText(startCmd);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="text-muted hover:text-ink"
+          >
+            {copied ? <Check size={14} /> : <Copy size={14} />}
+          </button>
+        </div>
+      ),
+    },
+    {
+      done: !!setup?.image_ready,
+      title: t("settings.computers.stepImage"),
+      body: !setup?.image_ready && (
+        <div className="space-y-2">
+          <Button size="sm" onClick={() => void run("pull")} disabled={busy !== "" || !setup?.running}>
+            {busy === "pull" ? t("settings.computers.downloading") : t("settings.computers.download")}
+          </Button>
+          {log && (
+            <details className="text-[12px] text-muted">
+              <summary className="cursor-pointer">{t("settings.computers.showProgress")}</summary>
+              <pre className="selectable mt-1 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-hover px-2.5 py-2 font-mono text-[11.5px]">{log}</pre>
+            </details>
+          )}
+        </div>
+      ),
+    },
+    s.shared_vm
+      ? {
+          done: setup?.vm === "running",
+          title: t("settings.computers.stepVm"),
+          body: setup?.vm !== "running" && (
+            <Button size="sm" variant="primary" onClick={() => void run("vm")} disabled={busy !== "" || !setup?.image_ready}>
+              {busy === "vm" ? t("settings.computers.starting") : t("settings.computers.startVm")}
+            </Button>
+          ),
+        }
+      : { done: false, title: t("settings.computers.stepVmPerAgent") },
+  ];
+
+  return (
+    <>
+      <Card title={t("settings.computers.isolation")}>
+        <div className="px-4 pt-3.5 text-[12.5px] text-muted">{t("settings.computers.isolationHint")}</div>
+        <div className="grid grid-cols-2 gap-1 px-4 py-3">
+          {([false, true] as const).map((shared) => (
+            <button
+              key={String(shared)}
+              onClick={() => void save({ ...s, shared_vm: shared })}
+              className={`rounded-lg border px-3 py-2 text-[13px] font-medium ${s.shared_vm === shared ? "border-accent bg-hover text-ink" : "border-line text-muted hover:bg-hover"}`}
+            >
+              {shared ? t("settings.computers.shared") : t("settings.computers.perAgentOption")}
+            </button>
+          ))}
+        </div>
+        <p className="px-4 pb-3 text-[11.5px] text-muted">{s.shared_vm ? t("settings.computers.sharedNote") : t("settings.computers.perAgentNote")}</p>
+        <CardRow label={t("settings.computers.idle")} hint={t("settings.computers.idleHint")}>
+          <span className="flex items-center gap-2">
+            <Input className="w-20 text-right" value={s.idle_minutes} onChange={(e) => void save({ ...s, idle_minutes: Math.max(0, Number(e.target.value.replace(/\D/g, "")) || 0) })} />
+            <span className="text-[12.5px] text-muted">{t("settings.computers.minutes")}</span>
+          </span>
+        </CardRow>
+      </Card>
+      <Card
+        title={t("settings.computers.setup")}
+        action={
+          <button onClick={load} aria-label={t("settings.composio.refresh")} className="text-muted hover:text-ink">
+            <RefreshCw size={13} />
+          </button>
+        }
+      >
+        <p className="px-4 pt-3.5 text-[12.5px] text-muted">{t("settings.computers.setupHint")}</p>
+        <ol className="space-y-3.5 px-4 py-3.5">
+          {steps.map((st, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className={`mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full text-[12px] ${st.done ? "bg-success text-white" : "border border-line text-muted"}`}>
+                {st.done ? <Check size={13} /> : i + 1}
+              </span>
+              <div className="min-w-0 space-y-2">
+                <span className={`block text-[13.5px] ${st.done ? "text-muted line-through" : "font-medium"}`}>{st.title}</span>
+                {st.body}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </Card>
     </>
   );
 }

@@ -152,6 +152,24 @@ async fn chat_once(core: &Arc<Core>, agent_id: &str, text: &str) -> anyhow::Resu
                 std::io::stdin().read_line(&mut line)?;
                 core.resolve_approval(&approval.id, line.trim().eq_ignore_ascii_case("y"));
             }
+            Ok(CoreEvent::QuestionRequested { question }) if question.thread_id == agent_id => {
+                eprint!("\n? {} {}", question.title, question.body);
+                let permission = question.kind == "permission";
+                eprint!("{} ", if permission { " [y/N]" } else { "" });
+                let mut line = String::new();
+                std::io::stdin().read_line(&mut line)?;
+                let line = line.trim();
+                let answer = if permission {
+                    if line.eq_ignore_ascii_case("y") {
+                        opencue_core::bridge::APPROVED
+                    } else {
+                        opencue_core::bridge::REJECTED
+                    }
+                } else {
+                    line
+                };
+                core.answer_question(&question.id, answer).await;
+            }
             Ok(CoreEvent::ThreadsChanged) if !core.is_busy(agent_id) => break,
             Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             _ => {}

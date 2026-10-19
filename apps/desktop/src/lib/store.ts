@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { api, onCoreEvent, filesToAttachments, type UpdateInfo } from "./api";
 import { onMessageForVoice } from "./voice";
-import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, ThreadSummary } from "./types";
+import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | null;
 export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
@@ -29,6 +29,10 @@ interface State {
   working: Record<string, string[]>;
   /** tool message id → pending approval */
   approvals: Record<string, ApprovalRequest>;
+  /** question id → question an agent is waiting on */
+  questions: Record<string, Question>;
+  /** The conversation between two agents being looked at, if any (the chat it came from is `a`). */
+  dm: { a: string; b: string } | null;
   toast: string | null;
   /** Models each provider reports, by provider id. */
   models: Record<string, ModelList>;
@@ -40,6 +44,8 @@ interface State {
   init: () => Promise<void>;
   refresh: () => Promise<void>;
   select: (id: string | null) => void;
+  openDm: (a: string, b: string) => void;
+  closeDm: () => void;
   setPanel: (p: Panel) => void;
   setDialog: (d: Dialog) => void;
   openSettings: (s?: SettingsSection) => void;
@@ -80,6 +86,8 @@ export const useStore = create<State>((set, get) => ({
   messages: {},
   working: {},
   approvals: {},
+  questions: {},
+  dm: null,
   toast: null,
   models: {},
   update: null,
@@ -97,7 +105,8 @@ export const useStore = create<State>((set, get) => ({
     } catch {}
     const threads = get().threads;
     if (!selected || !threads.some((t) => t.id === selected)) selected = threads[0]?.id ?? null;
-    set({ settings, ready: true });
+    const pending = await api.pendingQuestions().catch(() => [] as Question[]);
+    set({ settings, ready: true, questions: Object.fromEntries(pending.map((q) => [q.id, q])) });
     get().select(selected);
   },
 
@@ -119,13 +128,18 @@ export const useStore = create<State>((set, get) => ({
     const isGroup = !!(id && groups[id]);
     // Keep the right panel open but switch it to the matching kind.
     const nextPanel: Panel = panel ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
-    set({ selected: id, panel: nextPanel });
+    set({ selected: id, panel: nextPanel, dm: null });
     try {
       if (id) localStorage.setItem("opencue.selected", id);
     } catch {}
     if (id) void get().loadMessages(id);
   },
 
+  openDm: (a, b) => {
+    set({ dm: { a, b } });
+    void get().loadMessages(dmThreadId(a, b));
+  },
+  closeDm: () => set({ dm: null }),
   setPanel: (panel) => set({ panel }),
   setDialog: (dialog) => set({ dialog }),
   openSettings: (s = "general") => set({ settingsSection: s }),
@@ -179,6 +193,11 @@ export const useStore = create<State>((set, get) => ({
   },
 }));
 
+/** Id of the conversation two agents share (the same as the core's). */
+export function dmThreadId(a: string, b: string): string {
+  return a <= b ? `dm_${a}_${b}` : `dm_${b}_${a}`;
+}
+
 function upsertMessage(list: Message[] | undefined, m: Message): Message[] {
   const cur = list ?? [];
   const i = cur.findIndex((x) => x.id === m.id);
@@ -228,9 +247,22 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
         else cur.delete(ev.agent_id);
         return { working: { ...s.working, [ev.thread_id]: [...cur] } };
       });
+      if (!ev.busy) {
+        // An agent that stopped working has nothing left to wait for.
+        set((s) => ({ questions: Object.fromEntries(Object.entries(s.questions).filter(([, q]) => q.agent_id !== ev.agent_id)) }));
+      }
       break;
     case "approval_requested":
       set((s) => ({ approvals: { ...s.approvals, [ev.approval.message_id]: ev.approval } }));
+      break;
+    case "question_requested":
+      set((s) => ({ questions: { ...s.questions, [ev.question.id]: ev.question } }));
+      break;
+    case "question_resolved":
+      set((s) => {
+        const { [ev.question_id]: _, ...rest } = s.questions;
+        return { questions: rest };
+      });
       break;
     case "approval_resolved":
       set((s) => ({

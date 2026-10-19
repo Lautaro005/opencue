@@ -1,6 +1,8 @@
 // Thin typed wrapper over Tauri IPC. Outside Tauri (plain browser) a mock backend is used.
 
 import type {
+  DockerSetup,
+  Question,
   Agent,
   AgentPatch,
   AppInfo,
@@ -99,6 +101,12 @@ export const api = {
   stopThread: (threadId: string) => invokeImpl<void>("stop_thread", { threadId }),
   clearThread: (threadId: string) => invokeImpl<void>("clear_thread", { threadId }),
   resolveApproval: (approvalId: string, approved: boolean) => invokeImpl<boolean>("resolve_approval", { approvalId, approved }),
+  answerQuestion: (questionId: string, answer: string) => invokeImpl<boolean>("answer_question", { questionId, answer }),
+  pendingQuestions: () => invokeImpl<Question[]>("pending_questions"),
+  dockerSetup: () => invokeImpl<DockerSetup>("docker_setup"),
+  dockerPrepare: () => invokeImpl<void>("docker_prepare"),
+  dockerStartShared: () => invokeImpl<void>("docker_start_shared"),
+  refreshComposio: () => invokeImpl<ComposioStatus>("refresh_composio"),
   providerCatalog: () => invokeImpl<ProviderInfo[]>("provider_catalog"),
   listProviders: () => invokeImpl<ProviderConfig[]>("list_providers"),
   saveProvider: (provider: ProviderConfig, apiKey?: string) => invokeImpl<ProviderConfig>("save_provider", { provider, apiKey }),

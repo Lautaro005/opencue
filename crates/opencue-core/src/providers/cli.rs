@@ -283,7 +283,10 @@ impl LlmProvider for CliProvider {
                 extra_claude(&mut servers, &mut allowed, &req.mcp_extra);
                 if !servers.is_empty() {
                     // Variadic flags go last so they can't swallow anything else.
-                    cmd.arg("--mcp-config")
+                    // Only these servers: the CLI's own ones (from ~/.claude) can't be allowed in a
+                    // headless run, so calling them fails with a permission error nobody can answer.
+                    cmd.arg("--strict-mcp-config")
+                        .arg("--mcp-config")
                         .arg(serde_json::json!({ "mcpServers": servers }).to_string())
                         .arg("--allowedTools")
                         .args(&allowed);

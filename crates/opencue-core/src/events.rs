@@ -31,6 +31,14 @@ pub enum CoreEvent {
         approval_id: String,
         approved: bool,
     },
+    /// An agent asks the user a question or for permission.
+    QuestionRequested {
+        question: crate::bridge::Question,
+    },
+    QuestionResolved {
+        question_id: String,
+        answer: String,
+    },
     /// Something in the sidebar changed (agent/group created, renamed, deleted).
     ThreadsChanged,
     McpChanged,

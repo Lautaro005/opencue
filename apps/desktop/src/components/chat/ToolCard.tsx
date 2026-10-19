@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookmarkPlus, Brain, Check, ChevronRight, FileText, FolderOpen, Globe, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2, X, Zap } from "lucide-react";
+import { BookmarkPlus, Brain, ChevronRight, FileText, FolderOpen, Globe, HelpCircle, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2, Zap } from "lucide-react";
 import type { ApprovalRequest, Message, ToolCall } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/format";
+import { useStore } from "../../lib/store";
+import { AvatarView } from "../AvatarView";
 import { Spinner } from "../ui";
+import { AskCard } from "./AskCard";
 
 function describe(name: string, args: Record<string, unknown> | undefined, t: (k: string, o?: Record<string, unknown>) => string) {
   const a = args ?? {};
@@ -21,6 +24,8 @@ function describe(name: string, args: Record<string, unknown> | undefined, t: (k
       return { icon: <Trash2 size={14} />, title: t("chat.tools.forget"), detail: `#${a.id ?? ""}` };
     case "send_to_agent":
       return { icon: <Send size={14} />, title: t("chat.tools.send_to_agent", { agent: a.agent ?? "" }), detail: String(a.message ?? "") };
+    case "ask_user":
+      return { icon: <HelpCircle size={14} />, title: t("chat.tools.ask_user"), detail: String(a.question ?? "") };
     case "use_skill":
       return { icon: <Sparkles size={14} />, title: t("chat.tools.use_skill"), detail: String(a.name ?? "") };
     case "save_skill":
@@ -56,16 +61,51 @@ function describe(name: string, args: Record<string, unknown> | undefined, t: (k
   }
 }
 
-export function ToolCard({ message, call, approval, agentName }: { message: Message; call?: ToolCall; approval?: ApprovalRequest; agentName: string }) {
+export function ToolCard({
+  message,
+  call,
+  approval,
+  agentName,
+  agentId,
+  isGroup,
+}: {
+  message: Message;
+  call?: ToolCall;
+  approval?: ApprovalRequest;
+  agentName: string;
+  agentId?: string | null;
+  isGroup?: boolean;
+}) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  const agents = useStore((s) => s.agents);
+  const openDm = useStore((s) => s.openDm);
   const name = message.tool_name ?? call?.name ?? "tool";
   const d = describe(name, call?.arguments, t);
   const status = message.status;
   const waiting = status === "awaiting_approval";
 
+  // Talking to another agent from a 1:1 chat: a pill that opens their conversation.
+  if (name === "send_to_agent" && !isGroup && agentId) {
+    const wanted = String(call?.arguments?.agent ?? "").replace(/^@/, "").trim().toLowerCase();
+    const target = Object.values(agents).find((a) => a.name.toLowerCase() === wanted);
+    if (target) {
+      return (
+        <button
+          onClick={() => openDm(agentId, target.id)}
+          className="animate-pop inline-flex max-w-full items-center gap-2 rounded-full border border-line bg-bg py-1.5 pr-3 pl-2 text-[13px] text-muted hover:bg-hover hover:text-ink"
+        >
+          {status === "running" ? <Spinner size={14} /> : <AvatarView avatar={target.avatar} name={target.name} size={20} />}
+          <span className="truncate">{t("chat.chatWith", { name: target.name })}</span>
+          <ChevronRight size={14} className="shrink-0 text-faint" />
+        </button>
+      );
+    }
+  }
+
   return (
-    <div className={cx("animate-pop max-w-[520px] rounded-xl border text-[12.5px]", waiting ? "border-warning/50 bg-warning-soft" : "border-line bg-bg")}>
+    <>
+    <div className="animate-pop max-w-[520px] rounded-xl border border-line bg-bg text-[12.5px]">
       <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left">
         <span className={cx("shrink-0", status === "error" ? "text-danger" : "text-muted")}>
           {status === "running" ? <Spinner size={13} /> : waiting ? <ShieldAlert size={14} className="text-warning" /> : d.icon}
@@ -80,28 +120,6 @@ export function ToolCard({ message, call, approval, agentName }: { message: Mess
         </span>
       </button>
 
-      {waiting && approval && (
-        <div className="border-t border-warning/30 px-3 py-2.5">
-          <p className="text-[12.5px] text-ink">
-            <span className="font-medium">{t("chat.needsApproval", { name: agentName })}</span> — <span className="text-muted">{approval.reason}</span>
-          </p>
-          <div className="mt-2 flex gap-2">
-            <button
-              onClick={() => void api.resolveApproval(approval.id, true)}
-              className="inline-flex items-center gap-1 rounded-lg bg-accent px-3 py-1 text-[12.5px] font-medium text-white hover:bg-accent-hover"
-            >
-              <Check size={13} /> {t("chat.approve")}
-            </button>
-            <button
-              onClick={() => void api.resolveApproval(approval.id, false)}
-              className="inline-flex items-center gap-1 rounded-lg border border-line bg-elevated px-3 py-1 text-[12.5px] font-medium hover:bg-hover"
-            >
-              <X size={13} /> {t("chat.deny")}
-            </button>
-          </div>
-        </div>
-      )}
-
       {open && (
         <div className="selectable space-y-2 border-t border-line px-3 py-2.5">
           {call && Object.keys(call.arguments ?? {}).length > 0 && (
@@ -115,5 +133,15 @@ export function ToolCard({ message, call, approval, agentName }: { message: Mess
         </div>
       )}
     </div>
+    {waiting && approval && (
+      <AskCard
+        permission
+        title={t("ask.permissionTitle", { name: agentName })}
+        body={approval.reason}
+        onAccept={() => void api.resolveApproval(approval.id, true)}
+        onReject={() => void api.resolveApproval(approval.id, false)}
+      />
+    )}
+    </>
   );
 }

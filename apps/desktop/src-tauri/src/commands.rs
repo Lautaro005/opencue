@@ -535,7 +535,45 @@ pub async fn save_composio(
     state.core.save_composio(api_key, user_id).await.map_err(e)
 }
 
+#[tauri::command]
+pub async fn refresh_composio(state: State<'_, AppState>) -> R<ComposioStatus> {
+    Ok(state.core.refresh_composio().await)
+}
+
+// ---------- questions from agents ----------
+
+#[tauri::command]
+pub async fn answer_question(
+    state: State<'_, AppState>,
+    question_id: String,
+    answer: String,
+) -> R<bool> {
+    Ok(state.core.answer_question(&question_id, &answer).await)
+}
+
+#[tauri::command]
+pub async fn pending_questions(
+    state: State<'_, AppState>,
+) -> R<Vec<opencue_core::bridge::Question>> {
+    Ok(state.core.pending_questions().await)
+}
+
 // ---------- computers ----------
+
+#[tauri::command]
+pub async fn docker_setup(state: State<'_, AppState>) -> R<opencue_core::computer::DockerSetup> {
+    Ok(state.core.docker_setup().await)
+}
+
+#[tauri::command]
+pub async fn docker_prepare(state: State<'_, AppState>) -> R<()> {
+    state.core.docker_prepare().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn docker_start_shared(state: State<'_, AppState>) -> R<()> {
+    state.core.docker_start_shared().await.map_err(e)
+}
 
 #[tauri::command]
 pub async fn computer_settings(state: State<'_, AppState>) -> R<ComputerSettings> {

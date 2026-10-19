@@ -30,6 +30,7 @@ pub const UPDATE_INSTRUCTIONS: &str = "update_instructions";
 pub const UPDATE_SOUL: &str = "update_soul";
 pub const UPDATE_PLAN: &str = "update_plan";
 pub const RESEARCH: &str = "research";
+pub const ASK_USER: &str = "ask_user";
 
 pub fn is_phase2(name: &str) -> bool {
     [
@@ -193,6 +194,34 @@ impl Toolbox {
                     "required": ["url"]
                 }),
             });
+        }
+        specs.push(spec(
+            ASK_USER,
+            "Ask the user something and wait for the answer: a question you need answered before going on, a choice between options, or permission for something sensitive. The user sees a highlighted card in the chat and answers there. Use it instead of guessing; don't use it for things you can find out yourself.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "question": { "type": "string", "description": "What you need to know, or what you want permission to do and why." },
+                    "title": { "type": "string", "description": "Optional short heading for the card." },
+                    "kind": { "type": "string", "enum": ["question", "permission"], "description": "\"permission\" shows Accept / Reject buttons; \"question\" shows a text field (or your options)." },
+                    "options": { "type": "array", "items": { "type": "string" }, "description": "Optional answers to offer as buttons." }
+                },
+                "required": ["question"]
+            }),
+        ));
+        if group.is_none() {
+            specs.push(spec(
+                SEND_TO_AGENT,
+                "Talk to another agent and get their reply as the result, without a group chat. Ask them for what you need with every detail: they can't see your conversation with the user. The user can open the exchange from the tool card.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "agent": { "type": "string", "description": "The other agent's name." },
+                        "message": { "type": "string", "description": "What you need from them." }
+                    },
+                    "required": ["agent", "message"]
+                }),
+            ));
         }
         if group.is_some() {
             specs.push(ToolSpec {

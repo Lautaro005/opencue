@@ -218,12 +218,32 @@ export interface ApprovalRequest {
   reason: string;
 }
 
+/** An agent asks the user something: free text, choices or a yes/no permission. */
+export interface Question {
+  id: string;
+  thread_id: string;
+  agent_id: string;
+  kind: "question" | "permission";
+  title: string;
+  body: string;
+  options: string[];
+}
+
+export interface DockerSetup {
+  installed: boolean;
+  running: boolean;
+  image_ready: boolean;
+  vm: "none" | "stopped" | "running";
+}
+
 export type CoreEvent =
   | { type: "message"; message: Message }
   | { type: "delta"; thread_id: string; message_id: string; agent_id: string; text: string }
   | { type: "busy"; thread_id: string; agent_id: string; busy: boolean }
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_resolved"; approval_id: string; approved: boolean }
+  | { type: "question_requested"; question: Question }
+  | { type: "question_resolved"; question_id: string; answer: string }
   | { type: "threads_changed" }
   | { type: "mcp_changed" }
   | { type: "profile_changed"; agent_id: string }
@@ -312,6 +332,10 @@ export interface ComputerSettings {
   has_space_token: boolean;
   os: string;
   docker_available: boolean;
+  /** One Docker computer for every agent instead of one each. */
+  shared_vm: boolean;
+  /** Minutes of inactivity before a Docker computer stops; 0 never. */
+  idle_minutes: number;
   wsl_available: boolean;
   webhook_port: number;
 }

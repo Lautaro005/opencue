@@ -1,6 +1,7 @@
 //! OpenCue core: everything except the UI. The desktop app and the CLI both drive a [`Core`].
 
 pub mod automations;
+pub mod bridge;
 pub mod composio;
 pub mod computer;
 pub mod db;
@@ -52,6 +53,18 @@ pub struct Core {
     /// Active run per thread: (run id, cancellation token).
     runs: Mutex<HashMap<String, (String, CancellationToken)>>,
     approvals: Mutex<HashMap<String, oneshot::Sender<bool>>>,
+    /// False in the tool server a CLI agent starts: it can't show cards or run other agents.
+    primary: bool,
+    /// Docker computers are shared by every agent (mirrors the setting, for sync callers).
+    shared_vm: std::sync::atomic::AtomicBool,
+    idle_started: std::sync::atomic::AtomicBool,
+    /// When each Docker computer was last used, to stop idle ones.
+    computer_used: Mutex<HashMap<String, std::time::Instant>>,
+    bridge_started: std::sync::atomic::AtomicBool,
+    /// Thread each agent is currently answering in, to place its questions.
+    active_threads: Mutex<HashMap<String, String>>,
+    /// What an @mention in a 1:1 chat tells the agent for the turn that follows.
+    mention_hints: Mutex<HashMap<String, String>>,
     skills: skills::Skills,
     /// Recent terminal output per agent for the Computer view.
     computer_logs: Mutex<HashMap<String, String>>,
@@ -93,6 +106,13 @@ impl Core {
             web: WebService::new(db),
             runs: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
+            primary,
+            shared_vm: std::sync::atomic::AtomicBool::new(false),
+            idle_started: std::sync::atomic::AtomicBool::new(false),
+            computer_used: Mutex::new(HashMap::new()),
+            bridge_started: std::sync::atomic::AtomicBool::new(false),
+            active_threads: Mutex::new(HashMap::new()),
+            mention_hints: Mutex::new(HashMap::new()),
             skills: skills::Skills::new(paths.skills_dir()),
             computer_logs: Mutex::new(HashMap::new()),
         }))
@@ -104,6 +124,8 @@ impl Core {
 
     /// Connect enabled MCP servers and start automations in the background.
     pub fn start_background(self: &Arc<Self>) {
+        self.start_bridge();
+        self.start_idle_monitor();
         self.start_automations();
         let core = self.clone();
         tokio::spawn(async move {

@@ -9,6 +9,7 @@ import { IconButton, Typing, useClickOutside } from "../ui";
 import { Logo } from "../Sidebar";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
+import { DmView } from "./DmView";
 
 const NO_WORKERS: string[] = [];
 
@@ -24,6 +25,7 @@ export function ChatView() {
   const setDialog = useStore((s) => s.setDialog);
   const working = useStore((s) => (selected ? s.working[selected] ?? NO_WORKERS : NO_WORKERS));
   const messageCount = useStore((s) => (selected ? s.messages[selected]?.length ?? 0 : 0));
+  const dm = useStore((s) => s.dm);
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useClickOutside(menuRef, () => setMenu(false), menu);
@@ -32,6 +34,8 @@ export function ChatView() {
   const group = selected ? groups[selected] : undefined;
   const thread = threads.find((th) => th.id === selected);
   const members = useMemo(() => (group ? group.members.map((m) => agents[m.agent_id]).filter(Boolean) : null), [group, agents]);
+  // In a 1:1 chat any other agent can be @mentioned: the agent asks them without a group.
+  const others = useMemo(() => (agent ? Object.values(agents).filter((a) => a.id !== agent.id) : undefined), [agent, agents]);
 
   if (!selected || (!agent && !group)) {
     return (
@@ -45,6 +49,8 @@ export function ChatView() {
       </main>
     );
   }
+
+  if (dm && dm.a === selected && agent) return <DmView />;
 
   const name = agent?.name ?? group!.name;
   const busy = !!thread?.busy;
@@ -109,7 +115,7 @@ export function ChatView() {
         <MessageList threadId={selected} isGroup={!!group} />
       )}
 
-      <Composer threadId={selected} name={name} members={members} busy={busy} onSend={(text, files) => void send(selected, text, files)} onStop={() => void api.stopThread(selected)} />
+      <Composer threadId={selected} name={name} members={members} mentionable={others} busy={busy} onSend={(text, files) => void send(selected, text, files)} onStop={() => void api.stopThread(selected)} />
     </main>
   );
 }

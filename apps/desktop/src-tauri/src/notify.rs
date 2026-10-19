@@ -62,6 +62,11 @@ pub async fn on_event(app: &AppHandle, core: &Core, ev: &CoreEvent) {
             approval.agent_id.clone(),
             (false, approval.reason.clone()),
         ),
+        CoreEvent::QuestionRequested { question } => (
+            "notify_approvals",
+            question.agent_id.clone(),
+            (false, question.body.clone()),
+        ),
         _ => return,
     };
     if !flag(core, "notify_enabled", true).await || !flag(core, kind, true).await {
