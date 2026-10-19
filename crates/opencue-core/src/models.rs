@@ -43,9 +43,9 @@ pub struct AgentSettings {
     /// Skills listed in the prompt and loadable with `use_skill`.
     #[serde(default = "yes")]
     pub skills: bool,
-    /// Composio actions (needs a Composio API key in Settings → Apps).
+    /// Catalog apps (Settings → Apps → Catalog) this agent can use, by slug.
     #[serde(default)]
-    pub composio: bool,
+    pub catalog: Vec<String>,
     /// ElevenLabs voice id for spoken replies; empty uses the app default.
     #[serde(default)]
     pub voice_id: Option<String>,

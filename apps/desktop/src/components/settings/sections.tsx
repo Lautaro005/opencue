@@ -60,6 +60,9 @@ export function GeneralSection() {
         <CardRow label={t("settings.general.closeToTray")}>
           <Toggle checked={settings.close_to_tray !== "false"} onChange={(v) => void setSetting("close_to_tray", String(v))} />
         </CardRow>
+        <CardRow label={t("settings.general.autoOpenComputer")} hint={t("settings.general.autoOpenComputerHint")}>
+          <Toggle checked={settings.auto_open_computer !== "false"} onChange={(v) => void setSetting("auto_open_computer", String(v))} />
+        </CardRow>
       </Card>
       <Card title={t("settings.general.sharedMemory")}>
         <CardRow label={t("settings.general.sharedMemoryToggle")} hint={t("settings.general.sharedMemoryHint")}>

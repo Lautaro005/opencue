@@ -325,3 +325,27 @@ button {
     background: var(--warning-soft);
   }
 }
+
+/* Catalog cards: a border that keeps moving, red / yellow / green by connection state. */
+.app-card {
+  --ring: var(--danger);
+  border: 2px solid transparent;
+  border-radius: 14px;
+  background:
+    linear-gradient(var(--elevated), var(--elevated)) padding-box,
+    conic-gradient(from var(--ask-angle), var(--ring), color-mix(in srgb, var(--ring) 14%, transparent) 30%, var(--ring) 55%, color-mix(in srgb, var(--ring) 14%, transparent) 80%, var(--ring)) border-box;
+  animation: ask-spin 4s linear infinite;
+}
+.app-card[data-state="reconnect"] {
+  --ring: var(--warning);
+}
+.app-card[data-state="connected"] {
+  --ring: var(--success);
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-card {
+    animation: none;
+    background: var(--elevated);
+    border-color: var(--ring);
+  }
+}

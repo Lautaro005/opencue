@@ -9,7 +9,6 @@ use serde_json::Value;
 use tokio_util::sync::CancellationToken;
 
 use crate::automations::{self, Automation, AutomationInput, Due, Trigger};
-use crate::composio::{Composio, ComposioAccount};
 use crate::computer::{CommandResult, Computer, ComputerBackend, ComputerConfig, FileEntry};
 use crate::email::{self, EmailAccount, EmailKind};
 use crate::events::CoreEvent;
@@ -19,7 +18,6 @@ use crate::tools::{self, arg_str, arg_u64, Capabilities};
 use crate::voice::{self, ElevenLabs, Voice};
 use crate::Core;
 
-pub const COMPOSIO_KEY: &str = "composio";
 pub const ELEVENLABS_KEY: &str = "elevenlabs";
 pub const SPACE_KEY: &str = "space";
 pub const DEFAULT_WEBHOOK_PORT: u16 = 7777;
@@ -27,21 +25,6 @@ const LOG_LIMIT: usize = 100_000;
 
 fn email_key(agent_id: &str) -> String {
     format!("email:{agent_id}")
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ComposioStatus {
-    pub configured: bool,
-    pub user_id: String,
-    pub accounts: Vec<ComposioAccount>,
-    pub error: Option<String>,
-    /// "none", "project" (an `ak_` key against Composio's API) or "connect" (a `ck_` consumer key
-    /// through Composio Connect's MCP server).
-    #[serde(default)]
-    pub mode: String,
-    /// In "connect" mode: how many tools the server offers (0 while it is still connecting).
-    #[serde(default)]
-    pub tools: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -58,6 +41,10 @@ pub struct ComputerSettings {
     pub has_space_token: bool,
     pub os: String,
     pub docker_available: bool,
+    /// "docker" or "podman".
+    #[serde(default)]
+    pub runtime: String,
+    pub podman_available: bool,
     /// One Docker computer for every agent ("shared") or one each.
     #[serde(default)]
     pub shared_vm: bool,
@@ -307,7 +294,6 @@ impl Core {
                     .map(|m| (m.from.clone(), m.subject.clone(), m.render(true)))
                     .collect()
             }
-            EmailKind::ComposioGmail => self.new_gmail_messages(agent_id).await?,
         };
         if fresh.is_empty() {
             return Ok(());
@@ -326,54 +312,6 @@ impl Core {
             }
         }
         Ok(())
-    }
-
-    /// New Gmail messages through Composio since the last check. The first check only records
-    /// what is already there, so turning an automation on doesn't replay the inbox.
-    async fn new_gmail_messages(
-        &self,
-        agent_id: &str,
-    ) -> anyhow::Result<Vec<(String, String, String)>> {
-        let key = format!("gmail_seen:{agent_id}");
-        let seen: Option<Vec<String>> = self
-            .store
-            .setting(&key)
-            .await?
-            .and_then(|s| serde_json::from_str(&s).ok());
-        let data = self
-            .composio()
-            .await?
-            .execute_value(
-                "GMAIL_FETCH_EMAILS",
-                serde_json::json!({ "max_results": 15, "query": "in:inbox newer_than:2d" }),
-            )
-            .await?;
-        let mails = email::parse_gmail_messages(&data);
-        let mut known = seen.clone().unwrap_or_default();
-        let fresh: Vec<_> = mails
-            .iter()
-            .filter(|m| !known.contains(&m.id))
-            .cloned()
-            .collect();
-        known.extend(fresh.iter().map(|m| m.id.clone()));
-        let start = known.len().saturating_sub(300);
-        self.store
-            .set_setting(&key, &serde_json::to_string(&known[start..])?)
-            .await?;
-        if seen.is_none() {
-            return Ok(vec![]);
-        }
-        Ok(fresh
-            .into_iter()
-            .rev()
-            .map(|m| {
-                let rendered = format!(
-                    "From: {}\nSubject: {}\nDate: {}\n\n{}",
-                    m.from, m.subject, m.date, m.body
-                );
-                (m.from, m.subject, rendered)
-            })
-            .collect())
     }
 
     async fn serve_webhooks(self: &Arc<Self>) -> anyhow::Result<()> {
@@ -495,248 +433,11 @@ impl Core {
             .email_account(agent_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("no email account"))?;
-        if acc.kind == EmailKind::ComposioGmail {
-            self.composio()
-                .await?
-                .search_tools("fetch emails", Some("gmail"), 1)
-                .await?;
-            return Ok(());
-        }
         let pw = self
             .secrets
             .get(&email_key(agent_id))
             .ok_or_else(|| anyhow::anyhow!("enter the password first"))?;
         email::test(&acc, &pw).await
-    }
-
-    // ---------- Composio ----------
-
-    async fn composio(&self) -> anyhow::Result<Composio> {
-        let key = self
-            .secrets
-            .get(COMPOSIO_KEY)
-            .filter(|k| !k.is_empty())
-            .ok_or_else(|| {
-                anyhow::anyhow!("Composio is not connected. Add your API key in Settings → Apps.")
-            })?;
-        let user = self.store.setting("composio_user_id").await.ok().flatten();
-        Ok(Composio::new(key, user))
-    }
-
-    pub async fn composio_status(&self) -> ComposioStatus {
-        let user_id = self
-            .store
-            .setting("composio_user_id")
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        let none = |user_id: String| ComposioStatus {
-            configured: false,
-            user_id,
-            accounts: vec![],
-            error: None,
-            mode: "none".into(),
-            tools: 0,
-        };
-        let Some(key) = self.secrets.get(COMPOSIO_KEY).filter(|k| !k.is_empty()) else {
-            return none(user_id);
-        };
-        if crate::composio::is_consumer_key(&key) {
-            return self.composio_connect_status(user_id).await;
-        }
-        match self.composio().await {
-            Err(_) => none(user_id),
-            Ok(c) => match c.accounts().await {
-                Ok(accounts) => ComposioStatus {
-                    configured: true,
-                    user_id,
-                    accounts,
-                    error: None,
-                    mode: "project".into(),
-                    tools: 0,
-                },
-                Err(e) => ComposioStatus {
-                    configured: true,
-                    user_id,
-                    accounts: vec![],
-                    error: Some(format!("{e:#}")),
-                    mode: "project".into(),
-                    tools: 0,
-                },
-            },
-        }
-    }
-
-    /// Status of a consumer key: the Composio Connect MCP server's state and the apps it says
-    /// are connected.
-    async fn composio_connect_status(&self, user_id: String) -> ComposioStatus {
-        use crate::composio::CONNECT_SERVER_ID;
-        let servers = self.store.list_mcp_servers().await.unwrap_or_default();
-        let Some(server) = servers.into_iter().find(|s| s.id == CONNECT_SERVER_ID) else {
-            return ComposioStatus {
-                configured: true,
-                user_id,
-                accounts: vec![],
-                error: Some("Composio Connect is not set up yet; save the key again.".into()),
-                mode: "connect".into(),
-                tools: 0,
-            };
-        };
-        let status = self
-            .mcp
-            .status(std::slice::from_ref(&server))
-            .await
-            .into_iter()
-            .next();
-        let tools = self.mcp.tools(std::slice::from_ref(&server)).await;
-        let accounts = tools
-            .iter()
-            .flat_map(|t| {
-                crate::composio::connected_from_description(
-                    t.tool.description.as_deref().unwrap_or_default(),
-                )
-            })
-            .collect::<std::collections::BTreeSet<_>>()
-            .into_iter()
-            .map(|toolkit| ComposioAccount {
-                id: toolkit.clone(),
-                toolkit,
-                status: "ACTIVE".into(),
-            })
-            .collect();
-        ComposioStatus {
-            configured: true,
-            user_id,
-            accounts,
-            error: status.as_ref().and_then(|s| s.error.clone()),
-            mode: "connect".into(),
-            tools: tools.len(),
-        }
-    }
-
-    /// Make the MCP server for a consumer key (or remove it for any other kind of key).
-    async fn sync_composio_connect(self: &Arc<Self>) -> anyhow::Result<()> {
-        use crate::composio::{is_consumer_key, CONNECT_SERVER_ID, CONNECT_URL};
-        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
-        let existing = self
-            .store
-            .list_mcp_servers()
-            .await?
-            .into_iter()
-            .any(|s| s.id == CONNECT_SERVER_ID);
-        if is_consumer_key(&key) {
-            let cfg = McpServerConfig {
-                id: CONNECT_SERVER_ID.into(),
-                name: "composio".into(),
-                transport: McpTransport::Http,
-                command: None,
-                args: vec![],
-                env: Default::default(),
-                url: Some(CONNECT_URL.into()),
-                // The key stays in the keychain; it is filled in when the server connects.
-                headers: [(
-                    "x-consumer-api-key".to_string(),
-                    format!("{}{COMPOSIO_KEY}", crate::mcp::KEYCHAIN_PREFIX),
-                )]
-                .into(),
-                enabled: true,
-            };
-            self.store.upsert_mcp_server(&cfg).await?;
-            self.mcp.disconnect(&cfg.id).await;
-            self.emit(CoreEvent::McpChanged);
-            // Connect now so the status says whether the key works.
-            self.mcp.connect(&cfg).await;
-            self.emit(CoreEvent::McpChanged);
-        } else if existing {
-            self.mcp.disconnect(CONNECT_SERVER_ID).await;
-            self.store.delete_mcp_server(CONNECT_SERVER_ID).await?;
-            self.emit(CoreEvent::McpChanged);
-        }
-        Ok(())
-    }
-
-    pub async fn save_composio(
-        self: &Arc<Self>,
-        api_key: Option<String>,
-        user_id: String,
-    ) -> anyhow::Result<ComposioStatus> {
-        if let Some(k) = api_key {
-            let k = k.trim();
-            if k.is_empty() {
-                self.secrets.delete(COMPOSIO_KEY)?;
-            } else {
-                self.secrets.set(COMPOSIO_KEY, k)?;
-            }
-            self.sync_composio_connect().await?;
-        }
-        self.store
-            .set_setting("composio_user_id", user_id.trim())
-            .await?;
-        Ok(self.composio_status().await)
-    }
-
-    /// Reload what Composio has: reconnect the Connect server (so its tools and connected apps are
-    /// read again) or ask the REST API for the accounts.
-    pub async fn refresh_composio(self: &Arc<Self>) -> ComposioStatus {
-        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
-        if crate::composio::is_consumer_key(&key) {
-            if let Err(e) = self.sync_composio_connect().await {
-                let mut st = self.composio_status().await;
-                st.error = Some(format!("{e:#}"));
-                return st;
-            }
-        }
-        self.composio_status().await
-    }
-
-    /// Apps that can be connected, most popular first; `query` narrows them by name.
-    pub async fn composio_toolkits(
-        &self,
-        query: &str,
-    ) -> anyhow::Result<Vec<crate::composio::ComposioToolkit>> {
-        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
-        if crate::composio::is_consumer_key(&key) {
-            return Ok(crate::composio::popular_toolkits(query));
-        }
-        self.composio().await?.toolkits(query, 60).await
-    }
-
-    /// Start connecting an app to Composio; returns the sign-in page to open in the browser.
-    pub async fn composio_connect(&self, toolkit: &str) -> anyhow::Result<String> {
-        use crate::composio::CONNECT_SERVER_ID;
-        let key = self.secrets.get(COMPOSIO_KEY).unwrap_or_default();
-        if !crate::composio::is_consumer_key(&key) {
-            return self.composio().await?.connect(toolkit).await;
-        }
-        let toolkit = toolkit.trim().to_lowercase();
-        anyhow::ensure!(!toolkit.is_empty(), "choose an app first");
-        if !self.mcp.is_ready(CONNECT_SERVER_ID).await {
-            let server = self
-                .store
-                .list_mcp_servers()
-                .await?
-                .into_iter()
-                .find(|s| s.id == CONNECT_SERVER_ID)
-                .ok_or_else(|| anyhow::anyhow!("save your Composio key first"))?;
-            self.mcp.connect(&server).await;
-        }
-        let (text, is_error) = self
-            .mcp
-            .call(
-                CONNECT_SERVER_ID,
-                "COMPOSIO_MANAGE_CONNECTIONS",
-                serde_json::json!({ "toolkits": [{ "name": toolkit, "action": "add" }] }),
-            )
-            .await?;
-        anyhow::ensure!(
-            !is_error,
-            "Composio said: {}",
-            text.chars().take(300).collect::<String>()
-        );
-        crate::composio::redirect_url_in(&text).ok_or_else(|| {
-            anyhow::anyhow!("{toolkit} is already connected, or Composio gave no sign-in link")
-        })
     }
 
     // ---------- computers ----------
@@ -765,6 +466,7 @@ impl Core {
                 shared
             },
             idle_minutes: get("vm_idle_minutes").await.parse().unwrap_or(480),
+            runtime: crate::computer::runtime_name(&get("container_runtime").await).to_string(),
         }
     }
 
@@ -780,6 +482,8 @@ impl Core {
             has_space_token: cfg.space_token.is_some(),
             os: std::env::consts::OS.to_string(),
             docker_available: which::which("docker").is_ok(),
+            podman_available: which::which("podman").is_ok(),
+            runtime: cfg.runtime.clone(),
             shared_vm: cfg.shared,
             idle_minutes: cfg.idle_minutes,
             wsl_available: cfg!(windows) && which::which("wsl.exe").is_ok(),
@@ -824,6 +528,12 @@ impl Core {
             .await?;
         self.store
             .set_setting("vm_idle_minutes", &s.idle_minutes.to_string())
+            .await?;
+        self.store
+            .set_setting(
+                "container_runtime",
+                crate::computer::runtime_name(&s.runtime),
+            )
             .await?;
         self.shared_vm
             .store(s.shared_vm, std::sync::atomic::Ordering::Relaxed);
@@ -941,15 +651,20 @@ impl Core {
                 if minutes == 0 || !core.runs.lock().unwrap().is_empty() {
                     continue;
                 }
-                for name in crate::computer::running_containers().await {
-                    let idle = {
-                        let mut used = core.computer_used.lock().unwrap();
-                        used.entry(name.clone())
-                            .or_insert_with(std::time::Instant::now)
-                            .elapsed()
-                    };
-                    if idle >= Duration::from_secs(minutes as u64 * 60) {
-                        crate::computer::stop_container(&name).await;
+                for rt in ["docker", "podman"] {
+                    if which::which(rt).is_err() {
+                        continue;
+                    }
+                    for name in crate::computer::running_containers(rt).await {
+                        let idle = {
+                            let mut used = core.computer_used.lock().unwrap();
+                            used.entry(name.clone())
+                                .or_insert_with(std::time::Instant::now)
+                                .elapsed()
+                        };
+                        if idle >= Duration::from_secs(minutes as u64 * 60) {
+                            crate::computer::stop_container(rt, &name).await;
+                        }
                     }
                 }
             }
@@ -964,7 +679,12 @@ impl Core {
         } else {
             "opencue-"
         };
-        crate::computer::docker_setup(cfg.desktop_image(), container).await
+        crate::computer::docker_setup(
+            crate::computer::runtime_name(&cfg.runtime),
+            cfg.desktop_image(),
+            container,
+        )
+        .await
     }
 
     /// Download the desktop image (one time); progress goes to the Computers log.
@@ -977,7 +697,13 @@ impl Core {
                 stderr,
             })
         };
-        crate::computer::pull_image(cfg.desktop_image(), &sink, &CancellationToken::new()).await
+        crate::computer::pull_image(
+            crate::computer::runtime_name(&cfg.runtime),
+            cfg.desktop_image(),
+            &sink,
+            &CancellationToken::new(),
+        )
+        .await
     }
 
     /// Create and start the shared Docker computer (the per-agent ones start on first use).
@@ -1187,11 +913,6 @@ impl Core {
                 .ok()
                 .flatten()
                 .is_some(),
-            composio: agent.settings.composio
-                && self
-                    .secrets
-                    .get(COMPOSIO_KEY)
-                    .is_some_and(|k| !crate::composio::is_consumer_key(&k)),
         }
     }
 
@@ -1225,22 +946,6 @@ impl Core {
                     acc.address
                 ));
             }
-        }
-        if agent.settings.composio
-            && !caps.composio
-            && self
-                .secrets
-                .get(COMPOSIO_KEY)
-                .is_some_and(|k| crate::composio::is_consumer_key(&k))
-        {
-            s.push_str(
-                "\n\n## Connected apps\nThe user's apps (Gmail, Slack, Notion, GitHub…) work through Composio's tools, named mcp__composio__COMPOSIO_*. \
-                 Always call COMPOSIO_SEARCH_TOOLS first, then run what it returns with COMPOSIO_MULTI_EXECUTE_TOOL. \
-                 If an app is not connected, COMPOSIO_MANAGE_CONNECTIONS gives a sign-in link: show it to the user and wait for them to finish.",
-            );
-        }
-        if caps.composio {
-            s.push_str("\n\n## Connected apps\nUse `composio_search` to find actions for the user's connected apps, then `composio_execute`.");
         }
         s
     }
@@ -1392,46 +1097,6 @@ impl Core {
             tools::READ_EMAILS | tools::SEARCH_INBOX | tools::SEND_EMAIL => {
                 self.email_tool(agent, call).await
             }
-            tools::COMPOSIO_SEARCH => {
-                let found = self
-                    .composio()
-                    .await?
-                    .search_tools(need("query")?, arg_str(args, "toolkit"), 8)
-                    .await?;
-                if found.is_empty() {
-                    return Ok(
-                        "No matching actions. The app may not be connected in Composio yet.".into(),
-                    );
-                }
-                Ok(found
-                    .iter()
-                    .map(|t| {
-                        let params = t
-                            .input_parameters
-                            .get("properties")
-                            .map(|p| p.to_string())
-                            .unwrap_or_default();
-                        format!(
-                            "- {} ({}): {}\n  parameters: {}",
-                            t.slug,
-                            t.toolkit,
-                            t.description.chars().take(300).collect::<String>(),
-                            params.chars().take(800).collect::<String>()
-                        )
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"))
-            }
-            tools::COMPOSIO_EXECUTE => {
-                let arguments = args
-                    .get("arguments")
-                    .cloned()
-                    .unwrap_or(Value::Object(Default::default()));
-                self.composio()
-                    .await?
-                    .execute(need("slug")?, arguments)
-                    .await
-            }
             other => anyhow::bail!("unknown tool `{other}`"),
         }
     }
@@ -1444,28 +1109,6 @@ impl Core {
             .await?
             .ok_or_else(|| anyhow::anyhow!("you don't have an email account yet"))?;
         let limit = arg_u64(args, "limit").unwrap_or(10).clamp(1, 30) as usize;
-        if acc.kind == EmailKind::ComposioGmail {
-            let c = self.composio().await?;
-            return match call.name.as_str() {
-                tools::READ_EMAILS => {
-                    let unread = args.get("unread_only").and_then(Value::as_bool).unwrap_or(false);
-                    c.execute("GMAIL_FETCH_EMAILS", serde_json::json!({ "max_results": limit, "query": if unread { "is:unread" } else { "" } })).await
-                }
-                tools::SEARCH_INBOX => {
-                    c.execute("GMAIL_FETCH_EMAILS", serde_json::json!({ "max_results": limit, "query": arg_str(args, "query").unwrap_or_default() })).await
-                }
-                _ => {
-                    let cc: Vec<&str> = arg_str(args, "cc").unwrap_or_default().split(',').map(str::trim).filter(|s| !s.is_empty()).collect();
-                    c.execute("GMAIL_SEND_EMAIL", serde_json::json!({
-                        "recipient_email": arg_str(args, "to").unwrap_or_default(),
-                        "subject": arg_str(args, "subject").unwrap_or_default(),
-                        "body": args.get("body").and_then(Value::as_str).unwrap_or_default(),
-                        "cc": cc,
-                    }))
-                    .await
-                }
-            };
-        }
         let pw = self.secrets.get(&email_key(&agent.id)).ok_or_else(|| {
             anyhow::anyhow!("the email password is missing; ask the user to add it in your profile")
         })?;

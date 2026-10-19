@@ -65,11 +65,11 @@ creates your first agent. Replay it any time from **Settings → General**.
     <td valign="top"><b>⏰ Wake up on their own</b><br>Automations on a schedule, new email (IMAP or Gmail), local webhooks or group messages — described in plain words.</td>
   </tr>
   <tr>
-    <td valign="top"><b>✉️ Own an inbox</b><br>IMAP/SMTP with auto-detected servers, or Gmail via Composio. Read, search and send — sending asks first.</td>
+    <td valign="top"><b>✉️ Own an inbox</b><br>IMAP/SMTP with auto-detected servers. Read, search and send — sending asks first.</td>
     <td valign="top"><b>🖥️ Use a computer</b><br>A Docker container (with an optional desktop you can watch), a SPACE microVM, WSL, a <b>VMPal</b> virtual machine, or your machine with approval.</td>
   </tr>
   <tr>
-    <td valign="top"><b>🧩 Use your apps</b><br>MCP servers (stdio and HTTP, <code>mcp.json</code> import) and 1000+ apps through Composio, connected from inside OpenCue.</td>
+    <td valign="top"><b>🧩 Use your apps</b><br>MCP servers (stdio and HTTP, <code>mcp.json</code> import) and a catalog of apps (Gmail, Drive, Calendar, Notion, Trello, GitHub, Supabase, Vercel, Outlook) you sign in to with OAuth.</td>
     <td valign="top"><b>✨ Learn skills</b><br>Claude Code–compatible <code>SKILL.md</code>: write them, import them from a URL, or let agents save their own. Run any skill with <code>/</code>, or ask for <code>/create-skill</code> and <code>/create-automation</code>.</td>
   </tr>
   <tr>
@@ -82,7 +82,7 @@ creates your first agent. Replay it any time from **Settings → General**.
 LM Studio, any OpenAI-compatible API — or the **Codex**, **Claude Code** and **Grok** CLIs you're already signed in to.
 
 **Safe by default:** in *Ask first* mode, sending email, commands on your machine, deletions and data-changing tools wait
-for your OK. No account, no telemetry; secrets live in the system keychain.
+for your OK. No account, no telemetry; secrets stay in a private file on your computer.
 
 Not planned: phone numbers, payments/wallet, QR "scan & create".
 
@@ -91,7 +91,7 @@ Not planned: phone numbers, payments/wallet, QR "scan & create".
 OpenAI and Anthropic don't offer third-party sign-in for consumer subscriptions, and reusing their tokens elsewhere breaks
 their terms. OpenCue runs **your installed, logged-in** `codex`, `claude` or `grok` binary instead, so your subscription stays in
 the official client and OpenCue never sees the tokens. Those agents still get OpenCue's tools — memory, web, skills,
-computer, files, email, Composio — through a local MCP server (`opencue mcp-serve --agent <id>`).
+computer, files, email, catalog apps — through a local MCP server (`opencue mcp-serve --agent <id>`).
 
 ## Develop
 
@@ -118,7 +118,7 @@ Release builds sign update bundles, so a local `npm run tauri build` needs `TAUR
 
 ```
 crates/opencue-core     Rust core: agents, providers, runtime, memory, files, MCP client and server, web, skills,
-                        automations, email, Composio, computers (Docker/SPACE/WSL/host), voice, storage
+                        automations, email, catalog apps, computers (Docker/Podman/SPACE/WSL/host), voice, storage
 crates/opencue-cli      opencue-cli companion
 apps/desktop            Tauri 2 shell (src-tauri) + React/Tailwind UI (src)
 site/                   website (GitHub Pages): home, /docs, /privacy, /changelog, install scripts, llms.txt
@@ -138,8 +138,8 @@ docs/                   design doc, SPACE setup guide
 Inside: `opencue.db` (SQLite: agents, groups, messages, providers, MCP servers, automations, email accounts, settings,
 web cache), `agents/<id>/` (`INSTRUCTIONS.md`, `MEMORY.md`, `workspace/`, `space.json`), `files/` (shared files),
 `memory/GLOBAL.md` and `skills/<name>/SKILL.md`. Set `OPENCUE_HOME` to use another folder. API keys, email passwords and
-tokens live in the OS credential store; without one (headless Linux) they fall back to `secrets.json` with `0600`
-permissions.
+tokens live in `secrets.json` (mode `0600`) in the data folder; catalog app tokens are in `oauth/<app>.json` (also `0600`).
+The system keychain is not used.
 
 </details>
 
@@ -174,6 +174,9 @@ Changes to `site/` deploy the website.
 - [x] **0.3.5**: agents that talk to each other in 1:1 chats (`send_to_agent`, `@` and a "Chat with …" pill), the
   yellow ask/permission card (`ask_user`), shared or per-agent Docker VMs with an idle stop and a setup checklist, a
   Composio refresh button and a fix for Claude Code agents hitting permission errors on Composio.
+- [x] **0.3.6**: Podman as an alternative to Docker, a Catalog of OAuth apps instead of Composio (red/yellow/green cards),
+  a terminal that opens by itself, a right-click menu on agents and groups (rename, pin, clear, reset, delete), voice
+  calls in a phone-sized window, and secrets in a private file instead of the keychain.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

@@ -1,6 +1,6 @@
 # Security Policy
 
-OpenCue runs AI agents that can read web pages, email and shared files, call MCP and Composio tools, run commands on a
+OpenCue runs AI agents that can read web pages, email and shared files, call MCP tools and catalog apps, run commands on a
 computer and keep data on your machine — and it installs and updates itself — so security reports are taken seriously
 and handled privately.
 
@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.3.5`) | ✅ |
+| Latest release (`0.3.x`, currently `0.3.6`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -42,13 +42,12 @@ being exploited).
 In scope:
 
 - **Prompt injection that bypasses approvals** — content from a web page, email, shared file, webhook payload, tool
-  result or MCP / Composio response that makes an agent run an action that should have required approval in "Ask first"
+  result or MCP / catalog app response that makes an agent run an action that should have required approval in "Ask first"
   mode (sending email, running a command or writing a file on the host or WSL, deleting memory, data-changing tools) —
   including through `opencue mcp-serve`, which must ask the user (or refuse) for those actions for CLI agents in "Ask first" mode, and agent-to-agent chats, which must not let an agent skip another agent's approvals
 - **Sandbox escapes through OpenCue** — a command in the Docker or SPACE computer reaching the host or another agent's
   workspace because of how OpenCue mounts, names or talks to it; file tools escaping an agent's workspace folder
-- **Secret exposure** — API keys, email passwords, the SPACE token or the Composio key leaking from the OS keychain, the
-  `secrets.json` fallback, logs, the UI, the agent's context or network traffic; SPACE session tokens sent to a host
+- **Secret exposure** — API keys, email passwords, the SPACE token or an app's OAuth tokens leaking from `secrets.json` or `oauth/` (both `0600`), logs, the UI, the agent's context or network traffic; SPACE session tokens sent to a host
   other than the configured server
 - **Webhooks and the desktop view** — the automation server or a Docker desktop port reachable from other machines, or
   automations firing without the correct token
@@ -70,7 +69,7 @@ Out of scope:
 
 - Actions an agent takes in **Fully autonomous** mode, or on **This computer** after the user approved the command
 - Commands that run inside the Docker or SPACE sandbox itself (that is their purpose), unless they escape it
-- Behaviour of third-party services and tools themselves — model providers, Composio, ElevenLabs, email providers, SPACE,
+- Behaviour of third-party services and tools themselves — model providers, the catalog apps' own servers (Google, Notion, GitHub…), ElevenLabs, email providers, SPACE,
   Docker and desktop images (e.g. linuxserver.io Webtop), MCP servers, the `codex` and `claude` CLIs — report those
   upstream
 - Installers not being notarized or code-signed by Apple / Microsoft (known; update bundles are signed)
@@ -82,10 +81,12 @@ Out of scope:
 ## Security model at a glance
 
 - **Local-first**: chats, files, memory, skills, workspaces and settings stay in the OpenCue data folder. No telemetry.
-- **Secrets** (API keys, email passwords, SPACE token, Composio and ElevenLabs keys) are stored in the OS credential
-  store; without one they fall back to a `0600` file and a warning is logged. They are never put in the agent's context.
+- **Secrets** (API keys, email passwords, SPACE token, ElevenLabs key) are stored in `secrets.json` (mode `0600`) in the
+  data folder, not in the system keychain (it asked for permission constantly). Catalog apps sign in with OAuth (PKCE) in
+  the browser; the redirect goes to a loopback port the app opens only while a sign-in is pending, and the tokens are in
+  `oauth/<app>.json` (`0600`). Secrets are never put in the agent's context.
 - **Approvals** ("Ask first", the default): sending email, commands and file writes on the host or WSL, deleting
-  memories, MCP tools not marked read-only and Composio actions that may change data wait for the user.
+  memories, MCP tools and catalog app tools not marked read-only wait for the user.
 - **Computers**: Docker and SPACE isolate commands from the host; each Docker agent sees only its own workspace at
   `/workspace`. On the host, Docker and WSL, file tools reject paths that leave the agent's workspace. SPACE output
   streams are only read from the configured host.

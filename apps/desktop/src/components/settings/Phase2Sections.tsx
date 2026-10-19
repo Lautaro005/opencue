@@ -3,132 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Box, Check, Copy, Download, ExternalLink, Github, MonitorCog, Plus, RefreshCw, Server, Terminal, Trash2 } from "lucide-react";
 import { api, openUrl } from "../../lib/api";
 import { useStore } from "../../lib/store";
-import type { ComposioStatus, ComputerSettings, DockerSetup, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
+import type { ComputerSettings, DockerSetup, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
-import { AppPicker } from "./AppPicker";
 
 export const SPACE_REPO = "https://github.com/perplexityai/SPACE";
-
-// ---------- Composio (inside Apps) ----------
-
-export function ComposioCard() {
-  const { t } = useTranslation();
-  const [status, setStatus] = useState<ComposioStatus | null>(null);
-  const [key, setKey] = useState("");
-  const [user, setUser] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [connecting, setConnecting] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const showToast = useStore((s) => s.showToast);
-
-  const refresh = async () => {
-    setRefreshing(true);
-    try {
-      setStatus(await api.refreshComposio());
-    } catch (e) {
-      showToast(String(e));
-    } finally {
-      setRefreshing(false);
-    }
-  };
-
-  const connect = async (slug: string) => {
-    setConnecting(true);
-    try {
-      await openUrl(await api.composioConnect(slug));
-      showToast(t("settings.composio.connectOpened"));
-    } catch (e) {
-      showToast(String(e));
-    } finally {
-      setConnecting(false);
-    }
-  };
-
-  useEffect(() => {
-    void api.composioStatus().then((s) => {
-      setStatus(s);
-      setUser(s.user_id);
-    });
-  }, []);
-
-  const save = async () => {
-    setBusy(true);
-    try {
-      setStatus(await api.saveComposio(key || undefined, user));
-      setKey("");
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card
-      title="Composio"
-      action={
-        <button onClick={() => void openUrl("https://platform.composio.dev")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
-          {t("settings.composio.dashboard")} <ExternalLink size={12} />
-        </button>
-      }
-    >
-      <div className="space-y-3 px-4 py-3.5">
-        <p className="text-[12.5px] text-muted">{t("settings.composio.hint")}</p>
-        {status?.configured && status.mode === "connect" && (
-          <div className="flex items-center gap-2 rounded-lg bg-hover px-3 py-2 text-[12.5px]">
-            <span className={`size-1.5 shrink-0 rounded-full ${status.error ? "bg-danger" : status.tools > 0 ? "bg-success" : "bg-warning"}`} />
-            <span className="min-w-0 flex-1">
-              <span className="font-medium">{t("settings.composio.connectMode")}</span>
-              <span className="text-muted"> · {status.error ? status.error : status.tools > 0 ? t("settings.composio.toolsReady", { n: status.tools }) : t("settings.composio.connecting")}</span>
-            </span>
-          </div>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <Field label={t("settings.composio.key")} hint={status?.configured ? t("settings.composio.keySaved") : undefined}>
-            <Input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={status?.configured ? "••••••••" : "ck_… / ak_…"} />
-          </Field>
-          <Field label={t("settings.composio.user")} hint={t("settings.composio.userHint")}>
-            <Input value={user} onChange={(e) => setUser(e.target.value)} placeholder="default" />
-          </Field>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="primary" onClick={() => void save()} disabled={busy}>
-            {t("common.save")}
-          </Button>
-          <Button size="sm" onClick={() => void refresh()} disabled={refreshing || !status?.configured} aria-label={t("settings.composio.refreshApps")} data-tip={t("settings.composio.refreshApps")}>
-            <RefreshCw size={14} className={refreshing ? "animate-spin" : undefined} />
-          </Button>
-          {status?.error && <span className="line-clamp-2 text-[12px] text-danger">{status.error}</span>}
-        </div>
-        {status?.configured && (
-          <div className="flex flex-wrap gap-1.5">
-            {status.accounts.length === 0 ? (
-              <span className="text-[12px] text-faint">{t("settings.composio.noAccounts")}</span>
-            ) : (
-              status.accounts.map((a) => (
-                <Badge key={a.id} tone={a.status === "ACTIVE" ? "success" : "neutral"}>
-                  {a.toolkit}
-                </Badge>
-              ))
-            )}
-          </div>
-        )}
-        {status?.configured && (
-          <div className="space-y-2 border-t border-line pt-3">
-            <span className="block text-[12.5px] font-medium text-muted">{t("settings.composio.connect")}</span>
-            <div className="flex flex-wrap gap-1.5">
-              {["gmail", "googlecalendar", "slack", "notion", "github", "googledrive"].map((slug) => (
-                <button key={slug} disabled={connecting} onClick={() => void connect(slug)} className="rounded-full border border-line px-2.5 py-0.5 text-[12px] text-muted hover:bg-hover hover:text-ink disabled:opacity-50">
-                  + {slug}
-                </button>
-              ))}
-            </div>
-            <AppPicker busy={connecting} onPick={(slug) => void connect(slug)} />
-          </div>
-        )}
-      </div>
-    </Card>
-  );
-}
 
 // ---------- Skills ----------
 
@@ -263,8 +142,25 @@ export function ComputersSection() {
     <>
       <PageTitle title={t("settings.computers.title")} hint={t("settings.computers.hint")} />
       <Card title={t("settings.computers.docker")}>
-        <CardRow label={t("settings.computers.status")} hint={t("settings.computers.dockerHint")}>
-          <Badge tone={s.docker_available ? "success" : "neutral"}>{s.docker_available ? t("settings.computers.found") : t("settings.computers.notFound")}</Badge>
+        <CardRow label={t("settings.computers.runtime")} hint={t("settings.computers.runtimeHint")}>
+          <span className="inline-flex rounded-lg border border-line p-0.5" role="group" aria-label={t("settings.computers.runtime")}>
+            {(["docker", "podman"] as const).map((r) => (
+              <button
+                key={r}
+                aria-pressed={s.runtime === r}
+                onClick={() => void save({ ...s, runtime: r })}
+                className={`rounded-md px-3 py-1 text-[12.5px] font-medium ${s.runtime === r ? "bg-accent text-white" : "text-muted hover:bg-hover"}`}
+              >
+                {r === "docker" ? "Docker" : "Podman"}
+              </button>
+            ))}
+          </span>
+        </CardRow>
+        <CardRow label={t("settings.computers.status")} hint={s.runtime === "podman" ? t("settings.computers.podmanHint") : t("settings.computers.dockerHint")}>
+          {(() => {
+            const found = s.runtime === "podman" ? s.podman_available : s.docker_available;
+            return <Badge tone={found ? "success" : "neutral"}>{found ? t("settings.computers.found") : t("settings.computers.notFound")}</Badge>;
+          })()}
         </CardRow>
         <CardRow label={t("settings.computers.image")}>
           <Input className="w-56" value={s.docker_image} placeholder="ubuntu:24.04" onChange={(e) => setS({ ...s, docker_image: e.target.value })} onBlur={() => void save(s)} />
@@ -360,7 +256,7 @@ function DockerSetupCard({ s, save }: { s: ComputerSettings; save: (next: Comput
   const [log, setLog] = useState("");
   const [copied, setCopied] = useState(false);
   const load = () => void api.dockerSetup().then(setSetup);
-  useEffect(load, [s.shared_vm]);
+  useEffect(load, [s.shared_vm, s.runtime]);
   useEffect(() => {
     const onOut = (e: Event) => {
       const ev = (e as CustomEvent<{ agent_id: string; text: string }>).detail;
@@ -370,7 +266,16 @@ function DockerSetupCard({ s, save }: { s: ComputerSettings; save: (next: Comput
     return () => window.removeEventListener("opencue:computer-output", onOut);
   }, []);
 
-  const startCmd = s.os === "macos" ? "open -a Docker" : s.os === "windows" ? "Start Docker Desktop" : "sudo systemctl start docker";
+  const podman = s.runtime === "podman";
+  const startCmd = podman
+    ? s.os === "linux"
+      ? "podman info"
+      : "podman machine init; podman machine start"
+    : s.os === "macos"
+      ? "open -a Docker"
+      : s.os === "windows"
+        ? "Start Docker Desktop"
+        : "sudo systemctl start docker";
   const run = async (kind: "pull" | "vm") => {
     setBusy(kind);
     try {
@@ -387,16 +292,16 @@ function DockerSetupCard({ s, save }: { s: ComputerSettings; save: (next: Comput
   const steps: { done: boolean; title: string; body?: React.ReactNode }[] = [
     {
       done: !!setup?.installed,
-      title: t("settings.computers.stepInstall"),
+      title: podman ? t("settings.computers.stepInstallPodman") : t("settings.computers.stepInstall"),
       body: !setup?.installed && (
-        <button onClick={() => void openUrl("https://docs.docker.com/get-docker/")} className="text-[12.5px] text-accent hover:underline">
-          docs.docker.com/get-docker
+        <button onClick={() => void openUrl(podman ? "https://podman.io/docs/installation" : "https://docs.docker.com/get-docker/")} className="text-[12.5px] text-accent hover:underline">
+          {podman ? "podman.io/docs/installation" : "docs.docker.com/get-docker"}
         </button>
       ),
     },
     {
       done: !!setup?.running,
-      title: t("settings.computers.stepStart"),
+      title: podman ? t(s.os === "linux" ? "settings.computers.stepStartPodmanLinux" : "settings.computers.stepStartPodman") : t("settings.computers.stepStart"),
       body: !setup?.running && (
         <div className="flex w-fit items-center gap-3 rounded-lg bg-hover px-3 py-2 font-mono text-[12.5px]">
           {startCmd}

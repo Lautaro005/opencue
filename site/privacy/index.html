@@ -35,7 +35,7 @@
       <ul>
         <li>Your agents, their instructions, memory, skills, chats, automations and settings, in the OpenCue data folder (<code>~/Library/Application Support/opencue</code> on macOS, <code>~/.local/share/opencue</code> on Linux, <code>%APPDATA%\opencue\data</code> on Windows).</li>
         <li>Files you or your agents share in chats, in that folder's <code>files/</code> directory and as copies in the agents' workspaces.</li>
-        <li>Secrets — API keys, email passwords and tokens — in your operating system's credential store. Only when none is available are they saved in a <code>secrets.json</code> file readable by your user alone.</li>
+        <li>Secrets — API keys, email passwords and tokens — in a <code>secrets.json</code> file readable by your user alone, and the OAuth tokens of catalog apps in <code>oauth/</code> (same protection). The system keychain is not used.</li>
         <li>Files agents create in their workspace folder.</li>
       </ul>
       <p>The OpenCue project never receives any of this. There is no analytics, crash reporting or usage tracking in the app.</p>
@@ -48,7 +48,7 @@
         <tr><td>Local models (Ollama, LM Studio) or the <code>codex</code> / <code>claude</code> CLIs</td><td>The same, to the program on your machine (the CLIs then talk to their own company under their own terms). CLI agents reach OpenCue's tools through a local MCP server (<code>opencue mcp-serve</code>) that runs on your computer and only talks to the CLI that started it; what those tools return goes to the CLI's provider like any other reply</td><td>Every time an agent answers</td></tr>
         <tr><td>DuckDuckGo, Wikipedia, your SearXNG, and websites</td><td>Search queries and page requests</td><td>When an agent searches or reads the web</td></tr>
         <tr><td>Your email provider (IMAP/SMTP)</td><td>Login and the messages read or sent</td><td>When an agent uses email or an email automation checks the inbox</td></tr>
-        <tr><td>Composio</td><td>Your Composio API key, user ID and the arguments of actions agents run; when you connect an app, Composio's sign-in page opens in your browser and the app's account is linked to Composio, not to OpenCue</td><td>When an agent uses connected apps, Gmail automations check the inbox, or you connect an app</td></tr>
+        <tr><td>The catalog apps you connect (Google, Notion, Trello, GitHub, Supabase, Vercel, Microsoft)</td><td>Your sign-in happens on their page in your browser; afterwards their MCP server receives the requests agents make (search, read, create…) with your access token</td><td>When you connect an app or an agent uses it</td></tr>
         <tr><td>ElevenLabs</td><td>Your recorded voice and the text of replies to be spoken</td><td>Only while you use the microphone or a reply is read aloud</td></tr>
         <tr><td>SPACE server, Docker, MCP servers</td><td>Commands, files and tool arguments. Docker downloads the computer and desktop images from their registry (Docker Hub, lscr.io…) the first time</td><td>When an agent uses its computer or an app</td></tr>
         <tr><td>GitHub</td><td>A request for the latest release information (<code>latest.json</code>) and, if you install an update, the update file. GitHub sees your IP address and the app version in the request, like any download</td><td>Once at startup (turn it off in Settings → About), when you check for updates, and when you click links to the repository or docs</td></tr>

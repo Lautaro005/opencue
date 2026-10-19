@@ -1,5 +1,4 @@
-//! Per-agent email over IMAP (read/search) and SMTP (send). Gmail through Composio is handled by
-//! the runtime, which routes the same tools to Composio actions when the account kind says so.
+//! Per-agent email over IMAP (read/search) and SMTP (send).
 
 use std::sync::Arc;
 
@@ -13,23 +12,17 @@ use tokio_rustls::rustls::{self, pki_types::ServerName};
 pub enum EmailKind {
     #[default]
     Imap,
-    ComposioGmail,
 }
 
 impl EmailKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             EmailKind::Imap => "imap",
-            EmailKind::ComposioGmail => "composio_gmail",
         }
     }
 
-    pub fn parse(s: &str) -> Self {
-        if s == "composio_gmail" {
-            EmailKind::ComposioGmail
-        } else {
-            EmailKind::Imap
-        }
+    pub fn parse(_s: &str) -> Self {
+        EmailKind::Imap
     }
 }
 
@@ -395,58 +388,5 @@ mod tests {
     #[test]
     fn quotes_imap_strings() {
         assert_eq!(quote(r#"say "hi""#), r#""say \"hi\"""#);
-    }
-}
-
-/// One message from Composio's `GMAIL_FETCH_EMAILS`.
-#[derive(Debug, Clone, PartialEq)]
-pub struct GmailMessage {
-    pub id: String,
-    pub from: String,
-    pub subject: String,
-    pub date: String,
-    pub body: String,
-}
-
-/// Read `GMAIL_FETCH_EMAILS` output defensively: field names vary between Composio versions.
-pub fn parse_gmail_messages(data: &serde_json::Value) -> Vec<GmailMessage> {
-    let pick = |m: &serde_json::Value, keys: &[&str]| -> String {
-        keys.iter()
-            .find_map(|k| m.pointer(k).and_then(serde_json::Value::as_str))
-            .unwrap_or_default()
-            .to_string()
-    };
-    data.get("messages")
-        .and_then(serde_json::Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(|m| {
-            let id = pick(m, &["/messageId", "/id"]);
-            (!id.is_empty()).then(|| GmailMessage {
-                from: pick(m, &["/sender", "/from"]),
-                subject: pick(m, &["/subject", "/preview/subject"]),
-                date: pick(m, &["/messageTimestamp", "/date"]),
-                body: pick(m, &["/messageText", "/preview/body", "/snippet"])
-                    .chars()
-                    .take(4000)
-                    .collect(),
-                id,
-            })
-        })
-        .collect()
-}
-
-#[cfg(test)]
-mod gmail_tests {
-    #[test]
-    fn reads_composio_gmail_output() {
-        let data = serde_json::json!({ "messages": [
-            { "messageId": "a1", "sender": "Ana <ana@x.com>", "subject": "Hola", "messageText": "Body", "messageTimestamp": "2026-10-17T10:00:00Z" },
-            { "subject": "no id" }
-        ]});
-        let m = super::parse_gmail_messages(&data);
-        assert_eq!(m.len(), 1);
-        assert_eq!(m[0].from, "Ana <ana@x.com>");
-        assert_eq!(m[0].body, "Body");
     }
 }

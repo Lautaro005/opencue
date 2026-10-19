@@ -53,6 +53,9 @@ pub struct VmOptions {
     /// of its own inside OpenCue's data directory.
     #[serde(default)]
     pub data_dir: Option<String>,
+    /// "docker" or "podman" for this agent; `None` follows Settings → Computers.
+    #[serde(default)]
+    pub runtime: Option<String>,
 }
 
 /// Global computer settings (Settings → Computers).
@@ -74,6 +77,9 @@ pub struct ComputerConfig {
     /// One Docker computer (and desktop) for every agent instead of one each.
     #[serde(default)]
     pub shared: bool,
+    /// Container engine: "docker" (default) or "podman".
+    #[serde(default)]
+    pub runtime: String,
     /// Minutes without use after which a Docker computer is stopped; 0 never stops it.
     #[serde(default)]
     pub idle_minutes: u32,
@@ -82,6 +88,32 @@ pub struct ComputerConfig {
 /// linuxserver.io's Webtop: maintained, multi-arch, serves an XFCE desktop to the browser.
 pub const DEFAULT_DESKTOP_IMAGE: &str = "lscr.io/linuxserver/webtop:ubuntu-xfce";
 pub const DEFAULT_DESKTOP_PORT: u16 = 3000;
+
+/// The container engine behind "Local VM": Docker or Podman (rootless, no daemon).
+pub fn runtime_name(s: &str) -> &'static str {
+    if s.trim().eq_ignore_ascii_case("podman") {
+        "podman"
+    } else {
+        "docker"
+    }
+}
+
+/// Podman doesn't assume Docker Hub for short names, so spell them out.
+pub fn qualify_image(rt: &str, image: &str) -> String {
+    if rt != "podman" {
+        return image.to_string();
+    }
+    let first = image.split('/').next().unwrap_or_default();
+    let has_host =
+        image.contains('/') && (first.contains('.') || first.contains(':') || first == "localhost");
+    if has_host {
+        image.to_string()
+    } else if image.contains('/') {
+        format!("docker.io/{image}")
+    } else {
+        format!("docker.io/library/{image}")
+    }
+}
 
 impl ComputerConfig {
     pub fn desktop_image(&self) -> &str {
@@ -148,6 +180,11 @@ pub struct Computer<'a> {
 }
 
 impl Computer<'_> {
+    /// The engine this computer runs on: the agent's choice, else the global one.
+    pub fn rt(&self) -> &'static str {
+        runtime_name(self.vm.runtime.as_deref().unwrap_or(&self.config.runtime))
+    }
+
     pub fn container_name(&self) -> String {
         if self.shared {
             return "opencue-shared".into();
@@ -183,7 +220,7 @@ impl Computer<'_> {
             }
             ComputerBackend::Docker => {
                 self.ensure_container().await?;
-                let mut cmd = tokio::process::Command::new("docker");
+                let mut cmd = tokio::process::Command::new(self.rt());
                 cmd.args(["exec", "-w", "/workspace"]);
                 if self.config.docker_desktop {
                     // GUI programs the agent starts show up in the desktop view.
@@ -217,7 +254,8 @@ impl Computer<'_> {
     /// container is recreated (the workspace and the VM folder are kept).
     fn fingerprint(&self) -> String {
         format!(
-            "desktop={};image={};mem={};cpus={};vm={};ws={}",
+            "rt={};desktop={};image={};mem={};cpus={};vm={};ws={}",
+            self.rt(),
             self.desktop_enabled(),
             if self.desktop_enabled() {
                 self.config.desktop_image().to_string()
@@ -238,20 +276,21 @@ impl Computer<'_> {
 
     async fn ensure_container(&self) -> anyhow::Result<()> {
         let name = self.container_name();
-        let state = tokio::process::Command::new("docker")
+        let state = tokio::process::Command::new(self.rt())
             .args(["inspect", "-f", "{{.State.Running}}", &name])
             .output()
             .await
             .map_err(|e| {
                 anyhow::anyhow!(
-                    "Docker is not available ({e}). Install Docker Desktop or Docker Engine."
+                    "{} is not available ({e}). Install it and start it first.",
+                    self.rt()
                 )
             })?;
         let mut exists = state.status.success();
         let mut running = String::from_utf8_lossy(&state.stdout).trim() == "true";
         if exists {
             // Settings that are fixed at creation changed: start over with the same folders.
-            let label = tokio::process::Command::new("docker")
+            let label = tokio::process::Command::new(self.rt())
                 .args([
                     "inspect",
                     "-f",
@@ -271,7 +310,7 @@ impl Computer<'_> {
             return Ok(());
         }
         let out = if exists {
-            tokio::process::Command::new("docker")
+            tokio::process::Command::new(self.rt())
                 .args(["start", &name])
                 .output()
                 .await?
@@ -281,10 +320,11 @@ impl Computer<'_> {
             } else {
                 self.config.docker_image.trim()
             };
+            let image = qualify_image(self.rt(), image);
             std::fs::create_dir_all(&self.workspace)?;
             std::fs::create_dir_all(&self.vm_dir)?;
             let mount = format!("{}:/workspace", self.workspace.display());
-            let mut cmd = tokio::process::Command::new("docker");
+            let mut cmd = tokio::process::Command::new(self.rt());
             cmd.args(["run", "-d", "--name", &name, "--label", "opencue=agent"]);
             cmd.args(["--label", &format!("opencue.fp={}", self.fingerprint())]);
             cmd.args(["-v", &mount]);
@@ -310,10 +350,14 @@ impl Computer<'_> {
                         }
                     }
                 }
-                cmd.args(["--shm-size", "1g", self.config.desktop_image()]);
+                cmd.args([
+                    "--shm-size",
+                    "1g",
+                    &qualify_image(self.rt(), self.config.desktop_image()),
+                ]);
             } else {
                 cmd.args(["-v", &format!("{}:/root", self.vm_dir.display())]);
-                cmd.args(["-w", "/workspace", image, "sleep", "infinity"]);
+                cmd.args(["-w", "/workspace", &image, "sleep", "infinity"]);
             }
             cmd.output().await?
         };
@@ -336,7 +380,7 @@ impl Computer<'_> {
             "turn on the live desktop in this agent's Computer settings first"
         );
         self.ensure_container().await?;
-        let out = tokio::process::Command::new("docker")
+        let out = tokio::process::Command::new(self.rt())
             .args([
                 "port",
                 &self.container_name(),
@@ -362,7 +406,7 @@ impl Computer<'_> {
             self.backend == ComputerBackend::Docker,
             "only Docker computers can be restarted from here"
         );
-        let out = tokio::process::Command::new("docker")
+        let out = tokio::process::Command::new(self.rt())
             .args(["rm", "-f", &self.container_name()])
             .output()
             .await?;
@@ -852,17 +896,18 @@ pub struct DockerSetup {
     pub vm: String,
 }
 
-pub async fn docker_setup(image: &str, container: &str) -> DockerSetup {
+pub async fn docker_setup(rt: &str, image: &str, container: &str) -> DockerSetup {
+    let image = qualify_image(rt, image);
     let mut s = DockerSetup {
         vm: "none".into(),
         ..Default::default()
     };
-    s.installed = which::which("docker").is_ok();
+    s.installed = which::which(rt).is_ok();
     if !s.installed {
         return s;
     }
     let ok = |args: Vec<String>| async move {
-        tokio::process::Command::new("docker")
+        tokio::process::Command::new(rt)
             .args(args)
             .stdin(Stdio::null())
             .output()
@@ -875,7 +920,7 @@ pub async fn docker_setup(image: &str, container: &str) -> DockerSetup {
     if !s.running {
         return s;
     }
-    s.image_ready = ok(vec!["image".into(), "inspect".into(), image.into()])
+    s.image_ready = ok(vec!["image".into(), "inspect".into(), image.clone()])
         .await
         .is_some_and(|o| o.status.success());
     if let Some(o) = ok(vec![
@@ -898,24 +943,26 @@ pub async fn docker_setup(image: &str, container: &str) -> DockerSetup {
 
 /// Download an image, reporting progress through `sink`.
 pub async fn pull_image(
+    rt: &str,
     image: &str,
     sink: Sink<'_>,
     cancel: &CancellationToken,
 ) -> anyhow::Result<()> {
+    let image = qualify_image(rt, image);
     anyhow::ensure!(
-        which::which("docker").is_ok(),
-        "Docker is not installed. Install Docker Desktop or Docker Engine first."
+        which::which(rt).is_ok(),
+        "{rt} is not installed. Install it first."
     );
-    let mut cmd = tokio::process::Command::new("docker");
-    cmd.args(["pull", image]);
+    let mut cmd = tokio::process::Command::new(rt);
+    cmd.args(["pull", &image]);
     let res = run_process(cmd, Duration::from_secs(60 * 60), sink, cancel).await?;
     anyhow::ensure!(res.exit_code == 0, "docker pull failed");
     Ok(())
 }
 
 /// Names of the running containers OpenCue created.
-pub async fn running_containers() -> Vec<String> {
-    let Ok(out) = tokio::process::Command::new("docker")
+pub async fn running_containers(rt: &str) -> Vec<String> {
+    let Ok(out) = tokio::process::Command::new(rt)
         .args([
             "ps",
             "--filter",
@@ -935,8 +982,8 @@ pub async fn running_containers() -> Vec<String> {
         .collect()
 }
 
-pub async fn stop_container(name: &str) {
-    let _ = tokio::process::Command::new("docker")
+pub async fn stop_container(rt: &str, name: &str) {
+    let _ = tokio::process::Command::new(rt)
         .args(["stop", name])
         .output()
         .await;
@@ -961,6 +1008,37 @@ mod tests {
             },
             cfg,
         )
+    }
+
+    #[test]
+    fn podman_gets_fully_qualified_image_names() {
+        assert_eq!(qualify_image("docker", "ubuntu:24.04"), "ubuntu:24.04");
+        assert_eq!(
+            qualify_image("podman", "ubuntu:24.04"),
+            "docker.io/library/ubuntu:24.04"
+        );
+        assert_eq!(qualify_image("podman", "foo/bar:1"), "docker.io/foo/bar:1");
+        assert_eq!(
+            qualify_image("podman", "lscr.io/linuxserver/webtop:ubuntu-xfce"),
+            "lscr.io/linuxserver/webtop:ubuntu-xfce"
+        );
+        assert_eq!(
+            qualify_image("podman", "localhost:5000/x"),
+            "localhost:5000/x"
+        );
+        assert_eq!(runtime_name("Podman"), "podman");
+        assert_eq!(runtime_name(""), "docker");
+    }
+
+    #[test]
+    fn the_engine_follows_the_agent_then_the_settings() {
+        let tmp = tempfile::tempdir().unwrap();
+        let (mut c, _) = computer(tmp.path());
+        assert_eq!(c.rt(), "docker");
+        let base = c.fingerprint();
+        c.vm.runtime = Some("podman".into());
+        assert_eq!(c.rt(), "podman");
+        assert_ne!(c.fingerprint(), base);
     }
 
     #[test]

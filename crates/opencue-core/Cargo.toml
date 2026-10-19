@@ -21,8 +21,7 @@ chrono.workspace = true
 sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "chrono", "json"] }
 reqwest = { version = "0.13", default-features = false, features = ["json", "stream", "rustls", "gzip", "multipart", "query"] }
 eventsource-stream = "0.2"
-rmcp = { version = "3", features = ["client", "transport-child-process", "transport-streamable-http-client-reqwest"] }
-keyring = "4"
+rmcp = { version = "3", features = ["client", "auth", "transport-child-process", "transport-streamable-http-client-reqwest"] }
 directories = "6"
 scraper = "0.27"
 htmd = "0.5"

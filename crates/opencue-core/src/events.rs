@@ -31,6 +31,12 @@ pub enum CoreEvent {
         approval_id: String,
         approved: bool,
     },
+    /// A catalog app finished signing in (or failed to).
+    CatalogChanged {
+        slug: String,
+        connected: bool,
+        error: Option<String>,
+    },
     /// An agent asks the user a question or for permission.
     QuestionRequested {
         question: crate::bridge::Question,

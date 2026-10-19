@@ -565,4 +565,9 @@ async fn an_agent_can_talk_to_another_one_without_a_group() {
     assert_eq!(talk[0].agent_id.as_deref(), Some(boss.id.as_str()));
     assert_eq!(talk[0].content, "say hi");
     assert_eq!(talk[1].agent_id.as_deref(), Some(helper.id.as_str()));
+
+    // Resetting the chat also forgets what the agent talked about with other agents.
+    core.reset_thread(&boss.id).await.unwrap();
+    assert!(core.store.messages(&boss.id, 50).await.unwrap().is_empty());
+    assert!(core.store.messages(&dm, 50).await.unwrap().is_empty());
 }

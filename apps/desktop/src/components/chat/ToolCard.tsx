@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookmarkPlus, Brain, ChevronRight, FileText, FolderOpen, Globe, HelpCircle, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2, Zap } from "lucide-react";
+import { BookmarkPlus, Brain, ChevronRight, FileText, FolderOpen, Globe, HelpCircle, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
 import type { ApprovalRequest, Message, ToolCall } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/format";
@@ -46,10 +46,6 @@ function describe(name: string, args: Record<string, unknown> | undefined, t: (k
       return { icon: <Search size={14} />, title: t("chat.tools.search_inbox"), detail: String(a.query ?? "") };
     case "send_email":
       return { icon: <Mail size={14} />, title: t("chat.tools.send_email", { to: a.to ?? "" }), detail: String(a.subject ?? "") };
-    case "composio_search":
-      return { icon: <Zap size={14} />, title: t("chat.tools.composio_search"), detail: String(a.query ?? "") };
-    case "composio_execute":
-      return { icon: <Zap size={14} />, title: t("chat.tools.composio_execute"), detail: String(a.slug ?? "") };
     default: {
       const m = name.match(/^mcp__(.+?)__(.+)$/);
       return {

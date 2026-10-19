@@ -2,7 +2,7 @@
 
 pub mod automations;
 pub mod bridge;
-pub mod composio;
+pub mod catalog;
 pub mod computer;
 pub mod db;
 pub mod email;
@@ -25,7 +25,7 @@ pub mod web;
 mod runtime;
 mod services;
 
-pub use services::{ComposioStatus, ComputerSettings, VoiceSettings};
+pub use services::{ComputerSettings, VoiceSettings};
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -55,6 +55,10 @@ pub struct Core {
     approvals: Mutex<HashMap<String, oneshot::Sender<bool>>>,
     /// False in the tool server a CLI agent starts: it can't show cards or run other agents.
     primary: bool,
+    /// Chats that are on a voice call right now.
+    call_threads: Mutex<std::collections::HashSet<String>>,
+    /// Sign-ins to catalog apps waiting for the browser to come back.
+    catalog_flows: Mutex<HashMap<String, CancellationToken>>,
     /// Docker computers are shared by every agent (mirrors the setting, for sync callers).
     shared_vm: std::sync::atomic::AtomicBool,
     idle_started: std::sync::atomic::AtomicBool,
@@ -102,11 +106,13 @@ impl Core {
             store,
             secrets: Secrets::new(paths.secrets_fallback_file()),
             events,
-            mcp: McpManager::new(paths.secrets_fallback_file()),
+            mcp: McpManager::new(paths.root().join("oauth")),
             web: WebService::new(db),
             runs: Mutex::new(HashMap::new()),
             approvals: Mutex::new(HashMap::new()),
             primary,
+            call_threads: Mutex::new(Default::default()),
+            catalog_flows: Mutex::new(HashMap::new()),
             shared_vm: std::sync::atomic::AtomicBool::new(false),
             idle_started: std::sync::atomic::AtomicBool::new(false),
             computer_used: Mutex::new(HashMap::new()),
@@ -125,6 +131,8 @@ impl Core {
     /// Connect enabled MCP servers and start automations in the background.
     pub fn start_background(self: &Arc<Self>) {
         self.start_bridge();
+        self.start_catalog();
+        self.forget_composio();
         self.start_idle_monitor();
         self.start_automations();
         let core = self.clone();
@@ -228,6 +236,38 @@ impl Core {
             .await;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(())
+    }
+
+    /// A fresh start: the messages, the summary of them, the plan and the conversations the agent
+    /// had with other agents are all gone (memory, instructions and files stay).
+    pub async fn reset_thread(&self, thread_id: &str) -> anyhow::Result<()> {
+        self.clear_thread(thread_id).await?;
+        let mut agents = vec![];
+        if let Some(g) = self.store.get_group(thread_id).await? {
+            agents.extend(g.members.iter().map(|m| m.agent_id.clone()));
+        } else {
+            agents.push(thread_id.to_string());
+        }
+        for id in agents {
+            let _ = self.store.set_plan(&id, "");
+            let like = format!("dm_%{id}%");
+            let _ = sqlx::query("DELETE FROM messages WHERE thread_id LIKE ?")
+                .bind(&like)
+                .execute(&self.store.db)
+                .await;
+        }
+        self.emit(CoreEvent::ThreadsChanged);
+        Ok(())
+    }
+
+    /// Mark a chat as a voice call (or end it): while it lasts the agent answers like speech.
+    pub fn set_call_mode(&self, thread_id: &str, on: bool) {
+        let mut calls = self.call_threads.lock().unwrap();
+        if on {
+            calls.insert(thread_id.to_string());
+        } else {
+            calls.remove(thread_id);
+        }
     }
 
     // ---------- providers ----------

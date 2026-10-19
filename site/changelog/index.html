@@ -30,6 +30,23 @@
     </div>
     <article class="prose">
       <div class="release">
+        <h2 id="v0.3.6">0.3.6 <time datetime="2026-10-19">October 19, 2026</time></h2>
+        <h3>New</h3>
+        <ul>
+          <li><strong>Podman</strong> as an alternative to Docker for Local VMs: a switch in Settings → Computers, a setup checklist that follows it, and a per-agent choice.</li>
+          <li><strong>Catalog</strong> instead of Composio: Gmail, Google Drive, Google Calendar, Notion, Trello, GitHub, Supabase, Vercel and Outlook as cards with a moving border (red not connected, yellow connect again, green connected). Touch one to sign in with OAuth in your browser; OpenCue comes back by itself. Turn each app on per agent.</li>
+          <li><strong>The terminal opens by itself</strong> when an agent runs a command, so you can watch the commands and the VM.</li>
+          <li><strong>Right-click</strong> an agent or group: rename, pin, clear chat, reset chat, delete.</li>
+          <li><strong>Voice calls</strong>: a phone icon in the agent's header opens a phone-sized window; just talk, interrupt any time, mute or hang up.</li>
+        </ul>
+        <h3>Removed</h3>
+        <ul>
+          <li>Composio.</li>
+          <li>The system keychain: secrets now live in a private file (<code>secrets.json</code>, mode 0600). <strong>Enter your API keys again</strong> after updating.</li>
+        </ul>
+      </div>
+
+      <div class="release">
         <h2 id="v0.3.5">0.3.5 <time datetime="2026-10-19">October 19, 2026</time></h2>
         <h3>New</h3>
         <ul>

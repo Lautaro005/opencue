@@ -41,7 +41,7 @@
         <a href="#files">Files</a>
         <a href="#approvals">Approvals</a>
         <div class="group">Capabilities</div>
-        <a href="#apps">Apps, MCP &amp; Composio</a>
+        <a href="#apps">Apps, MCP &amp; Catalog</a>
         <a href="#skills">Skills</a>
         <a href="#email">Email</a>
         <a href="#automations">Automations</a>
@@ -96,13 +96,13 @@
         <p>Every agent uses one provider and model, picked when you create it or later in its profile → <strong>Model</strong>. <strong>Settings → Providers</strong> shows a container for every supported provider; click one to connect it. <strong>Settings → Models</strong> lists the models of the providers that are ready — search them and switch off the ones that shouldn't appear in pickers; the star sets a provider's default model.</p>
         <table>
           <tr><th>Provider</th><th>How it signs in</th></tr>
-          <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheaperInference, Ollama Cloud</td><td>API key, stored in your system keychain</td></tr>
+          <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheaperInference, Ollama Cloud</td><td>API key, stored on this computer (<code>secrets.json</code>, mode 0600)</td></tr>
           <tr><td>Ollama, LM Studio, any OpenAI-compatible server</td><td>Base URL, no key needed for local servers</td></tr>
           <tr><td>ChatGPT / Codex, Claude Code, Grok Build</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code>, <code>claude</code> or <code>grok</code> program you are already logged in to (Grok answers in text only). Models listed are the ones each CLI accepts.</td></tr>
         </table>
         <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client.</p>
         <h3>OpenCue tools for CLI agents</h3>
-        <p>CLI agents get OpenCue's own tools — memory, web, skills, their computer, files, email and Composio — through MCP: OpenCue hands the CLI a server started as <code>opencue mcp-serve --agent &lt;id&gt;</code>. Turn it off per agent in profile → <strong>Model</strong> → <em>OpenCue tools</em>. In <em>Ask first</em> mode actions that need approval (sending email, commands on your computer, deleting memories…) are put to you on the yellow card in the chat. Claude Code is started with only OpenCue's server, so your other MCP servers (configured in the CLI) aren't visible to the agent, and your own MCP servers configured in OpenCue aren't passed on.</p>
+        <p>CLI agents get OpenCue's own tools — memory, web, skills, their computer, files, email and catalog apps — through MCP: OpenCue hands the CLI a server started as <code>opencue mcp-serve --agent &lt;id&gt;</code>. Turn it off per agent in profile → <strong>Model</strong> → <em>OpenCue tools</em>. In <em>Ask first</em> mode actions that need approval (sending email, commands on your computer, deleting memories…) are put to you on the yellow card in the chat. Claude Code is started with only OpenCue's server, so your other MCP servers (configured in the CLI) aren't visible to the agent, and your own MCP servers configured in OpenCue aren't passed on.</p>
 
         <h2 id="profile">Profile &amp; avatar</h2>
         <p>Click an agent's face in its profile to change it in a floating window: ten faces, twelve shapes and a color row. The profile is organized like this:</p>
@@ -148,12 +148,12 @@
           <li>Sending email</li>
           <li>Commands and file writes on <em>This computer</em> or WSL</li>
           <li>Deleting a memory</li>
-          <li>MCP tools not marked read-only, and Composio actions that may change data</li>
+          <li>MCP and catalog-app tools not marked read-only</li>
         </ul>
         <p>The request appears as a card with a moving yellow border and <strong>Accept</strong> / <strong>Reject</strong>. Agents can also ask you things with <code>ask_user</code>: a text field (and optional answer buttons) on the same kind of card. CLI agents get the same cards.</p>
         <p><strong>Fully autonomous</strong> runs everything without asking. Use it only with tools and content you trust.</p>
 
-        <h2 id="apps">Apps, MCP &amp; Composio</h2>
+        <h2 id="apps">Apps, MCP &amp; Catalog</h2>
         <h3>MCP servers</h3>
         <p><strong>Settings → Apps</strong> accepts local servers (a command such as <code>npx -y @modelcontextprotocol/server-filesystem ~/Documents</code>), remote servers by URL (Streamable HTTP), or an imported Claude Desktop–style <code>mcp.json</code>:</p>
         <pre><code>{
@@ -163,12 +163,12 @@
   }
 }</code></pre>
         <p>In an agent's <strong>Apps</strong> page choose all servers or only some.</p>
-        <h3>Composio</h3>
-        <p><a href="https://composio.dev">Composio</a> connects 500+ apps (Gmail, Slack, Notion, GitHub, Google Calendar…). OpenCue takes either kind of Composio key: a <strong>consumer key</strong> (<code>ck_…</code>, the one <a href="https://connect.composio.dev">Composio Connect</a> gives you for MCP clients; OpenCue talks to <code>connect.composio.dev/mcp</code> with it in <code>x-consumer-api-key</code>) or a <strong>project key</strong> (<code>ak_…</code>, Platform → Settings → API Keys, used with Composio's API in <code>x-api-key</code>). The key stays in your keychain.</p>
+        <h3>Catalog</h3>
+        <p><strong>Settings → Apps → Catalog</strong> has cards for Gmail, Google Drive, Google Calendar, Notion, Trello, GitHub, Supabase, Vercel and Outlook. The border shows the state: <strong>red</strong> not connected, <strong>yellow</strong> connect again (the sign-in expired or failed), <strong>green</strong> connected.</p>
         <ol>
-          <li>Create a Composio account and paste your API key in <strong>Settings → Apps → Composio</strong>. The <em>User ID</em> is the Composio user whose connected accounts agents should use (<code>default</code> if empty).</li>
-          <li>Under <strong>Connect an app</strong>, touch the search field to see the apps (type to filter) and pick one. Sign in in the browser page that opens, then press <strong>Refresh</strong>. You can also connect apps in the Composio dashboard.</li>
-          <li>Turn on <strong>Composio apps</strong> in an agent's Apps page. With a project key it gets two tools: <code>composio_search</code> to find an action and <code>composio_execute</code> to run it. With a consumer key it gets Composio Connect's own tools (<code>COMPOSIO_SEARCH_TOOLS</code>, <code>COMPOSIO_MULTI_EXECUTE_TOOL</code>, <code>COMPOSIO_MANAGE_CONNECTIONS</code>…). There is no built-in shared key: each person uses their own Composio account.</li>
+          <li>Touch a card. Your browser opens the provider's sign-in page (OAuth); when you finish, OpenCue comes back to the front and the card turns green. Tokens are kept in <code>oauth/&lt;app&gt;.json</code> and refreshed automatically.</li>
+          <li>Some providers (Google, Microsoft, GitHub) don't let apps register themselves. If the card says so, create an OAuth app in the provider's developer console (redirect URL <code>http://127.0.0.1</code>) and enter its <em>client ID</em> (and secret) when asked.</li>
+          <li>In an agent's profile → <strong>Apps</strong>, turn on the catalog apps it may use. Agents backed by the Claude Code or Codex CLIs get them through OpenCue's tools. Tools that change data ask first in Ask-first mode.</li>
         </ol>
 
         <h2 id="skills">Skills</h2>
@@ -188,8 +188,7 @@ description: Write the Friday status report from this week's notes and emails.
         <h2 id="email">Email</h2>
         <p>Profile → <strong>Mails</strong> → Add. Two account types:</p>
         <ul>
-          <li><strong>IMAP / SMTP</strong> — any provider. Gmail, Outlook, Yahoo, iCloud and Fastmail servers fill in automatically. With 2-step verification use an <em>app password</em>. The password goes to your system keychain.</li>
-          <li><strong>Gmail via Composio</strong> — uses the Gmail account connected in Composio.</li>
+          <li><strong>IMAP / SMTP</strong> — any provider. Gmail, Outlook, Yahoo, iCloud and Fastmail servers fill in automatically. With 2-step verification use an <em>app password</em>. The password is stored on this computer (<code>secrets.json</code>).</li>
         </ul>
         <p>The agent gets <code>read_emails</code>, <code>search_inbox</code> (plain words, or <code>from:</code> / <code>subject:</code>) and <code>send_email</code>. Sending waits for approval in Ask-first mode. Email content is treated as data: agents are told not to follow instructions written inside messages.</p>
 
@@ -198,7 +197,7 @@ description: Write the Friday status report from this week's notes and emails.
         <table>
           <tr><th>Trigger</th><th>Details</th></tr>
           <tr><td>Schedule</td><td>Five-field cron in local time: <code>minute hour day month weekday</code>. <code>0 9 * * 1-5</code> = weekdays at 9:00. Runs missed while OpenCue was closed for more than 10 minutes are skipped.</td></tr>
-          <tr><td>New email</td><td>Checks the agent's inbox (IMAP, or Gmail through Composio) every 1–60 minutes. Optional filter on sender or subject. The first check only records what is already there, so old mail doesn't fire.</td></tr>
+          <tr><td>New email</td><td>Checks the agent's inbox (IMAP) every 1–60 minutes. Optional filter on sender or subject. The first check only records what is already there, so old mail doesn't fire.</td></tr>
           <tr><td>Webhook</td><td>A private URL on your computer, e.g. <code>http://127.0.0.1:7777/hooks/&lt;token&gt;</code>. Anything you POST becomes trigger data.</td></tr>
           <tr><td>Group message</td><td>When you write in a group the agent belongs to, optionally only if the message contains a keyword.</td></tr>
         </table>
@@ -268,7 +267,7 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
           <tr><td>Linux</td><td><code>~/.local/share/opencue</code></td></tr>
           <tr><td>Windows</td><td><code>%APPDATA%\opencue\data</code></td></tr>
         </table>
-        <p>Inside: <code>opencue.db</code> (agents, chats, settings, automations, web cache), <code>agents/&lt;id&gt;/</code> (instructions, memory, workspace), <code>files/</code> (files shared in chats), <code>memory/GLOBAL.md</code> and <code>skills/</code>. Set <code>OPENCUE_HOME</code> to use another folder. Secrets (API keys, email passwords, tokens) go to the system keychain, or a <code>0600</code> <code>secrets.json</code> if there is none. See the <a href="../privacy/">privacy policy</a> for what leaves your computer.</p>
+        <p>Inside: <code>opencue.db</code> (agents, chats, settings, automations, web cache), <code>agents/&lt;id&gt;/</code> (instructions, memory, workspace), <code>files/</code> (files shared in chats), <code>memory/GLOBAL.md</code> and <code>skills/</code>. Set <code>OPENCUE_HOME</code> to use another folder. Secrets (API keys, email passwords, tokens) are kept in a <code>0600</code> <code>secrets.json</code> (the system keychain is not used); catalog app tokens are in <code>oauth/</code>. See the <a href="../privacy/">privacy policy</a> for what leaves your computer.</p>
 
         <h2 id="cli">Command line</h2>
         <p><code>opencue-cli</code> (zipped with each release) uses the same data folder as the app:</p>
