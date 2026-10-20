@@ -408,6 +408,7 @@ impl LlmProvider for CliProvider {
             out.text = streamed.trim().to_string();
             return Ok(out);
         }
+        let mut think = super::ThinkStream::default();
         let mut lines = BufReader::new(stdout).lines();
 
         while let Some(line) = lines.next_line().await? {
@@ -417,14 +418,26 @@ impl LlmProvider for CliProvider {
             match self.kind {
                 CliKind::Claude => match v["type"].as_str() {
                     Some("stream_event") => {
-                        if v.pointer("/event/delta/type").and_then(Value::as_str)
-                            == Some("text_delta")
-                        {
-                            if let Some(t) = v.pointer("/event/delta/text").and_then(Value::as_str)
-                            {
-                                streamed.push_str(t);
-                                on_delta(t);
+                        match v.pointer("/event/delta/type").and_then(Value::as_str) {
+                            Some("text_delta") => {
+                                if let Some(t) =
+                                    v.pointer("/event/delta/text").and_then(Value::as_str)
+                                {
+                                    let piece = think.answer(t);
+                                    streamed.push_str(&piece);
+                                    on_delta(&piece);
+                                }
                             }
+                            Some("thinking_delta") => {
+                                if let Some(t) =
+                                    v.pointer("/event/delta/thinking").and_then(Value::as_str)
+                                {
+                                    let piece = think.reasoning(t);
+                                    streamed.push_str(&piece);
+                                    on_delta(&piece);
+                                }
+                            }
+                            _ => {}
                         }
                     }
                     Some("result") => {
@@ -495,7 +508,17 @@ impl LlmProvider for CliProvider {
                 )
             ));
         }
-        out.text = final_text.filter(|t| !t.is_empty()).unwrap_or(streamed);
+        streamed.push_str(&think.finish());
+        // The CLI's final result has no reasoning: keep what was streamed before it.
+        let thought = streamed.find("<think>").and_then(|i| {
+            streamed[i..]
+                .find("</think>")
+                .map(|j| streamed[i..i + j + "</think>".len()].to_string())
+        });
+        out.text = match final_text.filter(|t| !t.is_empty()) {
+            Some(t) => format!("{}{t}", thought.unwrap_or_default()),
+            None => streamed,
+        };
         Ok(out)
     }
 

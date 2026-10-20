@@ -1,6 +1,7 @@
 // Voice conversations: record the mic, transcribe with ElevenLabs (through the core), send the
 // text, and read the agent's reply aloud when it finishes.
 
+import { splitThink } from "./format";
 import { api } from "./api";
 import type { Message } from "./types";
 
@@ -83,7 +84,7 @@ export function onMessageForVoice(m: Message, autoSpeak: boolean) {
     voiceThreads.delete(m.thread_id);
     return;
   }
-  if (m.role !== "assistant" || m.status !== "done" || !m.content.trim() || m.tool_calls?.length) return;
+  if (m.role !== "assistant" || m.status !== "done" || !splitThink(m.content).text.trim() || m.tool_calls?.length) return;
   voiceThreads.delete(m.thread_id);
-  void speak(m.content, m.agent_id ?? undefined).catch(() => {});
+  void speak(splitThink(m.content).text, m.agent_id ?? undefined).catch(() => {});
 }

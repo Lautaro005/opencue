@@ -605,6 +605,16 @@ pub async fn docker_prepare(state: State<'_, AppState>) -> R<()> {
 }
 
 #[tauri::command]
+pub async fn docker_start_engine(state: State<'_, AppState>) -> R<()> {
+    state.core.docker_start_engine().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn stop_all_computers(state: State<'_, AppState>) -> R<usize> {
+    Ok(state.core.stop_all_computers().await)
+}
+
+#[tauri::command]
 pub async fn docker_start_shared(state: State<'_, AppState>) -> R<()> {
     state.core.docker_start_shared().await.map_err(e)
 }

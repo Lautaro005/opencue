@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Box, Check, Copy, Download, ExternalLink, Github, MonitorCog, Plus, RefreshCw, Server, Terminal, Trash2 } from "lucide-react";
+import { Box, Check, Copy, Download, ExternalLink, Github, MonitorCog, Play, Plus, RefreshCw, Server, Square, Terminal, Trash2 } from "lucide-react";
 import { api, openUrl } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import type { ComputerSettings, DockerSetup, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
-import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Textarea, Toggle } from "../ui";
+import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Spinner, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
 
 export const SPACE_REPO = "https://github.com/perplexityai/SPACE";
@@ -128,6 +128,7 @@ function SkillEditor({ skill, onClose }: { skill: Skill; onClose: () => void }) 
 
 export function ComputersSection() {
   const { t } = useTranslation();
+  const showToast = useStore((st) => st.showToast);
   const [s, setS] = useState<ComputerSettings | null>(null);
   const [token, setToken] = useState("");
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
@@ -165,10 +166,21 @@ export function ComputersSection() {
         <CardRow label={t("settings.computers.image")}>
           <Input className="w-56" value={s.docker_image} placeholder="ubuntu:24.04" onChange={(e) => setS({ ...s, docker_image: e.target.value })} onBlur={() => void save(s)} />
         </CardRow>
+        <CardRow label={t("settings.computers.stopVms")} hint={t("settings.computers.stopVmsHint")}>
+          <Button
+            size="sm"
+            onClick={() =>
+              void api.stopAllComputers().then((n) => showToast(n > 0 ? t("settings.computers.stopped", { count: n }) : t("settings.computers.noneRunning")))
+            }
+          >
+            <Square size={12} fill="currentColor" /> {t("settings.computers.stopAll")}
+          </Button>
+        </CardRow>
         <CardRow label={t("settings.computers.desktop")} hint={t("settings.computers.desktopHint")}>
           <Toggle checked={s.docker_desktop} onChange={(v) => void save({ ...s, docker_desktop: v })} />
         </CardRow>
-        {s.docker_desktop && (
+        {s.docker_desktop && s.runtime === "podman" && <p className="px-4 pb-3.5 text-[11.5px] text-muted">{t("settings.computers.podmanDesktop")}</p>}
+        {s.docker_desktop && s.runtime !== "podman" && (
           <div className="grid grid-cols-[1fr_96px] gap-2 px-4 pb-3.5">
             <Field label={t("settings.computers.desktopImage")}>
               <Input value={s.desktop_image} onChange={(e) => setS({ ...s, desktop_image: e.target.value })} onBlur={() => void save(s)} />
@@ -276,6 +288,20 @@ function DockerSetupCard({ s, save }: { s: ComputerSettings; save: (next: Comput
       : s.os === "windows"
         ? "Start Docker Desktop"
         : "sudo systemctl start docker";
+  // Docker on Linux needs a password, so only the others can run from here.
+  const canRunStart = podman || s.os === "macos";
+  const [starting, setStarting] = useState(false);
+  const runStart = async () => {
+    setStarting(true);
+    try {
+      await api.dockerStartEngine();
+    } catch (e) {
+      showToast(String(e));
+    } finally {
+      setStarting(false);
+      load();
+    }
+  };
   const run = async (kind: "pull" | "vm") => {
     setBusy(kind);
     try {
@@ -303,8 +329,14 @@ function DockerSetupCard({ s, save }: { s: ComputerSettings; save: (next: Comput
       done: !!setup?.running,
       title: podman ? t(s.os === "linux" ? "settings.computers.stepStartPodmanLinux" : "settings.computers.stepStartPodman") : t("settings.computers.stepStart"),
       body: !setup?.running && (
+        <div className="space-y-2">
         <div className="flex w-fit items-center gap-3 rounded-lg bg-hover px-3 py-2 font-mono text-[12.5px]">
           {startCmd}
+          {canRunStart && (
+            <button aria-label={t("settings.computers.runCommand")} data-tip={t("settings.computers.runCommand")} disabled={starting} onClick={() => void runStart()} className="text-success hover:brightness-110 disabled:opacity-50">
+              {starting ? <Spinner size={13} /> : <Play size={14} fill="currentColor" />}
+            </button>
+          )}
           <button
             aria-label={t("common.copy")}
             onClick={() => {
@@ -316,6 +348,8 @@ function DockerSetupCard({ s, save }: { s: ComputerSettings; save: (next: Comput
           >
             {copied ? <Check size={14} /> : <Copy size={14} />}
           </button>
+        </div>
+        {log && starting && <pre className="selectable max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-hover px-2.5 py-2 font-mono text-[11.5px] text-muted">{log}</pre>}
         </div>
       ),
     },

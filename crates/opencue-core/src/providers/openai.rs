@@ -131,6 +131,7 @@ impl LlmProvider for OpenAiProvider {
 
         let mut out = ChatResponse::default();
         let mut calls: BTreeMap<u64, PartialCall> = BTreeMap::new();
+        let mut think = super::ThinkStream::default();
         let mut stream = resp.bytes_stream().eventsource();
         while let Some(event) = stream.next().await {
             let event = event?;
@@ -157,10 +158,22 @@ impl LlmProvider for OpenAiProvider {
             let Some(delta) = chunk.pointer("/choices/0/delta") else {
                 continue;
             };
+            // Reasoning models stream their thinking apart from the answer.
+            if let Some(text) = delta
+                .get("reasoning_content")
+                .or_else(|| delta.get("reasoning"))
+                .and_then(Value::as_str)
+                .filter(|t| !t.is_empty())
+            {
+                let piece = think.reasoning(text);
+                out.text.push_str(&piece);
+                on_delta(&piece);
+            }
             if let Some(text) = delta.get("content").and_then(Value::as_str) {
                 if !text.is_empty() {
-                    out.text.push_str(text);
-                    on_delta(text);
+                    let piece = think.answer(text);
+                    out.text.push_str(&piece);
+                    on_delta(&piece);
                 }
             }
             if let Some(tool_calls) = delta.get("tool_calls").and_then(Value::as_array) {
@@ -187,6 +200,11 @@ impl LlmProvider for OpenAiProvider {
             }
         }
 
+        let closing = think.finish();
+        if !closing.is_empty() {
+            out.text.push_str(&closing);
+            on_delta(&closing);
+        }
         out.tool_calls = calls
             .into_values()
             .filter(|c| !c.name.is_empty())

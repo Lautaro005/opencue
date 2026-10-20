@@ -311,6 +311,63 @@ pub struct ChatResponse {
     pub output_tokens: i64,
 }
 
+/// Reasoning travels inside the text as `<think>…</think>`; the chat shows it folded, and it is
+/// dropped from the history, spoken replies and memory.
+pub fn strip_think(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(i) = rest.find("<think>") {
+        out.push_str(&rest[..i]);
+        match rest[i..].find("</think>") {
+            Some(j) => rest = &rest[i + j + "</think>".len()..],
+            None => {
+                rest = "";
+                break;
+            }
+        }
+    }
+    out.push_str(rest);
+    out.trim_start().to_string()
+}
+
+/// Wraps a model's reasoning stream in `<think>` tags as it arrives.
+#[derive(Default)]
+pub struct ThinkStream {
+    open: bool,
+}
+
+impl ThinkStream {
+    /// The text to add to the reply for a piece of reasoning.
+    pub fn reasoning(&mut self, t: &str) -> String {
+        if self.open {
+            t.to_string()
+        } else {
+            self.open = true;
+            format!("<think>{t}")
+        }
+    }
+
+    /// The text to add for a piece of the answer (closes the reasoning first).
+    pub fn answer(&mut self, t: &str) -> String {
+        if self.open {
+            self.open = false;
+            format!("</think>{t}")
+        } else {
+            t.to_string()
+        }
+    }
+
+    /// Closes reasoning that ended without an answer (a tool call followed).
+    pub fn finish(&mut self) -> String {
+        if self.open {
+            self.open = false;
+            "</think>".to_string()
+        } else {
+            String::new()
+        }
+    }
+}
+
 /// Receives streamed text as it arrives.
 pub type DeltaSink<'a> = &'a (dyn Fn(&str) + Send + Sync);
 
@@ -420,5 +477,26 @@ mod tests {
     #[test]
     fn grok_cli_is_in_the_catalog() {
         assert_eq!(info(ProviderKind::GrokCli).api, ApiStyle::Cli);
+    }
+}
+
+#[cfg(test)]
+mod think_tests {
+    use super::*;
+
+    #[test]
+    fn reasoning_is_wrapped_and_stripped() {
+        let mut t = ThinkStream::default();
+        let text = format!(
+            "{}{}{}",
+            t.reasoning("hmm "),
+            t.reasoning("ok"),
+            t.answer("Hi")
+        );
+        assert_eq!(text, "<think>hmm ok</think>Hi");
+        assert_eq!(strip_think(&text), "Hi");
+        assert_eq!(strip_think("<think>unfinished"), "");
+        assert_eq!(strip_think("no tags"), "no tags");
+        assert_eq!(t.finish(), "");
     }
 }

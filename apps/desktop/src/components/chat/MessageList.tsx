@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, ChevronRight, Sparkles, Zap } from "lucide-react";
+import { AlertCircle, Brain, ChevronRight, Sparkles, Zap } from "lucide-react";
 import { useStore } from "../../lib/store";
 import type { Agent, Message, ToolCall } from "../../lib/types";
-import { clockTime, cx } from "../../lib/format";
+import { clockTime, cx, splitThink } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
-import { Typing } from "../ui";
+import { Spinner, Typing } from "../ui";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 import { AttachmentList } from "./Attachments";
@@ -88,10 +88,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                       )}
                     </div>
                   ) : m.content ? (
-                    <div className="max-w-full rounded-[20px] bg-agent px-4 py-2.5 text-[14px] leading-relaxed text-agent-ink">
-                      <Markdown text={m.content} />
-                      {m.status === "stopped" && <div className="mt-1 text-[11.5px] text-muted">— {t("chat.stopped")}</div>}
-                    </div>
+                    <AssistantText m={m} />
                   ) : m.status === "streaming" ? (
                     <div className="inline-flex h-10 items-center rounded-[20px] bg-agent px-4 text-muted">
                       <Typing />
@@ -108,9 +105,41 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
             </Fragment>
           );
         })}
-        <QuestionCards threadId={threadId} />
+        <QuestionCards threadId={threadId} isGroup={isGroup} />
       </div>
     </div>
+  );
+}
+
+/** An agent's reply; its reasoning, if any, is a folded message above the answer. */
+function AssistantText({ m }: { m: Message }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const { think, text, thinking } = splitThink(m.content);
+  return (
+    <>
+      {think && (
+        <div className="max-w-full">
+          <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-muted hover:bg-hover">
+            {thinking && m.status === "streaming" ? <Spinner size={12} /> : <Brain size={13} />}
+            <span>{thinking && m.status === "streaming" ? t("chat.thinking") : t("chat.thought")}</span>
+            <ChevronRight size={13} className={cx("text-faint transition-transform", open && "rotate-90")} />
+          </button>
+          {open && <div className="selectable mt-1 ml-1 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-event px-3 py-2 text-[12.5px] leading-relaxed text-muted">{think}</div>}
+        </div>
+      )}
+      {text && (
+        <div className="max-w-full rounded-[20px] bg-agent px-4 py-2.5 text-[14px] leading-relaxed text-agent-ink">
+          <Markdown text={text} />
+          {m.status === "stopped" && <div className="mt-1 text-[11.5px] text-muted">— {t("chat.stopped")}</div>}
+        </div>
+      )}
+      {!text && m.status === "streaming" && !thinking && (
+        <div className="inline-flex h-10 items-center rounded-[20px] bg-agent px-4 text-muted">
+          <Typing />
+        </div>
+      )}
+    </>
   );
 }
 

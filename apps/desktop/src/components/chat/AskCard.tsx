@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Send, ShieldAlert, X } from "lucide-react";
+import { AvatarView } from "../AvatarView";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 
@@ -88,7 +89,7 @@ export function AskCard({
 }
 
 /** The questions agents are waiting on in this thread. */
-export function QuestionCards({ threadId }: { threadId: string }) {
+export function QuestionCards({ threadId, isGroup }: { threadId: string; isGroup: boolean }) {
   const { t } = useTranslation();
   const questions = useStore((s) => s.questions);
   const agents = useStore((s) => s.agents);
@@ -99,17 +100,23 @@ export function QuestionCards({ threadId }: { threadId: string }) {
       {mine.map((q) => {
         const name = agents[q.agent_id]?.name ?? "";
         const permission = q.kind === "permission";
+        const asker = agents[q.agent_id];
         return (
-          <AskCard
-            key={q.id}
-            permission={permission}
-            title={q.title || (permission ? t("ask.permissionTitle", { name }) : t("ask.questionTitle", { name }))}
-            body={q.body}
-            options={q.options}
-            onAccept={() => void api.answerQuestion(q.id, "approved")}
-            onReject={() => void api.answerQuestion(q.id, "rejected")}
-            onAnswer={(text) => void api.answerQuestion(q.id, text)}
-          />
+          // Lined up with the agent's replies: under their avatar column in groups, not starting at it.
+          <div key={q.id} className="flex items-start gap-2.5">
+            {isGroup && <div className="w-8 shrink-0">{asker && <AvatarView avatar={asker.avatar} name={asker.name} size={30} />}</div>}
+            <div className="min-w-0 max-w-[85%] flex-1">
+              <AskCard
+                permission={permission}
+                title={q.title || (permission ? t("ask.permissionTitle", { name }) : t("ask.questionTitle", { name }))}
+                body={q.body}
+                options={q.options}
+                onAccept={() => void api.answerQuestion(q.id, "approved")}
+                onReject={() => void api.answerQuestion(q.id, "rejected")}
+                onAnswer={(text) => void api.answerQuestion(q.id, text)}
+              />
+            </div>
+          </div>
         );
       })}
     </div>

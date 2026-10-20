@@ -67,3 +67,28 @@ export function describeCron(cron: string): string {
   if (num(dom) !== null && dow === "*") return t("cron.monthly", { day: num(dom), time: at });
   return cron;
 }
+
+/** Reasoning arrives inside the text as `<think>…</think>`: split it from the answer. */
+export function splitThink(content: string): { think: string; text: string; thinking: boolean } {
+  let think = "";
+  let text = "";
+  let rest = content;
+  let thinking = false;
+  for (;;) {
+    const i = rest.indexOf("<think>");
+    if (i === -1) {
+      text += rest;
+      break;
+    }
+    text += rest.slice(0, i);
+    const j = rest.indexOf("</think>", i);
+    if (j === -1) {
+      think += (think ? "\n\n" : "") + rest.slice(i + 7);
+      thinking = true;
+      break;
+    }
+    think += (think ? "\n\n" : "") + rest.slice(i + 7, j);
+    rest = rest.slice(j + 8);
+  }
+  return { think: think.trim(), text: text.replace(/^\s+/, ""), thinking };
+}

@@ -233,6 +233,8 @@ pub fn run() {
             commands::docker_setup,
             commands::docker_prepare,
             commands::docker_start_shared,
+            commands::docker_start_engine,
+            commands::stop_all_computers,
             commands::provider_catalog,
             commands::list_providers,
             commands::save_provider,

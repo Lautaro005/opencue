@@ -179,6 +179,9 @@ Changes to `site/` deploy the website.
   calls in a phone-sized window, and secrets in a private file instead of the keychain.
 - [x] **0.3.7**: permission cards for Claude Code agents, a stop button for VMs, Podman without Docker, Composio in the
   Catalog (with the apps it connects), a live green card for agent-to-agent chats and logos from your assets on the site.
+- [x] **0.3.8**: a working Podman desktop (Cua's XFCE image), stop-all and play buttons in Settings → Computers, desktop
+  view on by default, the chosen VM respected over VMPal, folded reasoning, a gray call button without an ElevenLabs
+  key and an Agents / Skills menu under the chat's +.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases
