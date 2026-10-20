@@ -2,6 +2,30 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.3.8 — 2026-10-19
+
+### Fixed
+
+- **Podman desktop showed a black screen.** With Podman the VM now uses Cua's XFCE desktop image (the one OpenMausBot
+  runs), started the way it needs (user namespace, capabilities, noVNC on a loopback port). The image field is hidden
+  for Podman; Docker keeps its own.
+- **The chosen VM is respected.** An agent set to Docker or Podman no longer opened VMPal because machines were still
+  ticked there: VMPal tools are only offered when VMPal is the agent's computer, and the prompt says "the VM" is the
+  local one.
+- **Permission card alignment** in group chats: it lines up with the agents' replies instead of starting under the avatar.
+
+### New
+
+- Settings → Computers: **Stop all VMs** button, a **play** button next to the start command (Podman machine, Docker
+  Desktop on macOS) that runs it and shows its output, and **desktop view on by default**.
+- **Reasoning is a folded message** ("Reasoning ▸") above the answer. It comes from models that stream their thinking
+  (OpenAI-compatible `reasoning`, Ollama, Claude Code) and from `<think>` tags; it is left out of the history, spoken
+  replies, memory and the sidebar preview.
+- The **call button is gray** until an ElevenLabs key is set; hovering says so and touching it opens Settings → Voice.
+- The sidebar no longer shows "See how people use OpenCue".
+- The chat's **+** menu has **Agents** and **Skills** entries that open a list to the side (hover or click) and insert
+  the @mention or the `/skill`.
+
 ## 0.3.7 — 2026-10-19
 
 ### Fixed

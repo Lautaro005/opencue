@@ -157,7 +157,7 @@ async function simulateReply(threadId: string, text: string) {
   const m = msg(threadId, "assistant", "", 0, agentId, { status: "streaming" });
   messages.push(m);
   emit({ type: "message", message: { ...m } });
-  const reply = `This is a preview build without the Rust core, so I can't really think yet — but you said: “${text}”. Run \`npm run tauri dev\` to talk to a real model.`;
+  const reply = (text.startsWith("/think") ? "<think>The user wants a quick check. I should look at the files first, then answer in one line.</think>" : "") + `This is a preview build without the Rust core, so I can't really think yet — but you said: “${text}”. Run \`npm run tauri dev\` to talk to a real model.`;
   for (const word of reply.split(/(?<= )/)) {
     await new Promise((r) => setTimeout(r, 25));
     if (!busy.has(threadId)) break;
@@ -191,7 +191,7 @@ const catalogApps: { slug: string; name: string; description: string; state: "di
   { slug: "vercel", name: "Vercel", description: "Projects and deployments", state: "disconnected", needs_client: false, via_composio: false },
   { slug: "outlook", name: "Outlook", description: "Mail and calendar in Microsoft 365", state: "disconnected", needs_client: true, via_composio: false },
 ];
-const computer = { docker_desktop: false, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, podman_available: true, runtime: "docker", shared_vm: false, idle_minutes: 480, wsl_available: false, webhook_port: 7777 };
+const computer = { docker_desktop: true, desktop_image: "lscr.io/linuxserver/webtop:ubuntu-xfce", desktop_port: 3000, docker_image: "ubuntu:24.04", space_url: "", space_template: "", has_space_token: false, os: "linux", docker_available: true, podman_available: true, runtime: "docker", shared_vm: false, idle_minutes: 480, wsl_available: false, webhook_port: 7777 };
 const dockerState = { installed: true, running: true, image_ready: false, vm: "none" as const };
 let vmpalToml = "";
 const vmpalMachines = () => [...vmpalToml.matchAll(/^\[mcp_servers\.([^\]\s]+)\]/gm)].map((m) => ({ name: m[1], command: "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine", args: ["--mcp", "E7D-preview"], env: {} }));
@@ -199,7 +199,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.7-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.3.8-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -296,6 +296,8 @@ const handlers: Record<string, (a: Args) => unknown> = {
   },
   reset_computer: () => undefined,
   stop_computer: () => undefined,
+  docker_start_engine: () => undefined,
+  stop_all_computers: () => 2,
   computer_running: () => true,
   stop_thread: ({ threadId }) => void busy.delete(threadId),
   clear_thread: ({ threadId }) => {

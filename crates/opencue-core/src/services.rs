@@ -453,7 +453,8 @@ impl Core {
         };
         ComputerConfig {
             docker_image: get("docker_image").await,
-            docker_desktop: get("docker_desktop").await == "true",
+            // On unless the user turned it off.
+            docker_desktop: get("docker_desktop").await != "false",
             desktop_image: get("desktop_image").await,
             desktop_port: get("desktop_port").await.parse().unwrap_or(0),
             space_url: Some(get("space_url").await).filter(|s| !s.is_empty()),
@@ -708,9 +709,10 @@ impl Core {
         } else {
             "opencue-"
         };
+        let rt = crate::computer::runtime_name(&cfg.runtime);
         crate::computer::docker_setup(
-            crate::computer::runtime_name(&cfg.runtime),
-            cfg.desktop_image(),
+            rt,
+            &crate::computer::desktop_image_for(rt, &cfg.desktop_image),
             container,
         )
         .await
@@ -726,13 +728,63 @@ impl Core {
                 stderr,
             })
         };
+        let rt = crate::computer::runtime_name(&cfg.runtime);
         crate::computer::pull_image(
-            crate::computer::runtime_name(&cfg.runtime),
-            cfg.desktop_image(),
+            rt,
+            &crate::computer::desktop_image_for(rt, &cfg.desktop_image),
             &sink,
             &CancellationToken::new(),
         )
         .await
+    }
+
+    /// The command that starts the container engine, when there is one to run from here
+    /// (Docker on Linux needs sudo, so it stays a command to copy).
+    pub async fn engine_start_command(&self) -> Option<&'static str> {
+        let cfg = self.computer_config().await;
+        let podman = crate::computer::runtime_name(&cfg.runtime) == "podman";
+        match (podman, std::env::consts::OS) {
+            (true, "linux") => Some("podman info"),
+            (true, _) => Some("podman machine init; podman machine start"),
+            (false, "macos") => Some("open -a Docker"),
+            _ => None,
+        }
+    }
+
+    /// Run the engine's start command for the Computers checklist; its output goes to the log.
+    pub async fn docker_start_engine(&self) -> anyhow::Result<()> {
+        let command = self
+            .engine_start_command()
+            .await
+            .ok_or_else(|| anyhow::anyhow!("start it yourself: this one needs a password"))?;
+        let sink = |stderr: bool, text: &str| {
+            self.emit(CoreEvent::ComputerOutput {
+                agent_id: "docker-setup".into(),
+                text: text.to_string(),
+                stderr,
+            })
+        };
+        sink(false, &format!("$ {command}\n"));
+        let res =
+            crate::computer::run_host_command(command, &sink, &CancellationToken::new()).await?;
+        sink(false, &format!("[exit {}]\n", res.exit_code));
+        Ok(())
+    }
+
+    /// Stop every OpenCue VM (Docker and Podman). Files and programs stay; the next command
+    /// starts the VM again.
+    pub async fn stop_all_computers(&self) -> usize {
+        let mut stopped = 0;
+        for rt in ["docker", "podman"] {
+            if which::which(rt).is_err() {
+                continue;
+            }
+            for name in crate::computer::running_containers(rt).await {
+                crate::computer::stop_container(rt, &name).await;
+                stopped += 1;
+            }
+        }
+        stopped
     }
 
     /// Create and start the shared Docker computer (the per-agent ones start on first use).
@@ -962,7 +1014,7 @@ impl Core {
                 "\n\n## Computer\nYou have a computer ({}). Use `run_command` and the file tools for real work like scripts, data processing or builds. Keep files in your workspace.",
                 match b {
                     ComputerBackend::Host => "the user's own machine; be careful and explain risky commands",
-                    ComputerBackend::Docker => "a Linux container",
+                    ComputerBackend::Docker => "the user's local VM, a Linux container (Docker or Podman); when they say \"the VM\" they mean this one, so work here with `run_command` and never use other virtual machines",
                     ComputerBackend::Wsl => "WSL on the user's Windows machine",
                     _ => "a Linux microVM",
                 }

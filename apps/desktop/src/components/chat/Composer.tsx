@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, AtSign, FileText, Loader2, Mic, Paperclip, Plus, Slash, Sparkles, Square, Workflow, X } from "lucide-react";
+import { ArrowUp, AtSign, FileText, Loader2, ChevronRight, Mic, Paperclip, Plus, Slash, Sparkles, Square, Workflow, X } from "lucide-react";
 import type { Agent, SkillSummary } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx, formatBytes } from "../../lib/format";
@@ -30,12 +30,13 @@ export function Composer({
   const { t } = useTranslation();
   const [text, setText] = useState("");
   const [plus, setPlus] = useState(false);
+  const [sub, setSub] = useState<"agents" | "skills" | null>(null);
   const [mention, setMention] = useState<{ query: string; index: number } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
-  useClickOutside(plusRef, () => setPlus(false), plus);
+  useClickOutside(plusRef, () => { setPlus(false); setSub(null); }, plus);
   const [voice, setVoice] = useState<"idle" | "recording" | "transcribing">("idle");
   const [files, setFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -111,6 +112,13 @@ export function Composer({
       el?.focus();
       el?.setSelectionRange(name.length + 2, name.length + 2);
     });
+  };
+
+  // A skill goes at the start of the message, which is where "/" commands are read.
+  const insertSkill = (name: string) => {
+    const rest = text.replace(/^\/[\w-]*\s*/, "");
+    setText(`/${name} ${rest}`);
+    requestAnimationFrame(() => ref.current?.focus());
   };
 
   const pool = members ?? mentionable ?? null;
@@ -234,20 +242,9 @@ export function Composer({
               <Plus size={19} />
             </button>
             {plus && (
-              <div className="animate-pop absolute bottom-10 left-0 z-20 w-60 rounded-xl border border-line bg-elevated p-1 shadow-pop">
-                {pool?.map((a) => (
-                  <button
-                    key={a.id}
-                    onClick={() => {
-                      setPlus(false);
-                      insertMention(a);
-                    }}
-                    className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-hover"
-                  >
-                    <AtSign size={14} className="text-muted" /> {a.name}
-                  </button>
-                ))}
+              <div className="animate-pop absolute bottom-10 left-0 z-20 w-52 rounded-xl border border-line bg-elevated p-1 shadow-pop">
                 <button
+                  onMouseEnter={() => setSub(null)}
                   onClick={() => {
                     setPlus(false);
                     fileInput.current?.click();
@@ -256,6 +253,48 @@ export function Composer({
                 >
                   <Paperclip size={14} className="text-muted" /> {t("chat.files")}
                 </button>
+                {([
+                  { key: "agents" as const, label: t("chat.agents"), icon: <AtSign size={14} className="text-muted" />, count: pool?.length ?? 0 },
+                  { key: "skills" as const, label: t("chat.skills"), icon: <Sparkles size={14} className="text-muted" />, count: skills.length },
+                ]).filter((g) => g.count > 0).map((g) => (
+                  <div key={g.key} className="relative" onMouseEnter={() => setSub(g.key)}>
+                    <button onClick={() => setSub(sub === g.key ? null : g.key)} className={cx("flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-hover", sub === g.key && "bg-hover")}>
+                      {g.icon} {g.label}
+                      <ChevronRight size={14} className="ml-auto text-faint" />
+                    </button>
+                    {sub === g.key && (
+                      <div className="animate-pop absolute bottom-0 left-full z-30 ml-1 max-h-72 w-56 overflow-y-auto rounded-xl border border-line bg-elevated p-1 shadow-pop">
+                        {g.key === "agents"
+                          ? pool?.map((a) => (
+                              <button
+                                key={a.id}
+                                onClick={() => {
+                                  setPlus(false);
+                                  insertMention(a);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-hover"
+                              >
+                                <AvatarView avatar={a.avatar} name={a.name} size={20} />
+                                <span className="truncate">{a.name}</span>
+                              </button>
+                            ))
+                          : skills.map((k) => (
+                              <button
+                                key={k.name}
+                                onClick={() => {
+                                  setPlus(false);
+                                  insertSkill(k.name);
+                                }}
+                                className="flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left hover:bg-hover"
+                              >
+                                <span className="text-[13px] font-medium">/{k.name}</span>
+                                <span className="line-clamp-1 text-[11.5px] text-muted">{k.description}</span>
+                              </button>
+                            ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
           </div>

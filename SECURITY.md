@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.3.7`) | ✅ |
+| Latest release (`0.3.x`, currently `0.3.8`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -87,6 +87,8 @@ Out of scope:
   `oauth/<app>.json` (`0600`). Secrets are never put in the agent's context.
 - **Approvals** ("Ask first", the default): sending email, commands and file writes on the host or WSL, deleting
   memories, MCP tools and catalog app tools not marked read-only wait for the user.
+- **Podman desktop**: Cua's noVNC desktop is published on `127.0.0.1` only (random port) with a fixed viewer password, so
+  any program on the same computer can open it; the container drops all capabilities except SETUID, SETGID and SYS_CHROOT.
 - **Computers**: Docker and SPACE isolate commands from the host; each Docker agent sees only its own workspace at
   `/workspace`. On the host, Docker and WSL, file tools reject paths that leave the agent's workspace. SPACE output
   streams are only read from the configured host.

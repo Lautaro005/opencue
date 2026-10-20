@@ -3,8 +3,8 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Bot, Eraser, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Settings, Sparkles, Trash2, Users } from "lucide-react";
 import { useStore } from "../lib/store";
-import { cx, shortTime } from "../lib/format";
-import { api, openUrl } from "../lib/api";
+import { cx, shortTime, splitThink } from "../lib/format";
+import { api } from "../lib/api";
 import { confirmDialog } from "../lib/confirm";
 import { AvatarView, GroupAvatar, UserAvatar } from "./AvatarView";
 import { IconButton, Typing, useClickOutside } from "./ui";
@@ -149,7 +149,7 @@ export function Sidebar() {
                             <Typing /> {t("sidebar.working")}
                           </span>
                         ) : (
-                          th.last_message ?? " "
+                          (th.last_message ? splitThink(th.last_message).text || " " : " ")
                         )}
                       </span>
                     </span>
@@ -205,16 +205,6 @@ export function Sidebar() {
           <UserAvatar name={userName} size={30} />
           <span className="min-w-0">
             <span className="block truncate text-[13px] font-medium">{userName}</span>
-            <span
-              role="link"
-              onClick={(e) => {
-                e.stopPropagation();
-                void openUrl("https://lautaro005.github.io/opencue/");
-              }}
-              className="block truncate text-[11.5px] text-muted hover:text-accent"
-            >
-              {t("sidebar.seeHow")}
-            </span>
           </span>
         </button>
         <IconButton label={t("sidebar.settings")} onClick={() => openSettings()}>

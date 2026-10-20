@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Monitor, Phone, SquareUser, Users } from "lucide-react";
 import { useStore } from "../../lib/store";
@@ -27,6 +27,13 @@ export function ChatView() {
   const dm = useStore((s) => s.dm);
   const startCall = useStore((s) => s.startCall);
   const calling = useStore((s) => s.call?.threadId === s.selected);
+  const openSettings = useStore((s) => s.openSettings);
+  const settingsOpen = useStore((s) => s.settingsSection);
+  // Calls need an ElevenLabs key: the phone is gray until it is set.
+  const [voiceReady, setVoiceReady] = useState(true);
+  useEffect(() => {
+    void api.voiceSettings().then((v) => setVoiceReady(v.configured)).catch(() => {});
+  }, [settingsOpen]);
 
   const agent = selected ? agents[selected] : undefined;
   const group = selected ? groups[selected] : undefined;
@@ -70,7 +77,12 @@ export function ChatView() {
         </button>
         <div className="ml-auto flex items-center gap-0.5">
           {agent && (
-            <IconButton label={t("call.start")} active={calling} onClick={() => startCall(agent.id)}>
+            <IconButton
+              label={voiceReady ? t("call.start") : t("call.needKey")}
+              active={calling}
+              onClick={() => (voiceReady ? startCall(agent.id) : openSettings("voice"))}
+              className={voiceReady ? undefined : "opacity-40"}
+            >
               <Phone size={18} />
             </IconButton>
           )}

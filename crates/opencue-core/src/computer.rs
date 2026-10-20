@@ -89,6 +89,37 @@ pub struct ComputerConfig {
 pub const DEFAULT_DESKTOP_IMAGE: &str = "lscr.io/linuxserver/webtop:ubuntu-xfce";
 pub const DEFAULT_DESKTOP_PORT: u16 = 3000;
 
+/// The desktop Podman VMs use: Cua's XFCE image (what OpenMausBot runs), pinned by digest. The
+/// linuxserver Webtop one needs privileges rootless Podman does not give and showed a black screen.
+pub const CUA_IMAGE: &str =
+    "docker.io/trycua/xfce-cua@sha256:274eb636f5cf3fc58f705916ee72b7a701270b3877369d08533a385c5325be9b";
+/// Where Cua's image serves noVNC inside the container.
+pub const CUA_PORT: u16 = 6901;
+/// The viewer is published on 127.0.0.1 only; this just lets it connect without a prompt.
+const CUA_PASSWORD: &str = "opencue";
+
+/// The desktop image for an engine: Podman always gets Cua's, Docker the configured one.
+pub fn desktop_image_for(rt: &str, configured: &str) -> String {
+    if rt == "podman" {
+        CUA_IMAGE.to_string()
+    } else {
+        match configured.trim() {
+            "" => DEFAULT_DESKTOP_IMAGE.to_string(),
+            s => s.to_string(),
+        }
+    }
+}
+
+pub fn desktop_port_for(rt: &str, configured: u16) -> u16 {
+    if rt == "podman" {
+        CUA_PORT
+    } else if configured == 0 {
+        DEFAULT_DESKTOP_PORT
+    } else {
+        configured
+    }
+}
+
 /// The container engine behind "Local VM": Docker or Podman (rootless, no daemon).
 pub fn runtime_name(s: &str) -> &'static str {
     if s.trim().eq_ignore_ascii_case("podman") {
@@ -185,6 +216,15 @@ impl Computer<'_> {
         runtime_name(self.vm.runtime.as_deref().unwrap_or(&self.config.runtime))
     }
 
+    /// The desktop image and port for this computer's engine.
+    pub fn desktop_image(&self) -> String {
+        desktop_image_for(self.rt(), &self.config.desktop_image)
+    }
+
+    pub fn desktop_port(&self) -> u16 {
+        desktop_port_for(self.rt(), self.config.desktop_port)
+    }
+
     pub fn container_name(&self) -> String {
         if self.shared {
             return "opencue-shared".into();
@@ -222,9 +262,13 @@ impl Computer<'_> {
                 self.ensure_container().await?;
                 let mut cmd = tokio::process::Command::new(self.rt());
                 cmd.args(["exec", "-w", "/workspace"]);
-                if self.config.docker_desktop {
+                if self.desktop_enabled() {
                     // GUI programs the agent starts show up in the desktop view.
                     cmd.args(["-e", "DISPLAY=:1"]);
+                    if self.rt() == "podman" {
+                        // Cua's desktop runs as its `cua` user; its files belong to the host user.
+                        cmd.args(["--user", "1000:1000", "-e", "HOME=/home/cua"]);
+                    }
                 }
                 cmd.args([&self.container_name(), "sh", "-lc", command]);
                 run_process(cmd, timeout, sink, cancel).await
@@ -258,7 +302,7 @@ impl Computer<'_> {
             self.rt(),
             self.desktop_enabled(),
             if self.desktop_enabled() {
-                self.config.desktop_image().to_string()
+                self.desktop_image()
             } else {
                 self.config.docker_image.trim().to_string()
             },
@@ -323,7 +367,12 @@ impl Computer<'_> {
             let image = qualify_image(self.rt(), image);
             std::fs::create_dir_all(&self.workspace)?;
             std::fs::create_dir_all(&self.vm_dir)?;
-            let mount = format!("{}:/workspace", self.workspace.display());
+            // Podman relabels the folder for SELinux (a no-op elsewhere).
+            let mount = if self.rt() == "podman" {
+                format!("{}:/workspace:Z", self.workspace.display())
+            } else {
+                format!("{}:/workspace", self.workspace.display())
+            };
             let mut cmd = tokio::process::Command::new(self.rt());
             cmd.args(["run", "-d", "--name", &name, "--label", "opencue=agent"]);
             cmd.args(["--label", &format!("opencue.fp={}", self.fingerprint())]);
@@ -334,10 +383,25 @@ impl Computer<'_> {
             if let Some(cpus) = self.vm.cpus.filter(|c| *c > 0.0) {
                 cmd.args(["--cpus", &cpus.to_string()]);
             }
-            if self.desktop_enabled() {
+            if self.desktop_enabled() && self.rt() == "podman" {
+                // Cua's XFCE desktop, run the way OpenMausBot runs it on Podman: the supervisor
+                // starts as root inside the user namespace and drops to `cua` (1000), which
+                // keep-id maps to the host user so the workspace keeps its owner.
+                cmd.args(["--label", "opencue.desktop=1"]);
+                cmd.args(["--userns", "keep-id:uid=1000,gid=1000", "--user", "0:0"]);
+                cmd.args(["--cap-drop", "ALL"]);
+                for cap in ["SETUID", "SETGID", "SYS_CHROOT"] {
+                    cmd.args(["--cap-add", cap]);
+                }
+                cmd.args(["--shm-size", "512m"]);
+                cmd.args(["-e", &format!("VNC_PW={CUA_PASSWORD}")]);
+                cmd.args(["-p", &format!("127.0.0.1::{CUA_PORT}")]);
+                cmd.args(["--workdir", "/workspace"]);
+                cmd.args([&qualify_image("podman", CUA_IMAGE)]);
+            } else if self.desktop_enabled() {
                 // The web desktop is published on a random port of 127.0.0.1 only; its home
                 // (/config) lives in the VM folder so it survives restarts and recreation.
-                let publish = format!("127.0.0.1::{}", self.config.desktop_port());
+                let publish = format!("127.0.0.1::{}", self.desktop_port());
                 cmd.args(["--label", "opencue.desktop=1", "-p", &publish]);
                 cmd.args(["-v", &format!("{}:/config", self.vm_dir.display())]);
                 #[cfg(unix)]
@@ -353,7 +417,7 @@ impl Computer<'_> {
                 cmd.args([
                     "--shm-size",
                     "1g",
-                    &qualify_image(self.rt(), self.config.desktop_image()),
+                    &qualify_image(self.rt(), &self.desktop_image()),
                 ]);
             } else {
                 cmd.args(["-v", &format!("{}:/root", self.vm_dir.display())]);
@@ -384,7 +448,7 @@ impl Computer<'_> {
             .args([
                 "port",
                 &self.container_name(),
-                &format!("{}/tcp", self.config.desktop_port()),
+                &format!("{}/tcp", self.desktop_port()),
             ])
             .output()
             .await?;
@@ -397,6 +461,13 @@ impl Computer<'_> {
                     "this computer was created without a desktop; restart it to add one"
                 )
             })?;
+        if self.rt() == "podman" {
+            // Cua's noVNC page, already connected and scaled to the panel.
+            return Ok(format!(
+                "http://{}/vnc.html#autoconnect=true&resize=scale&password={CUA_PASSWORD}",
+                addr.trim()
+            ));
+        }
         Ok(format!("http://{}/", addr.trim()))
     }
 
@@ -1012,6 +1083,21 @@ pub async fn running_containers(rt: &str) -> Vec<String> {
         .collect()
 }
 
+/// Run a one-off command on this computer (the Computers setup buttons), streaming its output.
+pub async fn run_host_command(
+    command: &str,
+    sink: Sink<'_>,
+    cancel: &CancellationToken,
+) -> anyhow::Result<CommandResult> {
+    run_process(
+        shell_command(command),
+        Duration::from_secs(900),
+        sink,
+        cancel,
+    )
+    .await
+}
+
 pub async fn stop_container(rt: &str, name: &str) {
     let _ = tokio::process::Command::new(rt)
         .args(["stop", name])
@@ -1038,6 +1124,15 @@ mod tests {
             },
             cfg,
         )
+    }
+
+    #[test]
+    fn podman_uses_cua_desktop_and_docker_the_configured_one() {
+        assert_eq!(desktop_image_for("podman", "anything"), CUA_IMAGE);
+        assert_eq!(desktop_port_for("podman", 3000), CUA_PORT);
+        assert_eq!(desktop_image_for("docker", ""), DEFAULT_DESKTOP_IMAGE);
+        assert_eq!(desktop_image_for("docker", "my/desktop"), "my/desktop");
+        assert_eq!(desktop_port_for("docker", 0), DEFAULT_DESKTOP_PORT);
     }
 
     #[test]

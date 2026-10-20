@@ -6,6 +6,7 @@
 // message in the chat; each finished reply is read aloud (ElevenLabs, or the system voice). Talking
 // while the agent speaks interrupts it.
 
+import { splitThink } from "./format";
 import { api } from "./api";
 import { useStore } from "./store";
 import type { Message } from "./types";
@@ -308,7 +309,7 @@ export class Call {
     for (const m of messages) {
       if (this.spoken.has(m.id) || m.role !== "assistant" || m.status !== "done" || m.tool_calls?.length) continue;
       this.spoken.add(m.id);
-      const text = spokenText(m.content);
+      const text = spokenText(splitThink(m.content).text);
       if (text) this.queue.push({ ...m, content: text });
     }
     if (this.queue.length && !this.playing) void this.playNext();

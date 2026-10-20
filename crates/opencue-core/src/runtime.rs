@@ -40,6 +40,16 @@ pub(crate) struct AgentOutcome {
     pub(crate) handoffs: Vec<String>,
 }
 
+/// The VMPal machines an agent may control: only when VMPal is its chosen computer, so picking
+/// Docker, Podman or another computer is respected even if machines were selected earlier.
+pub(crate) fn vmpal_chosen(agent: &Agent) -> &[String] {
+    if agent.settings.computer == crate::computer::ComputerBackend::Vmpal {
+        &agent.settings.vmpal
+    } else {
+        &[]
+    }
+}
+
 pub(crate) fn message(
     thread_id: &str,
     role: Role,
@@ -135,6 +145,12 @@ fn sanitize(history: Vec<ChatMessage>) -> Vec<ChatMessage> {
             _ => out.push(m.clone()),
         }
         i += 1;
+    }
+    // Reasoning is for the user to read; the model gets the answers only.
+    for m in &mut out {
+        if m.role == ChatRole::Assistant && m.content.contains("<think>") {
+            m.content = crate::providers::strip_think(&m.content);
+        }
     }
     out
 }
@@ -504,9 +520,7 @@ impl Core {
                     s.enabled
                         && if crate::vmpal::is_vmpal_id(&s.id) {
                             // VMPal machines are opt-in per agent, never part of "all servers".
-                            agent
-                                .settings
-                                .vmpal
+                            vmpal_chosen(&agent)
                                 .iter()
                                 .any(|n| crate::vmpal::id_for(n) == s.id)
                         } else {
@@ -538,7 +552,7 @@ impl Core {
             self.vmpal_machines()
                 .await
                 .into_iter()
-                .filter(|m| agent.settings.vmpal.contains(&m.name))
+                .filter(|m| vmpal_chosen(&agent).contains(&m.name))
                 .map(|m| crate::providers::ExtraMcp {
                     name: m.name,
                     command: m.command,
@@ -663,8 +677,9 @@ impl Core {
             self.emit(CoreEvent::Message {
                 message: msg.clone(),
             });
-            if !resp.text.trim().is_empty() {
-                outcome.text = resp.text.clone();
+            let answer = crate::providers::strip_think(&resp.text);
+            if !answer.trim().is_empty() {
+                outcome.text = answer;
             }
             if resp.tool_calls.is_empty() {
                 break;
@@ -941,10 +956,8 @@ impl Core {
         }
         if tools {
             s.push_str(&self.capabilities_prompt(agent, caps).await);
-            if !agent.settings.vmpal.is_empty() {
-                let machines = agent
-                    .settings
-                    .vmpal
+            if !vmpal_chosen(agent).is_empty() {
+                let machines = vmpal_chosen(agent)
                     .iter()
                     .map(|n| format!("{n} (tools start with `{}`)", crate::mcp::tool_prefix(n)))
                     .collect::<Vec<_>>()
