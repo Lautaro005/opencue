@@ -78,8 +78,8 @@ creates your first agent. Replay it any time from **Settings → General**.
   </tr>
 </table>
 
-**Bring your own model:** OpenAI, Anthropic, xAI (Grok), OpenRouter, CheaperInference, Ollama (local and cloud),
-LM Studio, any OpenAI-compatible API — or the **Codex**, **Claude Code** and **Grok** CLIs you're already signed in to.
+**Bring your own model:** OpenAI, Anthropic, xAI (Grok), Google Gemini, Meta Muse, OpenRouter, CheaperInference, Ollama (local and cloud),
+LM Studio, any OpenAI-compatible API — or the **Codex**, **Claude Code**, **Grok** and **Muse Code** CLIs you're already signed in to.
 
 **Safe by default:** in *Ask first* mode, sending email, commands on your machine, deletions and data-changing tools wait
 for your OK. No account, no telemetry; secrets stay in a private file on your computer.
@@ -89,7 +89,7 @@ Not planned: phone numbers, payments/wallet, QR "scan & create".
 ### ChatGPT and Claude subscriptions, the allowed way
 
 OpenAI and Anthropic don't offer third-party sign-in for consumer subscriptions, and reusing their tokens elsewhere breaks
-their terms. OpenCue runs **your installed, logged-in** `codex`, `claude` or `grok` binary instead, so your subscription stays in
+their terms. OpenCue runs **your installed, logged-in** `codex`, `claude`, `grok` or `muse` binary instead, so your subscription stays in
 the official client and OpenCue never sees the tokens. Those agents still get OpenCue's tools — memory, web, skills,
 computer, files, email, catalog apps — through a local MCP server (`opencue mcp-serve --agent <id>`).
 
@@ -185,6 +185,8 @@ Changes to `site/` deploy the website.
 - [x] **0.4.0**: a built-in browser agents can drive (Browser tab next to the VM, terminal below), WhatsApp through a QR with
   green cards in the chat, templates for agents and teams with an x.ai import, a message search (⌘K) and the 5-hour and
   weekly limits of your Codex and Claude Code subscriptions.
+- [x] **0.4.1**: Google Gemini, Meta Muse (API and Muse Code CLI), complete templates (soul, skills, memories), agent chat
+  cards in each agent's color, one browser page per agent and a reliable test notification.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

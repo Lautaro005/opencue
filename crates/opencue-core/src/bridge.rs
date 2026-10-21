@@ -294,7 +294,7 @@ impl Core {
                     .await;
                 let core = self.clone();
                 tokio::spawn(async move {
-                    let text = core.browser_serve(&payload).await;
+                    let text = core.browser_serve(&agent_id, &payload).await;
                     let _ =
                         sqlx::query("UPDATE bridge SET status = 'done', result = ? WHERE id = ?")
                             .bind(text)

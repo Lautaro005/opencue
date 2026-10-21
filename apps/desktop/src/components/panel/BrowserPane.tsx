@@ -28,19 +28,22 @@ export function BrowserPane({ agent }: { agent: Agent }) {
       void api.browserHide();
       return;
     }
-    const place = () => {
+    // The panel slides in and resizes, which moves the box without resizing it: follow it every
+    // frame (sending only when it changed) so the native view never sits where the box isn't.
+    let raf = 0;
+    let last = "";
+    const follow = () => {
       const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0) void api.browserPlace(r.left, r.top, r.width, r.height);
+      const key = `${Math.round(r.left)}|${Math.round(r.top)}|${Math.round(r.width)}|${Math.round(r.height)}`;
+      if (key !== last && r.width > 0 && r.height > 0) {
+        last = key;
+        void api.browserPlace(agent.id, r.left, r.top, r.width, r.height);
+      }
+      raf = requestAnimationFrame(follow);
     };
-    place();
-    const ro = new ResizeObserver(place);
-    ro.observe(el);
-    window.addEventListener("resize", place);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", place);
-    };
-  }, [covered, native]);
+    follow();
+    return () => cancelAnimationFrame(raf);
+  }, [covered, native, agent.id]);
   useEffect(() => () => void api.browserHide(), []);
 
   useEffect(() => {
@@ -48,7 +51,7 @@ export function BrowserPane({ agent }: { agent: Agent }) {
     let live = true;
     const poll = () =>
       void api
-        .browserState()
+        .browserState(agent.id)
         .then(([u, ti]) => {
           if (!live) return;
           if (u && !typing) setUrl(u);
@@ -61,9 +64,9 @@ export function BrowserPane({ agent }: { agent: Agent }) {
       live = false;
       window.clearInterval(timer);
     };
-  }, [native, typing]);
+  }, [native, typing, agent.id]);
 
-  const act = (action: string, to?: string) => void api.browserControl(action, to).catch((e) => showToast(String(e)));
+  const act = (action: string, to?: string) => void api.browserControl(agent.id, action, to).catch((e) => showToast(String(e)));
 
   return (
     <div className="flex min-h-0 flex-1 flex-col px-4 pb-2">
@@ -92,7 +95,7 @@ export function BrowserPane({ agent }: { agent: Agent }) {
           spellCheck={false}
           className="mx-1 min-w-0 flex-1 rounded-lg border border-line bg-bg px-2.5 py-1 font-mono text-[11.5px] outline-none focus:border-accent"
         />
-        <IconButton label={t("computer.browser.clear")} onClick={() => void api.browserClear().then(() => showToast(t("computer.browser.cleared")))} className="size-7">
+        <IconButton label={t("computer.browser.clear")} onClick={() => void api.browserClear(agent.id).then(() => showToast(t("computer.browser.cleared")))} className="size-7">
           <Trash2 size={13} />
         </IconButton>
       </div>

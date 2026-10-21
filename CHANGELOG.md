@@ -2,6 +2,35 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.4.1 — 2026-10-21
+
+### New
+
+- **Three new providers**: **Google Gemini** (API key from AI Studio, through Gemini's OpenAI-compatible endpoint),
+  **Meta Muse API** (`api.meta.ai/v1`, Muse Spark models) and **Muse Code CLI** (your installed, logged-in `muse`;
+  it answers in text, like the Grok CLI). The model lists come from each API.
+- **Templates come complete.** Every template agent (alone or inside a team) now has a soul, skills of its own and
+  starting memories besides its instructions, like a marketplace bot. Importing from x.ai also sets the soul and maps
+  the bot's color and shape to OpenCue's own avatars.
+- **Agent-to-agent chat as a card.** In a 1:1 chat, each time an agent talks to another one there is a card with the
+  other agent's name and a border in their own color; it unfolds into the question and the answer, and an arrow opens
+  the full chat. A later request gets its own new card instead of going back to the old one.
+
+### Changed
+
+- Templates window: the category tags sit in their own row under **Agents / Teams**.
+- Site: the Codex / Claude Code CLI logos are gone, Grok loses its terminal icon, and Gemini and Muse are added.
+
+### Fixed
+
+- **Template avatars** are always made of OpenCue's own shapes, faces and colors (no more "invalid" looks in the
+  avatar editor); imported bots are mapped to the nearest one.
+- **Built-in browser**: the pane no longer flashes over the sidebar and the Computer header (the page is created out of
+  sight and follows the panel while it slides in), and **each agent has its own page**: opening a site for one agent
+  no longer changes the others' browsers (and their cookies are separate too).
+- **Send a test notification** works every time: each one has its own id, a new time stamp in the text and the
+  permission is asked again if the system took it back.
+
 ## 0.4.0 — 2026-10-20
 
 ### New

@@ -151,7 +151,10 @@ export type ProviderKind =
   | "openai_compatible"
   | "codex_cli"
   | "claude_cli"
-  | "grok_cli";
+  | "grok_cli"
+  | "muse_cli"
+  | "gemini"
+  | "muse";
 
 export interface ProviderInfo {
   kind: ProviderKind;

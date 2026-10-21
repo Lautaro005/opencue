@@ -346,6 +346,26 @@ button {
   }
 }
 
+/* An exchange with another agent: the same card, bordered in that agent's own color. */
+.agent-card {
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    conic-gradient(from var(--ask-angle), var(--agent-color), color-mix(in srgb, var(--agent-color) 14%, transparent) 30%, var(--agent-color) 55%, color-mix(in srgb, var(--agent-color) 14%, transparent) 80%, var(--agent-color)) border-box;
+  animation: ask-spin 3.6s linear infinite;
+}
+.agent-card[data-busy="false"] {
+  animation-play-state: paused;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-card {
+    animation: none;
+    background: var(--bg);
+    border-color: var(--agent-color);
+  }
+}
+
 /* Apps connected through Composio: small tags with a blue moving border. */
 .composio-tag {
   --ring: #2f86eb;

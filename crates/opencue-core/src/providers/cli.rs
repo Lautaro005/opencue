@@ -16,6 +16,7 @@ pub enum CliKind {
     Claude,
     Codex,
     Grok,
+    Muse,
 }
 
 pub struct CliProvider {
@@ -45,6 +46,7 @@ impl CliProvider {
             CliKind::Claude => "claude",
             CliKind::Codex => "codex",
             CliKind::Grok => "grok",
+            CliKind::Muse => "muse",
         }
     }
 
@@ -57,6 +59,7 @@ impl CliProvider {
                     CliKind::Claude => "`claude`, then /login",
                     CliKind::Codex => "`codex login`",
                     CliKind::Grok => "`grok login`, or set XAI_API_KEY",
+                    CliKind::Muse => "`muse`, then /login, or set META_API_KEY",
                 }
             )
         })
@@ -103,6 +106,7 @@ fn cli_models(kind: CliKind) -> Vec<String> {
                 }
             }
         }
+        CliKind::Muse => {}
         CliKind::Grok => {
             out.extend(["grok-4.7", "grok-4.6", "grok-4.5"].map(String::from));
             let cfg = directories::UserDirs::new()
@@ -189,6 +193,7 @@ fn with_login_hint(kind: CliKind, msg: &str) -> String {
         CliKind::Claude => "open a terminal, run `claude` and type /login",
         CliKind::Codex => "open a terminal and run `codex login`",
         CliKind::Grok => "open a terminal and run `grok login` (or set XAI_API_KEY)",
+        CliKind::Muse => "open a terminal, run `muse` and type /login (or set META_API_KEY)",
     };
     format!("{msg}\n\nYour sign-in on this computer needs renewing: {how}, then send your message again.")
 }
@@ -249,6 +254,7 @@ impl LlmProvider for CliProvider {
         std::fs::create_dir_all(&workdir)?;
         let last_message_file = workdir.join(format!("codex-{}.txt", crate::db::new_id()));
 
+        let mut prompt_file: Option<std::path::PathBuf> = None;
         let mut cmd = Command::new(&bin);
         cmd.current_dir(&workdir)
             .stdin(Stdio::piped())
@@ -334,6 +340,22 @@ impl LlmProvider for CliProvider {
                 cmd.arg("-");
                 transcript(&req, true)
             }
+            CliKind::Muse => {
+                // Headless: one prompt from a file, plain text out. Approvals stay off but the
+                // sandbox stays on, and the prompt asks for text only.
+                let file = workdir.join(format!("muse-{}.txt", crate::db::new_id()));
+                let mut p = String::from(
+                    "Answer in plain text only, without using tools or touching files.\n\n",
+                );
+                p.push_str(&transcript(&req, true));
+                std::fs::write(&file, p)?;
+                cmd.arg("exec")
+                    .arg("--disable-approval")
+                    .arg("--prompt-file")
+                    .arg(&file);
+                prompt_file = Some(file);
+                String::new()
+            }
             CliKind::Grok => {
                 // Headless: one prompt, plain text out. Tools stay off (no auto-approve), so it
                 // answers in text instead of editing files in the scratch folder.
@@ -367,7 +389,7 @@ impl LlmProvider for CliProvider {
         let mut streamed = String::new();
         let mut final_text: Option<String> = None;
 
-        if self.kind == CliKind::Grok {
+        if matches!(self.kind, CliKind::Grok | CliKind::Muse) {
             // Plain text: forward it as it arrives, holding back a cut-off UTF-8 character.
             let mut pending: Vec<u8> = Vec::new();
             let mut buf = [0u8; 4096];
@@ -394,12 +416,16 @@ impl LlmProvider for CliProvider {
                 on_delta(&text);
             }
             let output = child.wait_with_output().await?;
+            if let Some(f) = &prompt_file {
+                let _ = std::fs::remove_file(f);
+            }
             if !output.status.success() && streamed.trim().is_empty() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 anyhow::bail!(with_login_hint(
-                    CliKind::Grok,
+                    self.kind,
                     &format!(
-                        "grok exited with {}: {}",
+                        "{} exited with {}: {}",
+                        self.binary(),
                         output.status,
                         stderr.chars().take(600).collect::<String>()
                     )
@@ -464,7 +490,7 @@ impl LlmProvider for CliProvider {
                     }
                     _ => {}
                 },
-                CliKind::Grok => {}
+                CliKind::Grok | CliKind::Muse => {}
                 CliKind::Codex => {
                     let item = v.get("item").or_else(|| v.get("msg"));
                     let is_message = item

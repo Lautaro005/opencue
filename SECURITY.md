@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.4.0`) | ✅ |
+| Latest release (`0.3.x`, currently `0.4.1`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -90,8 +90,8 @@ Out of scope:
   memories, MCP tools and catalog app tools not marked read-only wait for the user.
 - **Podman desktop**: Cua's noVNC desktop is published on `127.0.0.1` only (random port) with a fixed viewer password, so
   any program on the same computer can open it; the container drops all capabilities except SETUID, SETGID and SYS_CHROOT.
-- **Built-in browser**: the pane is a separate webview with its own cookies and storage (kept apart from the app's page and
-  from your browsers); it has no access to OpenCue's commands. The browser tools are off unless you turn on the agent's
+- **Built-in browser**: each agent has its own webview with its own page, cookies and storage (kept apart from the app's page,
+  from your browsers and from other agents' pages); it has no access to OpenCue's commands. The browser tools are off unless you turn on the agent's
   Browser switch; they open only `http`/`https` pages (never `localhost`, private networks, `file:` or `javascript:`),
   ask before a site the agent has not used yet in "Ask first" mode, refuse to type into password fields and treat page
   text as data. "Clear browsing data" wipes the session.
