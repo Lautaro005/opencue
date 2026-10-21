@@ -239,7 +239,7 @@ impl LlmProvider for OpenAiProvider {
                         m.get("id")
                             .or_else(|| m.get("name"))
                             .and_then(Value::as_str)
-                            .map(str::to_string)
+                            .map(|id| id.strip_prefix("models/").unwrap_or(id).to_string())
                     })
                     .collect()
             })

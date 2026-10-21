@@ -93,6 +93,8 @@ const catalog: ProviderInfo[] = [
   { kind: "openai", label: "OpenAI (ChatGPT)", api: "openai", default_base_url: "https://api.openai.com/v1", default_model: "gpt-5", requires_key: true, supports_tools: true, note: "API key from platform.openai.com" },
   { kind: "anthropic", label: "Anthropic (Claude)", api: "anthropic", default_base_url: "https://api.anthropic.com", default_model: "claude-sonnet-5-5", requires_key: true, supports_tools: true, note: "API key from console.anthropic.com" },
   { kind: "xai", label: "xAI (Grok)", api: "openai", default_base_url: "https://api.x.ai/v1", default_model: "grok-4", requires_key: true, supports_tools: true, note: "API key from console.x.ai" },
+  { kind: "gemini", label: "Google (Gemini API)", api: "openai", default_base_url: "https://generativelanguage.googleapis.com/v1beta/openai", default_model: "gemini-3-flash-preview", requires_key: true, supports_tools: true, note: "API key from aistudio.google.com (Gemini's OpenAI-compatible endpoint)" },
+  { kind: "muse", label: "Meta (Muse API)", api: "openai", default_base_url: "https://api.meta.ai/v1", default_model: "muse-spark-1.3", requires_key: true, supports_tools: true, note: "API key from dev.meta.ai (Muse Spark)" },
   { kind: "openrouter", label: "OpenRouter", api: "openai", default_base_url: "https://openrouter.ai/api/v1", default_model: "openrouter/auto", requires_key: true, supports_tools: true, note: "Hundreds of models behind one key" },
   { kind: "cheaperinference", label: "CheaperInference", api: "openai", default_base_url: "https://api.cheaperinference.com/v1", default_model: null, requires_key: true, supports_tools: true, note: "Flat-rate open models" },
   { kind: "ollama", label: "Ollama (local)", api: "openai", default_base_url: "http://localhost:11434/v1", default_model: "llama3.2", requires_key: false, supports_tools: true, note: "Runs models on this machine" },
@@ -101,6 +103,7 @@ const catalog: ProviderInfo[] = [
   { kind: "openai_compatible", label: "Custom (OpenAI-compatible)", api: "openai", default_base_url: null, default_model: null, requires_key: false, supports_tools: true, note: "Any /v1/chat/completions server" },
   { kind: "codex_cli", label: "ChatGPT via Codex CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed codex CLI login" },
   { kind: "grok_cli", label: "Grok via Grok Build CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed grok CLI login" },
+  { kind: "muse_cli", label: "Muse via Muse Code CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed muse CLI login" },
   { kind: "claude_cli", label: "Claude via Claude Code", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed claude CLI login" },
 ];
 
@@ -200,7 +203,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.4.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.4.1-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),

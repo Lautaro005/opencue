@@ -127,18 +127,21 @@ export function TemplatesDialog() {
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          {(["agents", "groups"] as const).map((k) => (
-            <button key={k} onClick={() => setTab(k)} className={cx("rounded-lg px-3 py-1 text-[13px] font-medium", tab === k ? "bg-active text-ink" : "text-muted hover:bg-hover")}>
-              {t(`templates.${k}`)}
-            </button>
-          ))}
-          <span className="mx-1 h-4 w-px bg-line" />
-          {(["all", ...CATEGORIES] as const).map((c) => (
-            <button key={c} onClick={() => setCategory(c)} className={cx("rounded-full border px-2.5 py-0.5 text-[12px]", category === c ? "border-accent bg-accent-soft text-ink" : "border-line text-muted hover:bg-hover")}>
-              {t(`templates.cat.${c}`)}
-            </button>
-          ))}
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            {(["agents", "groups"] as const).map((k) => (
+              <button key={k} onClick={() => setTab(k)} className={cx("rounded-lg px-3 py-1 text-[13px] font-medium", tab === k ? "bg-active text-ink" : "text-muted hover:bg-hover")}>
+                {t(`templates.${k}`)}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(["all", ...CATEGORIES] as const).map((c) => (
+              <button key={c} onClick={() => setCategory(c)} className={cx("rounded-full border px-2.5 py-0.5 text-[12px]", category === c ? "border-accent bg-accent-soft text-ink" : "border-line text-muted hover:bg-hover")}>
+                {t(`templates.cat.${c}`)}
+              </button>
+            ))}
+          </div>
         </div>
 
         {tab === "agents" ? (

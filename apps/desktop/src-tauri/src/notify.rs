@@ -4,8 +4,10 @@
 use opencue_core::events::CoreEvent;
 use opencue_core::models::Role;
 use opencue_core::Core;
+use std::sync::atomic::{AtomicI32, Ordering};
 use tauri::{AppHandle, Manager};
-use tauri_plugin_notification::NotificationExt;
+
+use tauri_plugin_notification::{NotificationExt, PermissionState};
 
 async fn flag(core: &Core, key: &str, default: bool) -> bool {
     core.store
@@ -32,9 +34,26 @@ fn snippet(text: &str) -> String {
     }
 }
 
+static NEXT_ID: AtomicI32 = AtomicI32::new(1);
+
 pub fn show(app: &AppHandle, title: &str, body: &str) -> Result<(), String> {
-    app.notification()
-        .builder()
+    let n = app.notification();
+    // Ask again when it isn't granted: the system can drop the permission between runs.
+    if !matches!(n.permission_state(), Ok(PermissionState::Granted)) {
+        match n.request_permission() {
+            Ok(PermissionState::Granted) => {}
+            _ => {
+                return Err(
+                    "Notifications are blocked for OpenCue. Allow them in your system settings."
+                        .into(),
+                )
+            }
+        }
+    }
+    // Every notification gets its own id: the system replaces (and silently drops) a new one that
+    // reuses the id of one still sitting in its notification center.
+    n.builder()
+        .id(NEXT_ID.fetch_add(1, Ordering::Relaxed))
         .title(title)
         .body(body)
         .show()

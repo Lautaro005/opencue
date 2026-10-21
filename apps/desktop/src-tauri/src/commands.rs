@@ -98,7 +98,9 @@ pub async fn greet_agent(state: State<'_, AppState>, id: String, text: String) -
 
 #[tauri::command]
 pub fn test_notification(app: tauri::AppHandle, title: String, body: String) -> R<()> {
-    crate::notify::show(&app, &title, &body)
+    // The time makes each test different, so a repeat is never taken for the one before it.
+    let stamp = chrono::Local::now().format("%H:%M:%S");
+    crate::notify::show(&app, &title, &format!("{body} ({stamp})"))
 }
 
 fn memory_file(
@@ -360,8 +362,8 @@ pub async fn whatsapp_disconnect(state: State<'_, AppState>) -> R<()> {
 // ---------- built-in browser ----------
 
 #[tauri::command]
-pub fn browser_place(state: State<'_, AppState>, x: f64, y: f64, w: f64, h: f64) {
-    state.browser.place(x, y, w, h);
+pub fn browser_place(state: State<'_, AppState>, agent_id: String, x: f64, y: f64, w: f64, h: f64) {
+    state.browser.place(&agent_id, x, y, w, h);
 }
 
 #[tauri::command]
@@ -372,20 +374,25 @@ pub fn browser_hide(state: State<'_, AppState>) {
 #[tauri::command]
 pub async fn browser_control(
     state: State<'_, AppState>,
+    agent_id: String,
     action: String,
     url: Option<String>,
 ) -> R<()> {
-    state.browser.control(&action, url).await.map_err(e)
+    state
+        .browser
+        .control(&agent_id, &action, url)
+        .await
+        .map_err(e)
 }
 
 #[tauri::command]
-pub async fn browser_state(state: State<'_, AppState>) -> R<(String, String)> {
-    Ok(state.browser.state().await)
+pub async fn browser_state(state: State<'_, AppState>, agent_id: String) -> R<(String, String)> {
+    Ok(state.browser.state(&agent_id).await)
 }
 
 #[tauri::command]
-pub fn browser_clear(state: State<'_, AppState>) -> R<()> {
-    state.browser.clear().map_err(e)
+pub fn browser_clear(state: State<'_, AppState>, agent_id: String) -> R<()> {
+    state.browser.clear(&agent_id).map_err(e)
 }
 
 /// Open the file with the system's default app.

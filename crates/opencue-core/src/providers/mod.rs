@@ -33,6 +33,9 @@ pub enum ProviderKind {
     CodexCli,
     ClaudeCli,
     GrokCli,
+    MuseCli,
+    Gemini,
+    Muse,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -85,6 +88,26 @@ pub const CATALOG: &[ProviderInfo] = &[
         requires_key: true,
         supports_tools: true,
         note: "API key from console.x.ai",
+    },
+    ProviderInfo {
+        kind: ProviderKind::Gemini,
+        label: "Google (Gemini API)",
+        api: ApiStyle::Openai,
+        default_base_url: Some("https://generativelanguage.googleapis.com/v1beta/openai"),
+        default_model: Some("gemini-3-flash-preview"),
+        requires_key: true,
+        supports_tools: true,
+        note: "API key from aistudio.google.com (Gemini's OpenAI-compatible endpoint)",
+    },
+    ProviderInfo {
+        kind: ProviderKind::Muse,
+        label: "Meta (Muse API)",
+        api: ApiStyle::Openai,
+        default_base_url: Some("https://api.meta.ai/v1"),
+        default_model: Some("muse-spark-1.3"),
+        requires_key: true,
+        supports_tools: true,
+        note: "API key from dev.meta.ai (Muse Spark)",
     },
     ProviderInfo {
         kind: ProviderKind::Openrouter,
@@ -165,6 +188,16 @@ pub const CATALOG: &[ProviderInfo] = &[
         requires_key: false,
         supports_tools: false,
         note: "Uses your installed `grok` CLI (xAI Grok Build) and its login. Answers in text; OpenCue tools are not available.",
+    },
+    ProviderInfo {
+        kind: ProviderKind::MuseCli,
+        label: "Muse via Muse Code CLI",
+        api: ApiStyle::Cli,
+        default_base_url: None,
+        default_model: None,
+        requires_key: false,
+        supports_tools: false,
+        note: "Uses your installed `muse` CLI (Meta Muse Code) and its login. Answers in text; OpenCue tools are not available.",
     },
     ProviderInfo {
         kind: ProviderKind::ClaudeCli,
@@ -411,6 +444,7 @@ pub fn build(
         ApiStyle::Cli => Arc::new(CliProvider::new(match config.kind {
             ProviderKind::CodexCli => CliKind::Codex,
             ProviderKind::GrokCli => CliKind::Grok,
+            ProviderKind::MuseCli => CliKind::Muse,
             _ => CliKind::Claude,
         })),
     })
@@ -453,6 +487,24 @@ pub(crate) async fn error_for_status(resp: reqwest::Response) -> anyhow::Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gemini_and_muse_are_in_the_catalog() {
+        let g = info(ProviderKind::Gemini);
+        assert_eq!(g.api, ApiStyle::Openai);
+        assert!(g.requires_key);
+        assert_eq!(
+            g.default_base_url,
+            Some("https://generativelanguage.googleapis.com/v1beta/openai")
+        );
+        assert_eq!(
+            info(ProviderKind::Muse).default_base_url,
+            Some("https://api.meta.ai/v1")
+        );
+        assert_eq!(info(ProviderKind::MuseCli).api, ApiStyle::Cli);
+        let kind: ProviderKind = serde_json::from_str("\"muse_cli\"").unwrap();
+        assert_eq!(kind, ProviderKind::MuseCli);
+    }
 
     #[test]
     fn old_cheapestinference_providers_still_load_and_move_to_the_right_address() {

@@ -100,7 +100,7 @@
           <tr><th>Provider</th><th>How it signs in</th></tr>
           <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheaperInference, Ollama Cloud</td><td>API key, stored on this computer (<code>secrets.json</code>, mode 0600)</td></tr>
           <tr><td>Ollama, LM Studio, any OpenAI-compatible server</td><td>Base URL, no key needed for local servers</td></tr>
-          <tr><td>ChatGPT / Codex, Claude Code, Grok Build</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code>, <code>claude</code> or <code>grok</code> program you are already logged in to (Grok answers in text only). Models listed are the ones each CLI accepts.</td></tr>
+          <tr><td>ChatGPT / Codex, Claude Code, Grok Build, Muse Code</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code>, <code>claude</code>, <code>grok</code> or <code>muse</code> program you are already logged in to (Grok and Muse answer in text only). Models listed are the ones each CLI accepts.</td></tr>
         </table>
         <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client.</p>
         <h3>OpenCue tools for CLI agents</h3>

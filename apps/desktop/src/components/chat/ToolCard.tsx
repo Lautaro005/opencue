@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { BookmarkPlus, Brain, ChevronRight, FileText, FolderOpen, Globe, HelpCircle, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowUpRight, BookmarkPlus, Brain, ChevronRight, FileText, FolderOpen, Globe, HelpCircle, Inbox, Mail, Plug, Search, Send, ShieldAlert, Sparkles, SquareTerminal, Trash2 } from "lucide-react";
 import type { Agent, ApprovalRequest, Message, ToolCall } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx } from "../../lib/format";
@@ -75,6 +75,7 @@ export function ToolCard({
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const agents = useStore((s) => s.agents);
+  const threadMessages = useStore((s) => s.messages[message.thread_id]);
   const name = message.tool_name ?? call?.name ?? "tool";
   const d = describe(name, call?.arguments, t);
   const status = message.status;
@@ -84,7 +85,13 @@ export function ToolCard({
   if (name === "send_to_agent" && !isGroup && agentId) {
     const wanted = String(call?.arguments?.agent ?? "").replace(/^@/, "").trim().toLowerCase();
     const target = Object.values(agents).find((a) => a.name.toLowerCase() === wanted);
-    if (target) return <LiveChat fromId={agentId} target={target} running={status === "running"} />;
+    if (target) {
+      // This exchange ends where the next one with the same agent starts, so each card keeps its own.
+      const later = (threadMessages ?? []).filter((m) => m.role === "tool" && m.tool_name === "send_to_agent" && m.agent_id === agentId && m.created_at > message.created_at);
+      const callArgs = (id: string | null) => (threadMessages ?? []).flatMap((m) => m.tool_calls ?? []).find((c) => c.id === id)?.arguments;
+      const next = later.find((m) => String(callArgs(m.tool_call_id)?.agent ?? "").replace(/^@/, "").trim().toLowerCase() === wanted);
+      return <LiveChat fromId={agentId} target={target} question={String(call?.arguments?.message ?? "")} since={message.created_at} until={next?.created_at} running={status === "running"} />;
+    }
   }
 
   return (
@@ -133,8 +140,9 @@ export function ToolCard({
 const NO_MESSAGES: Message[] = [];
 const NO_WORKERS: string[] = [];
 
-/** Talking to another agent from a 1:1 chat: a green, moving-border card that follows their conversation live. */
-function LiveChat({ fromId, target, running }: { fromId: string; target: Agent; running: boolean }) {
+/** One exchange with another agent, WhatsApp-style: their name in their own color, a dropdown with the
+ * question and the answer, and a button that opens the whole conversation. */
+function LiveChat({ fromId, target, question, since, until, running }: { fromId: string; target: Agent; question: string; since: string; until?: string; running: boolean }) {
   const { t } = useTranslation();
   const agents = useStore((s) => s.agents);
   const openDm = useStore((s) => s.openDm);
@@ -142,36 +150,48 @@ function LiveChat({ fromId, target, running }: { fromId: string; target: Agent; 
   const threadId = dmThreadId(fromId, target.id);
   const messages = useStore((s) => s.messages[threadId]) ?? NO_MESSAGES;
   const working = useStore((s) => s.working[threadId] ?? NO_WORKERS);
-  const endRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
   // Loading the thread is what makes its messages stream in here as they are written.
   useEffect(() => void loadMessages(threadId), [threadId, loadMessages]);
-  const talk = messages.filter((m) => m.role === "assistant" && (m.content || m.status === "streaming"));
-  useEffect(() => endRef.current?.scrollIntoView({ block: "end" }), [talk.length, talk[talk.length - 1]?.content]);
-  const busy = running || working.length > 0;
+  const answers = messages.filter((m) => m.role === "assistant" && m.agent_id === target.id && (m.content || m.status === "streaming") && m.created_at >= since && (!until || m.created_at < until));
+  const busy = running || (working.length > 0 && !until);
+  const sender = agents[fromId];
+  const color = target.avatar.color || "var(--success)";
 
   return (
-    <div className="live-card animate-pop w-full max-w-[520px] overflow-hidden text-[12.5px]" data-busy={busy}>
-      <button onClick={() => openDm(fromId, target.id)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-hover/50">
-        {busy ? <Spinner size={14} /> : <AvatarView avatar={target.avatar} name={target.name} size={20} />}
-        <span className="min-w-0 truncate font-medium text-ink">{t("chat.chatWith", { name: target.name })}</span>
-        <ChevronRight size={14} className="ml-auto shrink-0 text-faint" />
-      </button>
-      {talk.length > 0 && (
-        <div className="selectable max-h-64 space-y-2 overflow-y-auto border-t border-line/70 px-3 py-2.5">
-          {talk.map((m) => {
-            const who = m.agent_id ? agents[m.agent_id] : undefined;
-            return (
-              <div key={m.id} className="flex gap-2">
-                {who && <AvatarView avatar={who.avatar} name={who.name} size={18} />}
-                <div className="min-w-0 flex-1">
-                  <div className="text-[11px] font-medium text-muted">{who?.name}</div>
-                  <div className="whitespace-pre-wrap break-words text-[12.5px] leading-snug">{m.content || <Typing />}</div>
+    <div className="agent-card animate-pop my-1.5 w-full max-w-[520px] overflow-hidden text-[12.5px]" data-busy={busy} style={{ ["--agent-color" as string]: color }}>
+      <div className="flex items-center">
+        <button onClick={() => setOpen((v) => !v)} className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-hover/50">
+          {busy ? <Spinner size={14} /> : <AvatarView avatar={target.avatar} name={target.name} size={20} />}
+          <span className="min-w-0 truncate font-medium text-ink">{target.name}</span>
+          <ChevronRight size={14} className={cx("ml-auto shrink-0 text-faint transition-transform", open && "rotate-90")} />
+        </button>
+        <button onClick={() => openDm(fromId, target.id)} className="mr-1.5 rounded-lg p-1.5 text-muted hover:bg-hover hover:text-ink" aria-label={t("chat.openChat")} data-tip={t("chat.openChat")}>
+          <ArrowUpRight size={15} />
+        </button>
+      </div>
+      {open && (
+        <div className="selectable space-y-2.5 border-t border-line/70 px-3 py-2.5">
+          {question && (
+            <div>
+              <div className="text-[11px] font-medium text-muted">{sender?.name ?? t("chat.question")}</div>
+              <div className="whitespace-pre-wrap break-words leading-snug">{question}</div>
+            </div>
+          )}
+          <div>
+            <div className="text-[11px] font-medium text-muted">{target.name}</div>
+            {answers.length > 0 ? (
+              answers.map((m) => (
+                <div key={m.id} className="whitespace-pre-wrap break-words leading-snug">
+                  {m.content || <Typing />}
                 </div>
-              </div>
-            );
-          })}
-          {busy && talk[talk.length - 1]?.status !== "streaming" && <Typing />}
-          <div ref={endRef} />
+              ))
+            ) : busy ? (
+              <Typing />
+            ) : (
+              <div className="text-faint">…</div>
+            )}
+          </div>
         </div>
       )}
     </div>

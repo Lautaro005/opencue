@@ -126,6 +126,8 @@ export const es: Dict = {
     skills: "Skills",
     whatsappReply: "Respuesta",
     chatWith: "Chat con {{name}}",
+    openChat: "Abrir el chat completo",
+    question: "Pregunta",
     backTo: "Volver a {{name}}",
     dmEmpty: "Todavía no hablaron.",
     approve: "Permitir",

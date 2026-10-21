@@ -21,11 +21,11 @@ use crate::Core;
 
 const POLL: Duration = Duration::from_millis(400);
 
-/// What the desktop app does for the browser tools. `action` is `open`, `snapshot`, `click`,
+/// What the desktop app does for the browser tools. Every agent has its own page. `action` is `open`, `snapshot`, `click`,
 /// `type` or `close`; the answer is the text the agent reads.
 #[async_trait]
 pub trait BrowserHost: Send + Sync {
-    async fn run(&self, action: &str, args: Value) -> anyhow::Result<String>;
+    async fn run(&self, agent_id: &str, action: &str, args: Value) -> anyhow::Result<String>;
 }
 
 /// The page address an agent may open: http(s) only, and not this computer or its network.
@@ -129,7 +129,7 @@ impl Core {
             let host = host.ok_or_else(|| {
                 anyhow::anyhow!("the browser is only available in the desktop app")
             })?;
-            return host.run(action, args).await;
+            return host.run(&agent.id, action, args).await;
         }
         self.browser_remote(agent, action, args).await
     }
@@ -179,14 +179,14 @@ impl Core {
     }
 
     /// The app side of [`Core::browser_remote`].
-    pub(crate) async fn browser_serve(&self, payload: &str) -> String {
+    pub(crate) async fn browser_serve(&self, agent_id: &str, payload: &str) -> String {
         let v: Value = serde_json::from_str(payload).unwrap_or_default();
         let action = v.get("action").and_then(Value::as_str).unwrap_or_default();
         let args = v.get("args").cloned().unwrap_or_default();
         let host = self.browser_host.lock().unwrap().clone();
         match host {
             Some(h) => h
-                .run(action, args)
+                .run(agent_id, action, args)
                 .await
                 .unwrap_or_else(|e| format!("Error: {e:#}")),
             None => "Error: the browser is only available in the desktop app".into(),

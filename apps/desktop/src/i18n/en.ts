@@ -124,6 +124,8 @@ export const en = {
     skills: "Skills",
     whatsappReply: "Reply",
     chatWith: "Chat with {{name}}",
+    openChat: "Open the full chat",
+    question: "Question",
     backTo: "Back to {{name}}",
     dmEmpty: "They have not talked yet.",
     approve: "Allow",
