@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.3.8`) | ✅ |
+| Latest release (`0.3.x`, currently `0.4.0`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -47,6 +47,7 @@ In scope:
   including through `opencue mcp-serve`, which must ask the user (or refuse) for those actions for CLI agents in "Ask first" mode, and agent-to-agent chats, which must not let an agent skip another agent's approvals
 - **Sandbox escapes through OpenCue** — a command in the Docker or SPACE computer reaching the host or another agent's
   workspace because of how OpenCue mounts, names or talks to it; file tools escaping an agent's workspace folder
+- **Browser and messenger abuse** — a web page or a WhatsApp message making an agent act without the approval the mode requires, a page reaching OpenCue's commands or the host's network, or the WhatsApp session leaking
 - **Secret exposure** — API keys, email passwords, the SPACE token or an app's OAuth tokens leaking from `secrets.json` or `oauth/` (both `0600`), logs, the UI, the agent's context or network traffic; SPACE session tokens sent to a host
   other than the configured server
 - **Webhooks and the desktop view** — the automation server or a Docker desktop port reachable from other machines, or
@@ -89,6 +90,20 @@ Out of scope:
   memories, MCP tools and catalog app tools not marked read-only wait for the user.
 - **Podman desktop**: Cua's noVNC desktop is published on `127.0.0.1` only (random port) with a fixed viewer password, so
   any program on the same computer can open it; the container drops all capabilities except SETUID, SETGID and SYS_CHROOT.
+- **Built-in browser**: the pane is a separate webview with its own cookies and storage (kept apart from the app's page and
+  from your browsers); it has no access to OpenCue's commands. The browser tools are off unless you turn on the agent's
+  Browser switch; they open only `http`/`https` pages (never `localhost`, private networks, `file:` or `javascript:`),
+  ask before a site the agent has not used yet in "Ask first" mode, refuse to type into password fields and treat page
+  text as data. "Clear browsing data" wipes the session.
+- **WhatsApp** (Settings → Messenger): the app links as a companion device and keeps the session in
+  `messenger/whatsapp.db`; nothing is hosted. Only direct chats are answered (groups, status and your own messages are
+  ignored), optionally only from numbers you list. Each contact has an isolated conversation with the agent, the agent is
+  told the sender is an outside contact, learning into memory and profile is off for those chats, and in "Ask first" mode
+  any sensitive action a contact's message leads to asks you on the card in the agent's own chat.
+- **Templates and imports**: the import from x.ai only fetches `https://x.ai/bot/…` pages (redirects away from x.ai are
+  refused) and reads the data in them; nothing from a template is run, and imported skills are plain text files.
+- **Subscription limits** (Settings → Usage) are read from Codex's local session files and from the rate-limit events
+  Claude Code prints while an agent works; OpenCue never reads the CLIs' sign-in tokens.
 - **Computers**: Docker and SPACE isolate commands from the host; each Docker agent sees only its own workspace at
   `/workspace`. On the host, Docker and WSL, file tools reject paths that leave the agent's workspace. SPACE output
   streams are only read from the configured host.

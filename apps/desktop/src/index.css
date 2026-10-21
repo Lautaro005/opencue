@@ -387,3 +387,7 @@ button {
     border-color: var(--ring);
   }
 }
+
+/* A message the search jumped to. */
+@keyframes flash-bg { from { background: color-mix(in srgb, var(--warning) 28%, transparent); } to { background: transparent; } }
+[data-mid].flash + * { animation: flash-bg 1.8s ease-out; border-radius: 12px; }

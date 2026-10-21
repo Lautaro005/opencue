@@ -73,8 +73,8 @@ creates your first agent. Replay it any time from **Settings → General**.
     <td valign="top"><b>✨ Learn skills</b><br>Claude Code–compatible <code>SKILL.md</code>: write them, import them from a URL, or let agents save their own. Run any skill with <code>/</code>, or ask for <code>/create-skill</code> and <code>/create-automation</code>.</td>
   </tr>
   <tr>
-    <td valign="top"><b>🎙️ Talk</b><br>ElevenLabs: speak into the mic, hear replies in the voice you pick per agent.</td>
-    <td valign="top"><b>🌐 Browse</b><br>Free web search (DuckDuckGo, Wikipedia, optional SearXNG) and page → Markdown, cached locally.</td>
+    <td valign="top"><b>🎙️ Talk &amp; chat</b><br>ElevenLabs voice and calls, and WhatsApp: link a number with a QR and an agent answers its chats.</td>
+    <td valign="top"><b>🌐 Browse</b><br>Free web search (DuckDuckGo, Wikipedia, optional SearXNG), page → Markdown, and a built-in browser pane agents can click and type in while you watch.</td>
   </tr>
 </table>
 
@@ -182,6 +182,9 @@ Changes to `site/` deploy the website.
 - [x] **0.3.8**: a working Podman desktop (Cua's XFCE image), stop-all and play buttons in Settings → Computers, desktop
   view on by default, the chosen VM respected over VMPal, folded reasoning, a gray call button without an ElevenLabs
   key and an Agents / Skills menu under the chat's +.
+- [x] **0.4.0**: a built-in browser agents can drive (Browser tab next to the VM, terminal below), WhatsApp through a QR with
+  green cards in the chat, templates for agents and teams with an x.ai import, a message search (⌘K) and the 5-hour and
+  weekly limits of your Codex and Claude Code subscriptions.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

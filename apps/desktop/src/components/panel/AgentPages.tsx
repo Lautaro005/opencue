@@ -204,6 +204,11 @@ export function ComputerPage({ agent, onChange }: { agent: Agent; onChange: (s: 
           {t("computer.open")}
         </Button>
       )}
+      <div className="border-t border-line pt-3">
+        <Row label={t("computer.browser.switchLabel")} hint={t("computer.browser.switchHint")}>
+          <Toggle checked={agent.settings.browser} onChange={(v) => onChange({ browser: v })} />
+        </Row>
+      </div>
       {agent.settings.computer === "docker" && <LocalVmOptions agent={agent} />}
       {agent.settings.computer === "vmpal" && <VmPalPicker agent={agent} onChange={onChange} />}
     </Page>

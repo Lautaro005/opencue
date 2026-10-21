@@ -31,6 +31,12 @@ pub enum CoreEvent {
         approval_id: String,
         approved: bool,
     },
+    /// WhatsApp changed state (QR, connected, who answers…).
+    MessengerChanged,
+    /// An agent is using the built-in browser: the app shows it.
+    BrowserActivity {
+        agent_id: String,
+    },
     /// A catalog app finished signing in (or failed to).
     CatalogChanged {
         slug: String,

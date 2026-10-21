@@ -1,5 +1,6 @@
 //! Tauri shell: exposes the OpenCue core to the React UI and keeps agents running from the tray.
 
+mod browser;
 mod commands;
 mod notify;
 
@@ -12,6 +13,7 @@ use tauri::{Emitter, Manager, WindowEvent};
 
 pub struct AppState {
     pub core: Arc<Core>,
+    pub browser: Arc<browser::TauriBrowser>,
 }
 
 fn show_main(app: &tauri::AppHandle) {
@@ -127,7 +129,12 @@ pub fn run() {
                     }
                 }
             });
-            app.manage(AppState { core });
+            let browser = browser::TauriBrowser::new(
+                app.handle().clone(),
+                core.paths().root().join("browser"),
+            );
+            core.set_browser_host(browser.clone());
+            app.manage(AppState { core, browser });
             allow_microphone(app);
 
             // Tray: agents keep working while the window is closed. The menu opens on click, with
@@ -213,6 +220,8 @@ pub fn run() {
             commands::add_group_member,
             commands::remove_group_member,
             commands::get_messages,
+            commands::search_messages,
+            commands::import_grok_template,
             commands::send_message,
             commands::thread_files,
             commands::read_attachment,
@@ -279,6 +288,16 @@ pub fn run() {
             commands::reset_computer,
             commands::stop_computer,
             commands::open_external,
+            commands::cli_limits,
+            commands::messenger_status,
+            commands::whatsapp_configure,
+            commands::whatsapp_connect,
+            commands::whatsapp_disconnect,
+            commands::browser_place,
+            commands::browser_hide,
+            commands::browser_control,
+            commands::browser_state,
+            commands::browser_clear,
             commands::computer_running,
             commands::agent_workspace,
             commands::default_workspace,

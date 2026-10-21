@@ -5,8 +5,8 @@ import i18n from "../i18n";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | null;
-export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
-export type Dialog = "create-agent" | "create-group" | "walkthrough" | null;
+export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
+export type Dialog = "create-agent" | "create-group" | "templates" | "walkthrough" | null;
 
 export interface ModelList {
   list: string[];
@@ -34,6 +34,9 @@ interface State {
   questions: Record<string, Question>;
   /** The conversation between two agents being looked at, if any (the chat it came from is `a`). */
   dm: { a: string; b: string } | null;
+  searchOpen: boolean;
+  /** A message to scroll to once its chat is open (from the search). */
+  focusMessage: string | null;
   toast: string | null;
   /** The voice call in progress, if any. */
   call: { threadId: string; agentId: string } | null;
@@ -50,6 +53,8 @@ interface State {
   startCall: (agentId: string) => void;
   endCall: () => void;
   openDm: (a: string, b: string) => void;
+  setSearchOpen: (open: boolean) => void;
+  openMessage: (threadId: string, messageId: string) => Promise<void>;
   closeDm: () => void;
   setPanel: (p: Panel) => void;
   setDialog: (d: Dialog) => void;
@@ -93,6 +98,8 @@ export const useStore = create<State>((set, get) => ({
   approvals: {},
   questions: {},
   dm: null,
+  searchOpen: false,
+  focusMessage: null,
   toast: null,
   call: null,
   models: {},
@@ -146,6 +153,13 @@ export const useStore = create<State>((set, get) => ({
     void get().loadMessages(dmThreadId(a, b));
   },
   closeDm: () => set({ dm: null }),
+  setSearchOpen: (searchOpen) => set({ searchOpen }),
+  openMessage: async (threadId, messageId) => {
+    get().select(threadId);
+    // The hit may be older than what a chat loads by default.
+    const list = await api.getMessages(threadId, 5000);
+    set((s) => ({ messages: { ...s.messages, [threadId]: list }, focusMessage: messageId }));
+  },
   startCall: (agentId) => set({ call: { threadId: agentId, agentId } }),
   endCall: () => set({ call: null }),
   setPanel: (panel) => set({ panel }),
@@ -300,6 +314,18 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
         window.dispatchEvent(new CustomEvent("opencue:computer-focus"));
       }
       window.dispatchEvent(new CustomEvent("opencue:computer-output", { detail: ev }));
+      break;
+    }
+    case "messenger_changed":
+      window.dispatchEvent(new CustomEvent("opencue:messenger-changed"));
+      break;
+    case "browser_activity": {
+      // An agent is using the browser: open the Computer panel on it.
+      const s = get();
+      if (s.selected === ev.agent_id && s.settings.auto_open_computer !== "false") {
+        if (s.panel !== "computer") set(() => ({ panel: "computer" as Panel }));
+        window.dispatchEvent(new CustomEvent("opencue:browser-focus"));
+      }
       break;
     }
     case "catalog_changed": {
