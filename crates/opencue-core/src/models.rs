@@ -40,6 +40,9 @@ pub struct AgentSettings {
     /// Where `run_command` and the file tools run.
     #[serde(default)]
     pub computer: crate::computer::ComputerBackend,
+    /// Let the agent drive the built-in browser (Computer panel → Browser).
+    #[serde(default)]
+    pub browser: bool,
     /// Skills listed in the prompt and loadable with `use_skill`.
     #[serde(default = "yes")]
     pub skills: bool,
@@ -221,6 +224,17 @@ pub struct NewAttachment {
 pub enum ThreadKind {
     Agent,
     Group,
+}
+
+/// A message found by the sidebar's search.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchHit {
+    pub message_id: String,
+    pub thread_id: String,
+    pub role: String,
+    pub agent_id: Option<String>,
+    pub content: String,
+    pub created_at: String,
 }
 
 /// One row of the sidebar.

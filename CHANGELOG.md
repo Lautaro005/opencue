@@ -2,6 +2,35 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.4.0 — 2026-10-20
+
+### New
+
+- **Built-in browser.** Computer panel → **Browser** tab: a separate webview (its own cookies and storage) that an agent
+  can drive while you watch. A switch in the agent's Computer page gives it `browser_open`, `browser_snapshot`,
+  `browser_click`, `browser_type` and `browser_close`; the panel opens on the Browser tab by itself when it uses them.
+  A new site asks first, only public `http`/`https` pages open, passwords are never typed for you, and the pane has an
+  address bar, back / forward / reload and "clear browsing data". Works for Claude Code and Codex agents too.
+- **Computer panel redone**: the VM (and the browser, as tabs) on top and the terminal always below; the Files tab is
+  gone (the agent's page has it).
+- **Messenger → WhatsApp** (Settings, under Apps): scan a QR in WhatsApp → Linked devices and pick the agent that
+  answers. It runs inside the app (no server). Each contact gets their own conversation; a message that arrives is
+  answered automatically and appears in the agent's chat as a green **WhatsApp** card that unfolds into the question
+  and the answer. Optional list of numbers allowed; groups and status are ignored.
+- **Templates** in the sidebar's **+** menu: 31 ready-made agents and 7 teams adapted from popular Grok Bot templates
+  (meta, engineering, research, inbox, growth, creative, life). The window also imports from x.ai: a marketplace bot
+  (`x.ai/bot/marketplace/bots/…`) comes with its instructions, memories, skills, routines and apps; a shared link
+  (`x.ai/bot/…`) only exposes a name and a description.
+- **Search** (magnifier next to **+**, or ⌘K / Ctrl+K): finds a message in every chat and jumps to it.
+- **Subscription limits** under the Usage table: for Codex and Claude Code, the 5-hour and weekly windows with how much
+  is left (bar), and when each resets. Codex is read from its session files; Claude Code appears once an agent has
+  replied.
+
+### Changed
+
+- Reasoning is a subtle "Reasoning ▸" fold above the answer; what an agent says between tool calls goes in it too.
+- Settings → Computers: with Podman there is no image field.
+
 ## 0.3.8 — 2026-10-19
 
 ### Fixed

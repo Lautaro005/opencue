@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Bot, Eraser, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Settings, Sparkles, Trash2, Users } from "lucide-react";
+import { Bot, Eraser, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cx, shortTime, splitThink } from "../lib/format";
 import { api } from "../lib/api";
@@ -16,6 +16,7 @@ export function Sidebar() {
   const selected = useStore((s) => s.selected);
   const select = useStore((s) => s.select);
   const setDialog = useStore((s) => s.setDialog);
+  const setSearchOpen = useStore((s) => s.setSearchOpen);
   const openSettings = useStore((s) => s.openSettings);
   const update = useStore((s) => s.update);
   const settings = useStore((s) => s.settings);
@@ -61,7 +62,10 @@ export function Sidebar() {
           <Logo />
           <span className="text-[15px] font-semibold tracking-tight">OpenCue</span>
         </div>
-        <div className="relative" ref={menuRef}>
+        <div className="relative flex items-center" ref={menuRef}>
+          <IconButton label={t("search.title")} onClick={() => setSearchOpen(true)}>
+            <Search size={17} />
+          </IconButton>
           <IconButton label={t("sidebar.new")} onClick={() => setMenu((v) => !v)} active={menu}>
             <Plus size={18} />
           </IconButton>
@@ -81,6 +85,14 @@ export function Sidebar() {
                 onClick={() => {
                   setMenu(false);
                   setDialog("create-group");
+                }}
+              />
+              <MenuItem
+                icon={<LayoutTemplate size={16} />}
+                label={t("sidebar.templates")}
+                onClick={() => {
+                  setMenu(false);
+                  setDialog("templates");
                 }}
               />
             </div>

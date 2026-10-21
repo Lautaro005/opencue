@@ -9,6 +9,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::models::ToolCall;
 
@@ -305,6 +306,8 @@ pub struct ExtraMcp {
 
 #[derive(Debug, Clone, Default)]
 pub struct ChatResponse {
+    /// Rate-limit readings a subscription CLI reported while it ran.
+    pub rate_limits: Vec<Value>,
     pub text: String,
     pub tool_calls: Vec<ToolCall>,
     pub input_tokens: i64,

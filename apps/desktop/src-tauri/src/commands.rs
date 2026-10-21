@@ -238,6 +238,26 @@ pub async fn remove_group_member(
 }
 
 #[tauri::command]
+pub async fn import_grok_template(input: String) -> R<opencue_core::templates::GrokTemplate> {
+    opencue_core::templates::import_grok_bot(&input)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn search_messages(
+    state: State<'_, AppState>,
+    query: String,
+) -> R<Vec<opencue_core::models::SearchHit>> {
+    state
+        .core
+        .store
+        .search_messages(&query, 40)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
 pub async fn get_messages(
     state: State<'_, AppState>,
     thread_id: String,
@@ -298,6 +318,74 @@ pub fn open_external(url: String) -> R<()> {
         return Err("only http and https links can be opened".into());
     }
     tauri_plugin_opener::open_url(url, None::<&str>).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub async fn cli_limits(state: State<'_, AppState>) -> R<Vec<opencue_core::limits::CliLimits>> {
+    Ok(state.core.cli_limits().await)
+}
+
+// ---------- messenger (WhatsApp) ----------
+
+#[tauri::command]
+pub async fn messenger_status(
+    state: State<'_, AppState>,
+) -> R<opencue_core::messenger::MessengerStatus> {
+    Ok(state.core.messenger_status().await)
+}
+
+#[tauri::command]
+pub async fn whatsapp_configure(
+    state: State<'_, AppState>,
+    agent_id: Option<String>,
+    allow: String,
+) -> R<()> {
+    state
+        .core
+        .whatsapp_configure(agent_id, allow)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn whatsapp_connect(state: State<'_, AppState>) -> R<()> {
+    state.core.whatsapp_connect().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn whatsapp_disconnect(state: State<'_, AppState>) -> R<()> {
+    state.core.whatsapp_disconnect().await.map_err(e)
+}
+
+// ---------- built-in browser ----------
+
+#[tauri::command]
+pub fn browser_place(state: State<'_, AppState>, x: f64, y: f64, w: f64, h: f64) {
+    state.browser.place(x, y, w, h);
+}
+
+#[tauri::command]
+pub fn browser_hide(state: State<'_, AppState>) {
+    state.browser.hide();
+}
+
+#[tauri::command]
+pub async fn browser_control(
+    state: State<'_, AppState>,
+    action: String,
+    url: Option<String>,
+) -> R<()> {
+    state.browser.control(&action, url).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn browser_state(state: State<'_, AppState>) -> R<(String, String)> {
+    Ok(state.browser.state().await)
+}
+
+#[tauri::command]
+pub fn browser_clear(state: State<'_, AppState>) -> R<()> {
+    state.browser.clear().map_err(e)
 }
 
 /// Open the file with the system's default app.

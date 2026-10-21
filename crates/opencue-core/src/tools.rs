@@ -29,6 +29,11 @@ pub const UPDATE_SOUL: &str = "update_soul";
 pub const UPDATE_PLAN: &str = "update_plan";
 pub const RESEARCH: &str = "research";
 pub const ASK_USER: &str = "ask_user";
+pub const BROWSER_OPEN: &str = "browser_open";
+pub const BROWSER_SNAPSHOT: &str = "browser_snapshot";
+pub const BROWSER_CLICK: &str = "browser_click";
+pub const BROWSER_TYPE: &str = "browser_type";
+pub const BROWSER_CLOSE: &str = "browser_close";
 
 pub fn is_phase2(name: &str) -> bool {
     [
@@ -55,6 +60,7 @@ pub struct Capabilities {
     pub skills: bool,
     pub computer: ComputerBackend,
     pub email: bool,
+    pub browser: bool,
 }
 
 /// Everything an agent may call in one turn.
@@ -313,6 +319,49 @@ impl Toolbox {
                     },
                     "required": ["path"]
                 }),
+            ));
+        }
+        if caps.browser {
+            specs.push(spec(
+                BROWSER_OPEN,
+                "Open a web page in your browser pane (the user watches it). Use it for sites that need real browsing: logins, forms, dashboards, pages built with JavaScript. For plain reading prefer web_fetch. The user may be asked to approve a new site.",
+                json!({
+                    "type": "object",
+                    "properties": { "url": { "type": "string" } },
+                    "required": ["url"]
+                }),
+            ));
+            specs.push(spec(
+                BROWSER_SNAPSHOT,
+                "Read the page in your browser: address, title, the visible text and a numbered list of the things you can click or type into. Call it after every open, click or type.",
+                json!({ "type": "object", "properties": {} }),
+            ));
+            specs.push(spec(
+                BROWSER_CLICK,
+                "Click an element from the last snapshot by its number.",
+                json!({
+                    "type": "object",
+                    "properties": { "index": { "type": "integer", "minimum": 0 } },
+                    "required": ["index"]
+                }),
+            ));
+            specs.push(spec(
+                BROWSER_TYPE,
+                "Type text into an input from the last snapshot by its number; set submit to press Enter afterwards. Never type passwords or payment details: ask the user to do that in the pane.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "index": { "type": "integer", "minimum": 0 },
+                        "text": { "type": "string" },
+                        "submit": { "type": "boolean" }
+                    },
+                    "required": ["index", "text"]
+                }),
+            ));
+            specs.push(spec(
+                BROWSER_CLOSE,
+                "Close the page in your browser pane when you are done.",
+                json!({ "type": "object", "properties": {} }),
             ));
         }
         if caps.email {

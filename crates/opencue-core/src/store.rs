@@ -465,6 +465,43 @@ impl Store {
         Ok(rows.iter().map(message_from_row).collect())
     }
 
+    /// Messages (yours and the agents' replies) that contain the words, newest first. Chats between
+    /// agents and tool output are left out.
+    pub async fn search_messages(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> anyhow::Result<Vec<crate::models::SearchHit>> {
+        let q = query.trim();
+        if q.is_empty() {
+            return Ok(vec![]);
+        }
+        let like = format!(
+            "%{}%",
+            q.replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
+        );
+        let rows = sqlx::query(
+            "SELECT id, thread_id, role, agent_id, content, created_at FROM messages WHERE role IN ('user', 'assistant') AND thread_id NOT LIKE 'dm\\_%' ESCAPE '\\' AND thread_id NOT LIKE 'wa\\_%' ESCAPE '\\' AND content LIKE ? ESCAPE '\\' ORDER BY created_at DESC LIMIT ?",
+        )
+        .bind(like)
+        .bind(limit)
+        .fetch_all(&self.db)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| crate::models::SearchHit {
+                message_id: r.get("id"),
+                thread_id: r.get("thread_id"),
+                role: r.get("role"),
+                agent_id: r.get("agent_id"),
+                content: r.get("content"),
+                created_at: r.get("created_at"),
+            })
+            .collect())
+    }
+
     /// Every file shared in a thread, newest first, with the message that carried it.
     pub async fn thread_files(
         &self,
@@ -964,5 +1001,55 @@ impl Store {
             .execute(&self.db)
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod search_tests {
+    use crate::models::Role;
+
+    #[tokio::test]
+    async fn search_finds_messages_but_not_agent_chats_or_tools() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = crate::Core::open(crate::paths::Paths::at(dir.path()).unwrap())
+            .await
+            .unwrap();
+        for (thread, role, text) in [
+            (
+                "a1",
+                Role::User,
+                "Remind me about the Invoice from 100% Acme_Co",
+            ),
+            ("a1", Role::Assistant, "Done: the invoice is in your inbox"),
+            ("a1", Role::Tool, "invoice tool output"),
+            ("dm_a1_a2", Role::Assistant, "invoice between agents"),
+        ] {
+            let m = crate::runtime::message(thread, role, None, text);
+            core.store.insert_message(&m).await.unwrap();
+        }
+        let hits = core.store.search_messages("invoice", 10).await.unwrap();
+        assert_eq!(hits.len(), 2);
+        assert!(hits.iter().all(|h| h.thread_id == "a1"));
+        // % and _ are plain characters, not wildcards.
+        assert_eq!(
+            core.store
+                .search_messages("100% Acme_Co", 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(core
+            .store
+            .search_messages("100_ Acme", 10)
+            .await
+            .unwrap()
+            .is_empty());
+        assert!(core
+            .store
+            .search_messages("  ", 10)
+            .await
+            .unwrap()
+            .is_empty());
     }
 }

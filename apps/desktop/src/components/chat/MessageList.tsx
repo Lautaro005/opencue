@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Brain, ChevronRight, Sparkles, Zap } from "lucide-react";
+import { AlertCircle, ChevronRight, MessageCircle, Sparkles, Zap } from "lucide-react";
 import { useStore } from "../../lib/store";
 import type { Agent, Message, ToolCall } from "../../lib/types";
 import { clockTime, cx, splitThink } from "../../lib/format";
@@ -41,6 +41,19 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
     stick.current = true;
   }, [threadId]);
 
+  // Coming from the search: scroll to the message and flash it.
+  const focusMessage = useStore((s) => s.focusMessage);
+  useEffect(() => {
+    if (!focusMessage) return;
+    const el = scroller.current?.querySelector<HTMLElement>(`[data-mid="${focusMessage}"]`);
+    if (!el) return;
+    stick.current = false;
+    el.scrollIntoView({ block: "center" });
+    el.classList.add("flash");
+    window.setTimeout(() => el.classList.remove("flash"), 1800);
+    useStore.setState({ focusMessage: null });
+  }, [focusMessage, messages]);
+
   useLayoutEffect(() => {
     const el = scroller.current;
     if (el && stick.current) el.scrollTop = el.scrollHeight;
@@ -70,6 +83,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
 
           return (
             <Fragment key={m.id}>
+              <span data-mid={m.id} className="block h-0" />
               {divider && <div className="my-3 text-center text-[11.5px] font-medium text-faint">{divider}</div>}
               {m.role === "user" && <UserBubble m={m} firstOfRun={firstOfRun} />}
               {m.role === "event" && <EventCard m={m} />}
@@ -115,17 +129,22 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
 function AssistantText({ m }: { m: Message }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const { think, text, thinking } = splitThink(m.content);
+  const split = splitThink(m.content);
+  // What an agent says while it still has tools to call is its train of thought, not the answer.
+  const narrating = !!m.tool_calls?.length;
+  const think = [split.think, narrating ? split.text : ""].filter(Boolean).join("\n\n");
+  const text = narrating ? "" : split.text;
+  const thinking = split.thinking && m.status === "streaming";
   return (
     <>
       {think && (
         <div className="max-w-full">
-          <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[12.5px] text-muted hover:bg-hover">
-            {thinking && m.status === "streaming" ? <Spinner size={12} /> : <Brain size={13} />}
-            <span>{thinking && m.status === "streaming" ? t("chat.thinking") : t("chat.thought")}</span>
-            <ChevronRight size={13} className={cx("text-faint transition-transform", open && "rotate-90")} />
+          <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-[12px] text-faint transition-colors hover:text-muted">
+            {thinking ? <Spinner size={11} /> : null}
+            <span>{thinking ? t("chat.thinking") : t("chat.thought")}</span>
+            <ChevronRight size={12} className={cx("transition-transform", open && "rotate-90")} />
           </button>
-          {open && <div className="selectable mt-1 ml-1 max-h-72 overflow-y-auto whitespace-pre-wrap rounded-xl border border-line bg-event px-3 py-2 text-[12.5px] leading-relaxed text-muted">{think}</div>}
+          {open && <div className="selectable mt-1 max-h-72 overflow-y-auto whitespace-pre-wrap border-l-2 border-line pl-3 text-[12.5px] leading-relaxed text-muted">{think}</div>}
         </div>
       )}
       {text && (
@@ -134,7 +153,7 @@ function AssistantText({ m }: { m: Message }) {
           {m.status === "stopped" && <div className="mt-1 text-[11.5px] text-muted">— {t("chat.stopped")}</div>}
         </div>
       )}
-      {!text && m.status === "streaming" && !thinking && (
+      {!text && !think && m.status === "streaming" && (
         <div className="inline-flex h-10 items-center rounded-[20px] bg-agent px-4 text-muted">
           <Typing />
         </div>
@@ -171,6 +190,32 @@ function AgentRow({ agent, showHeader, isGroup, children }: { agent?: Agent; sho
 function EventCard({ m }: { m: Message }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
+  // A WhatsApp message the agent answered: a green card that unfolds into the question and the answer.
+  const wa = m.content.match(/^WhatsApp · (.+?)\n\nQ: ([\s\S]*?)\n\nA: ([\s\S]*)$/);
+  if (wa) {
+    return (
+      <div className="live-card animate-pop my-1.5 w-full max-w-[520px] overflow-hidden text-[12.5px]" data-busy="false">
+        <button onClick={() => setOpen((v) => !v)} className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-hover/50">
+          <MessageCircle size={15} className="shrink-0 text-success" />
+          <span className="font-medium text-ink">WhatsApp</span>
+          <span className="min-w-0 truncate text-muted">{wa[1]}</span>
+          <ChevronRight size={14} className={cx("ml-auto shrink-0 text-faint transition-transform", open && "rotate-90")} />
+        </button>
+        {open && (
+          <div className="selectable space-y-2.5 border-t border-line/70 px-3 py-2.5">
+            <div>
+              <div className="text-[11px] font-medium text-muted">{wa[1]}</div>
+              <div className="whitespace-pre-wrap break-words leading-snug">{wa[2]}</div>
+            </div>
+            <div>
+              <div className="text-[11px] font-medium text-muted">{t("chat.whatsappReply")}</div>
+              <div className="whitespace-pre-wrap break-words leading-snug">{wa[3]}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
   const isMail = /received an email/i.test(m.content);
   const auto = m.content.match(/^Automation “(.+?)”:/);
   const firstLine = m.content.split("\n")[0];

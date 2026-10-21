@@ -440,6 +440,11 @@ impl LlmProvider for CliProvider {
                             _ => {}
                         }
                     }
+                    Some("rate_limit_event") => {
+                        if let Some(info) = v.get("rate_limit_info") {
+                            out.rate_limits.push(info.clone());
+                        }
+                    }
                     Some("result") => {
                         final_text = v["result"].as_str().map(str::to_string);
                         out.input_tokens = v

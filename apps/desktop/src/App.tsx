@@ -11,6 +11,8 @@ import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
 import { ConfirmHost, ContextMenuHost, TooltipHost } from "./components/ui/Overlays";
 import { CallWindow } from "./components/CallWindow";
+import { TemplatesDialog } from "./components/dialogs/TemplatesDialog";
+import { SearchDialog } from "./components/SearchDialog";
 import { Walkthrough } from "./components/dialogs/Walkthrough";
 import { checkForUpdate, onTrayAction } from "./lib/api";
 
@@ -57,6 +59,10 @@ export default function App() {
         e.preventDefault();
         useStore.getState().openSettings();
       }
+      if (mod && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        useStore.getState().setSearchOpen(true);
+      }
       if (mod && e.key.toLowerCase() === "n") {
         e.preventDefault();
         useStore.getState().setDialog("create-agent");
@@ -88,6 +94,8 @@ export default function App() {
       <ConfirmHost />
       <TooltipHost />
       <ContextMenuHost />
+      <TemplatesDialog />
+      <SearchDialog />
       <CallWindow />
       {toast && (
         <div role="status" className="animate-pop fixed bottom-24 left-1/2 z-[60] flex max-w-[560px] -translate-x-1/2 items-start gap-3 rounded-xl border border-line bg-elevated px-4 py-2.5 text-[13px] shadow-pop">

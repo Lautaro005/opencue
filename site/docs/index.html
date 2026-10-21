@@ -46,6 +46,8 @@
         <a href="#email">Email</a>
         <a href="#automations">Automations</a>
         <a href="#computers">Computers</a>
+        <a href="#browser">Browser</a>
+        <a href="#messenger">Messenger</a>
         <a href="#voice">Voice</a>
         <a href="#internet">Internet</a>
         <div class="group">More</div>
@@ -241,6 +243,27 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
           <li>The port is published on <code>127.0.0.1</code> only, on a random free port.</li>
           <li>Existing computers keep their old container: use <strong>Restart computer</strong> in the Desktop tab. Restarting keeps the workspace.</li>
         </ul>
+
+        <h2 id="browser">Built-in browser</h2>
+        <p>Turn on <strong>Browser</strong> in an agent's <strong>Computer</strong> page and the agent can use a browser pane: <code>browser_open</code>, <code>browser_snapshot</code> (the page text and a numbered list of what can be clicked or typed into), <code>browser_click</code>, <code>browser_type</code> and <code>browser_close</code>. The Computer panel opens by itself on its <strong>Browser</strong> tab (next to the VM; the terminal is always below) so you watch it work, and you can type an address or log in yourself.</p>
+        <ul>
+          <li>The pane has its own cookies and storage, separate from your browsers; <em>Clear browsing data</em> wipes them.</li>
+          <li>In <em>Ask first</em> mode a new site asks first. Only public http/https pages open, and the agent never types passwords: it asks you to.</li>
+          <li>It uses your system's web engine (WebKit or WebView2), so a few sites may look slightly different from Chrome.</li>
+        </ul>
+
+        <h2 id="messenger">Messenger (WhatsApp)</h2>
+        <ol>
+          <li>Settings → <strong>Messenger</strong>: choose the agent that answers and, optionally, the numbers it may answer.</li>
+          <li>Press <strong>Link WhatsApp</strong>, then in WhatsApp go to <em>Settings → Linked devices → Link a device</em> and scan the code.</li>
+          <li>From then on every direct chat is answered by the agent, in its own conversation with that contact. Groups and status are ignored.</li>
+          <li>In the agent's chat each answered message shows up as a green <strong>WhatsApp</strong> card: click it to see the question and the reply.</li>
+        </ol>
+        <p>Everything runs in the app, so nothing is hosted for you and the app has to be open (or in the tray) to answer. Treat contacts as outsiders: in <em>Ask first</em> mode, anything sensitive their message leads to asks you first.</p>
+
+        <h2 id="templates">Templates, search &amp; limits</h2>
+        <p>The sidebar's <strong>+</strong> menu has <strong>Templates</strong>: ready-made agents and teams (Dr. Eggbot, PR Reviewer, Research Bot, Dewey…). The same window imports a Grok Bot from x.ai: paste a marketplace link (<code>x.ai/bot/marketplace/bots/…</code>) to get its instructions, memories, skills and routines, or a shared link (<code>x.ai/bot/…</code>), which only exposes the name and description.</p>
+        <p>The magnifier next to <strong>+</strong> (or <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd>) searches every chat for a message and jumps to it. <strong>Settings → Usage</strong> also shows the 5-hour and weekly limits of the Codex and Claude Code CLIs you connected, with a bar and the reset time.</p>
 
         <h2 id="voice">Voice</h2>
         <ol>

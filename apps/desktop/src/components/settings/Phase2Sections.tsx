@@ -163,9 +163,11 @@ export function ComputersSection() {
             return <Badge tone={found ? "success" : "neutral"}>{found ? t("settings.computers.found") : t("settings.computers.notFound")}</Badge>;
           })()}
         </CardRow>
-        <CardRow label={t("settings.computers.image")}>
-          <Input className="w-56" value={s.docker_image} placeholder="ubuntu:24.04" onChange={(e) => setS({ ...s, docker_image: e.target.value })} onBlur={() => void save(s)} />
-        </CardRow>
+        {s.runtime !== "podman" && (
+          <CardRow label={t("settings.computers.image")}>
+            <Input className="w-56" value={s.docker_image} placeholder="ubuntu:24.04" onChange={(e) => setS({ ...s, docker_image: e.target.value })} onBlur={() => void save(s)} />
+          </CardRow>
+        )}
         <CardRow label={t("settings.computers.stopVms")} hint={t("settings.computers.stopVmsHint")}>
           <Button
             size="sm"
@@ -179,7 +181,7 @@ export function ComputersSection() {
         <CardRow label={t("settings.computers.desktop")} hint={t("settings.computers.desktopHint")}>
           <Toggle checked={s.docker_desktop} onChange={(v) => void save({ ...s, docker_desktop: v })} />
         </CardRow>
-        {s.docker_desktop && s.runtime === "podman" && <p className="px-4 pb-3.5 text-[11.5px] text-muted">{t("settings.computers.podmanDesktop")}</p>}
+        {s.runtime === "podman" && <p className="px-4 pb-3.5 text-[11.5px] text-muted">{t("settings.computers.podmanDesktop")}</p>}
         {s.docker_desktop && s.runtime !== "podman" && (
           <div className="grid grid-cols-[1fr_96px] gap-2 px-4 pb-3.5">
             <Field label={t("settings.computers.desktopImage")}>

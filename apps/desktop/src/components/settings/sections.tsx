@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Search } from "lucide-react";
+import { RefreshCw, Search } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, checkForUpdate, openUrl } from "../../lib/api";
-import type { AppInfo, MemoryEntry, UsageRow } from "../../lib/types";
-import { compact } from "../../lib/format";
+import type { AppInfo, CliLimits, MemoryEntry, UsageRow } from "../../lib/types";
+import { compact, cx } from "../../lib/format";
 import { LANGUAGES, setLanguage } from "../../i18n";
 import { getTheme, setTheme, type Theme } from "../../lib/theme";
-import { Button, Input, Select, Textarea, Toggle } from "../ui";
+import { Button, IconButton, Input, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
 
 export function GeneralSection() {
@@ -201,7 +201,75 @@ export function UsageSection() {
           </div>
         </>
       )}
+      <CliLimitsCard />
     </>
+  );
+}
+
+/** "3h 20m", "2d 4h": how long until a limit window resets. */
+function untilReset(at: number, lang: string): string {
+  const secs = Math.max(0, at - Math.floor(Date.now() / 1000));
+  const d = Math.floor(secs / 86400);
+  const h = Math.floor((secs % 86400) / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const left = d > 0 ? `${d}d ${h}h` : h > 0 ? `${h}h ${m}m` : `${Math.max(1, m)}m`;
+  const when = new Date(at * 1000).toLocaleString(lang, { weekday: "short", hour: "numeric", minute: "2-digit" });
+  return `${left} · ${when}`;
+}
+
+/** The 5-hour and weekly limits of the subscription CLIs the user connected. */
+function CliLimitsCard() {
+  const { t, i18n } = useTranslation();
+  const [rows, setRows] = useState<CliLimits[] | null>(null);
+  const load = () => void api.cliLimits().then(setRows).catch(() => setRows([]));
+  useEffect(load, []);
+  if (!rows || rows.length === 0) return null;
+  return (
+    <div className="mt-7">
+      <div className="mb-3 flex items-center gap-2">
+        <h3 className="text-[14px] font-semibold">{t("settings.usage.limits")}</h3>
+        <IconButton label={t("common.refresh")} onClick={load} className="size-7">
+          <RefreshCw size={13} />
+        </IconButton>
+      </div>
+      <p className="mb-3 text-[12.5px] text-muted">{t("settings.usage.limitsHint")}</p>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        {rows.map((c) => (
+          <div key={c.cli} className="rounded-2xl border border-line p-4">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="text-[14px] font-semibold">{c.name}</span>
+              {c.plan && <span className="rounded-full bg-hover px-2 py-0.5 text-[11px] font-medium uppercase text-muted">{c.plan}</span>}
+              {c.updated_at && <span className="ml-auto text-[11px] text-faint">{t("settings.usage.updated", { when: new Date(c.updated_at * 1000).toLocaleTimeString(i18n.language, { hour: "numeric", minute: "2-digit" }) })}</span>}
+            </div>
+            {c.windows.length === 0 ? (
+              <p className="text-[12.5px] text-muted">{c.note}</p>
+            ) : (
+              <div className="space-y-4">
+                {c.windows.map((w) => {
+                  const used = w.used_percent;
+                  const left = used === null ? null : Math.max(0, Math.round(100 - used));
+                  const tone = used === null ? "bg-accent" : used >= 85 ? "bg-danger" : used >= 60 ? "bg-warning" : "bg-success";
+                  return (
+                    <div key={w.label}>
+                      <div className="mb-1.5 flex items-baseline justify-between">
+                        <span className="text-[12.5px] font-medium">{t(`settings.usage.window.${w.label}`, { defaultValue: w.label })}</span>
+                        <span className="text-[12px] tabular-nums text-muted">
+                          {left === null ? t("settings.usage.open") : <><span className="text-[15px] font-semibold text-ink">{left}%</span> {t("settings.usage.left")}</>}
+                        </span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-hover" role="progressbar" aria-valuenow={used ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label={w.label}>
+                        <div className={cx("h-full rounded-full transition-[width] duration-500", tone)} style={{ width: `${used === null ? 8 : Math.max(2, Math.min(100, used))}%` }} />
+                      </div>
+                      {w.resets_at && <div className="mt-1 text-[11.5px] text-faint">{t("settings.usage.resets", { when: untilReset(w.resets_at, i18n.language) })}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

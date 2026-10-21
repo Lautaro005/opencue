@@ -13,6 +13,8 @@ export interface AgentSettings {
   temperature: number | null;
   computer: ComputerBackend;
   skills: boolean;
+  /** Lets the agent drive the built-in browser. */
+  browser: boolean;
   /** Catalog apps (by slug) this agent can use. */
   catalog: string[];
   voice_id: string | null;
@@ -239,6 +241,15 @@ export interface DockerSetup {
   vm: "none" | "stopped" | "running";
 }
 
+export interface SearchHit {
+  message_id: string;
+  thread_id: string;
+  role: string;
+  agent_id: string | null;
+  content: string;
+  created_at: string;
+}
+
 export interface CatalogStatus {
   slug: string;
   name: string;
@@ -259,6 +270,8 @@ export type CoreEvent =
   | { type: "busy"; thread_id: string; agent_id: string; busy: boolean }
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_resolved"; approval_id: string; approved: boolean }
+  | { type: "browser_activity"; agent_id: string }
+  | { type: "messenger_changed" }
   | { type: "catalog_changed"; slug: string; connected: boolean; error: string | null }
   | { type: "question_requested"; question: Question }
   | { type: "question_resolved"; question_id: string; answer: string }
@@ -378,4 +391,44 @@ export interface VmPalMachine {
 export interface VmPalInfo {
   toml: string;
   machines: VmPalMachine[];
+}
+
+export interface LimitWindow {
+  label: string;
+  used_percent: number | null;
+  resets_at: number | null;
+}
+
+export interface CliLimits {
+  cli: string;
+  name: string;
+  plan: string | null;
+  windows: LimitWindow[];
+  updated_at: number | null;
+  note: string | null;
+}
+
+export interface MessengerStatus {
+  state: "off" | "starting" | "qr" | "connected" | "error";
+  qr_svg: string | null;
+  phone: string | null;
+  agent_id: string | null;
+  allow: string;
+  error: string | null;
+}
+
+export interface GrokTemplate {
+  id: string;
+  name: string;
+  creator: string;
+  description: string;
+  instructions: string;
+  color: string;
+  shape: string;
+  memories: string[];
+  skills: { name: string; description: string; content: string }[];
+  routines: { name: string; summary: string }[];
+  integrations: string[];
+  /** "marketplace" has everything; "shared" only a name and a description. */
+  source: "marketplace" | "shared";
 }

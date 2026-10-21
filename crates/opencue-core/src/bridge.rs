@@ -88,6 +88,12 @@ impl Core {
         payload: Value,
         token: Option<&CancellationToken>,
     ) -> anyhow::Result<String> {
+        // A WhatsApp turn has no chat the owner is watching: its cards go to the agent's own chat.
+        let thread_id = if crate::messenger::is_wa_thread(thread_id) {
+            agent.id.as_str()
+        } else {
+            thread_id
+        };
         let id = new_id();
         // The primary process shows the card itself; a secondary one leaves the row for it.
         let status = if self.primary { "announced" } else { "pending" };
@@ -281,7 +287,22 @@ impl Core {
             let thread = thread
                 .or_else(|| self.active_threads.lock().unwrap().get(&agent_id).cloned())
                 .unwrap_or_else(|| agent_id.clone());
-            if kind == "ask" {
+            if kind == "browser" {
+                let _ = sqlx::query("UPDATE bridge SET status = 'working' WHERE id = ?")
+                    .bind(&id)
+                    .execute(&self.store.db)
+                    .await;
+                let core = self.clone();
+                tokio::spawn(async move {
+                    let text = core.browser_serve(&payload).await;
+                    let _ =
+                        sqlx::query("UPDATE bridge SET status = 'done', result = ? WHERE id = ?")
+                            .bind(text)
+                            .bind(&id)
+                            .execute(&core.store.db)
+                            .await;
+                });
+            } else if kind == "ask" {
                 let _ = sqlx::query("UPDATE bridge SET status = 'announced' WHERE id = ?")
                     .bind(&id)
                     .execute(&self.store.db)

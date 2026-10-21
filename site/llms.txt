@@ -5,12 +5,15 @@
 Key facts:
 
 - Install on macOS/Linux: `curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh`. On Windows (PowerShell): `irm https://lautaro005.github.io/opencue/install.ps1 | iex`. Start with `opencue`. Installers (.dmg, .AppImage, .deb, .rpm, .exe, .msi) are on GitHub Releases.
-- Current version: 0.3.8 (October 19, 2026). The app updates itself with signed releases from GitHub.
+- Current version: 0.4.0 (October 20, 2026). The app updates itself with signed releases from GitHub.
 - License: Apache-2.0 with the Commons Clause — free to use, modify and share, not to sell.
 - Built with a Rust core and a Tauri 2 + React desktop shell. A companion CLI, `opencue-cli`, shares the data folder.
 - Approvals: in "Ask first" mode (default) sending email, commands or file writes on the host/WSL, deleting memories and data-changing tools wait for the user. "Fully autonomous" runs everything.
 - When an agent needs a decision or permission it shows a yellow ask card (`ask_user`) with a text field or Accept / Reject.
 - Docker/Podman computers: one per agent or one shared VM, stopped when idle, with a setup checklist in Settings → Computers.
+- Built-in browser: a Browser tab in the Computer panel (next to the VM, terminal below) that an agent with the switch on can open pages in, read, click and type, with its own cookies and an ask-first rule for new sites.
+- Messenger: Settings → Messenger links WhatsApp with a QR (no server); the chosen agent answers every direct chat and the app shows a green WhatsApp card with the question and answer.
+- Templates (sidebar + menu): 31 agents and 7 teams adapted from Grok Bot templates, with an import from x.ai. Search with ⌘K. Usage shows the 5-hour and weekly limits of Codex and Claude Code.
 - Voice calls: the phone icon in an agent's header opens a phone-sized window to talk with the agent. Right-click an agent or group for rename, pin, clear chat, reset chat and delete.
 - Catalog (Settings → Apps → Catalog): Composio, Gmail, Google Drive, Notion, Trello, GitHub, Supabase, Vercel and Outlook, connected with OAuth in the browser (red / yellow / green cards); Gmail, Drive, GitHub and Outlook sign in through Composio unless you bring your own OAuth key.
 - Agents backed by the Codex or Claude Code CLIs get OpenCue's tools through a local MCP server: `opencue mcp-serve --agent <id>`.

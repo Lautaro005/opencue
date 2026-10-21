@@ -19,6 +19,7 @@ const defaults = {
   temperature: null,
   computer: "none" as const,
   skills: true,
+  browser: false,
   catalog: [] as string[],
   voice_id: null,
   cli_tools: true,
@@ -199,7 +200,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.3.8-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.4.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -296,6 +297,11 @@ const handlers: Record<string, (a: Args) => unknown> = {
   },
   reset_computer: () => undefined,
   stop_computer: () => undefined,
+  browser_place: () => undefined,
+  browser_hide: () => undefined,
+  browser_control: () => undefined,
+  browser_state: () => ["", ""],
+  browser_clear: () => undefined,
   docker_start_engine: () => undefined,
   stop_all_computers: () => 2,
   computer_running: () => true,
@@ -379,6 +385,13 @@ const handlers: Record<string, (a: Args) => unknown> = {
   save_email_account: ({ account, password }) => (emails[account.agent_id] = { ...account, has_password: account.has_password || !!password }),
   delete_email_account: ({ agentId }) => void delete emails[agentId],
   test_email: () => undefined,
+  search_messages: ({ query }) => messages.filter((m) => (m.role === "user" || m.role === "assistant") && m.content.toLowerCase().includes(String(query).toLowerCase())).slice(-20).reverse().map((m) => ({ message_id: m.id, thread_id: m.thread_id, role: m.role, agent_id: m.agent_id, content: m.content, created_at: m.created_at })),
+  cli_limits: () => { const n = Math.floor(Date.now() / 1000); return [{ cli: "claude", name: "Claude Code", plan: null, updated_at: n - 600, note: null, windows: [{ label: "5h", used_percent: 62, resets_at: n + 5400 }, { label: "weekly", used_percent: 23, resets_at: n + 3 * 86400 }] }, { cli: "codex", name: "Codex", plan: "plus", updated_at: n - 7200, note: null, windows: [{ label: "5h", used_percent: 91, resets_at: n + 900 }, { label: "weekly", used_percent: 48, resets_at: n + 5 * 86400 }] }]; },
+  messenger_status: () => ({ state: "qr", qr_svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 8 8" width="240" height="240"><rect width="8" height="8" fill="#fff"/><path d="M1 1h2v2H1zM5 1h2v2H5zM1 5h2v2H1zM4 4h1v1H4zM6 5h1v2H6z" fill="#000"/></svg>', phone: null, agent_id: null, allow: "", error: null }),
+  whatsapp_configure: () => undefined,
+  whatsapp_connect: () => undefined,
+  whatsapp_disconnect: () => undefined,
+  import_grok_template: ({ input }) => ({ id: "qa-bot", name: "QA bot", creator: "Ulysses Ng", description: "Acts as your QA on the live deploy.", instructions: "Be strict.", color: "magenta", shape: "teardrop", memories: ["Never soft-pass a BLOCK item."], skills: [{ name: "fail-gate", description: "Use at ship time", content: "Step 1" }], routines: [{ name: "Post-merge", summary: "Re-run on merge." }], integrations: ["Vercel"], source: String(input).includes("marketplace") ? "marketplace" : "shared" }),
   composio_apps: () => ["gmail", "slack", "googlecalendar", "linear"],
   catalog_status: () => catalogApps.map((a) => ({ ...a, tools: a.state === "connected" ? 9 : 0, error: a.state === "reconnect" ? "The sign-in expired" : null })),
   catalog_connect: ({ slug }) => {

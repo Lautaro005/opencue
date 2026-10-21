@@ -2,21 +2,25 @@
 
 pub mod automations;
 pub mod bridge;
+pub mod browser;
 pub mod catalog;
 pub mod computer;
 pub mod db;
 pub mod email;
 pub mod events;
 pub mod files;
+pub mod limits;
 pub mod mcp;
 pub mod mcp_server;
 pub mod memory;
+pub mod messenger;
 pub mod models;
 pub mod paths;
 pub mod providers;
 pub mod secrets;
 pub mod skills;
 pub mod store;
+pub mod templates;
 pub mod tools;
 pub mod vmpal;
 pub mod voice;
@@ -59,6 +63,9 @@ pub struct Core {
     call_threads: Mutex<std::collections::HashSet<String>>,
     /// Sign-ins to catalog apps waiting for the browser to come back.
     catalog_flows: Mutex<HashMap<String, CancellationToken>>,
+    pub(crate) wa: Mutex<messenger::WaRuntime>,
+    pub(crate) browser_host: Mutex<Option<Arc<dyn browser::BrowserHost>>>,
+    pub(crate) browser_allowed: Mutex<std::collections::HashSet<String>>,
     /// Docker computers are shared by every agent (mirrors the setting, for sync callers).
     shared_vm: std::sync::atomic::AtomicBool,
     idle_started: std::sync::atomic::AtomicBool,
@@ -113,6 +120,9 @@ impl Core {
             primary,
             call_threads: Mutex::new(Default::default()),
             catalog_flows: Mutex::new(HashMap::new()),
+            wa: Mutex::new(Default::default()),
+            browser_host: Mutex::new(None),
+            browser_allowed: Mutex::new(Default::default()),
             shared_vm: std::sync::atomic::AtomicBool::new(false),
             idle_started: std::sync::atomic::AtomicBool::new(false),
             computer_used: Mutex::new(HashMap::new()),
@@ -132,6 +142,7 @@ impl Core {
     pub fn start_background(self: &Arc<Self>) {
         self.start_bridge();
         self.start_catalog();
+        self.wa_autostart();
         self.forget_composio();
         self.start_idle_monitor();
         self.start_automations();
@@ -250,11 +261,12 @@ impl Core {
         }
         for id in agents {
             let _ = self.store.set_plan(&id, "");
-            let like = format!("dm_%{id}%");
-            let _ = sqlx::query("DELETE FROM messages WHERE thread_id LIKE ?")
-                .bind(&like)
-                .execute(&self.store.db)
-                .await;
+            for like in [format!("dm_%{id}%"), format!("wa_{id}_%")] {
+                let _ = sqlx::query("DELETE FROM messages WHERE thread_id LIKE ?")
+                    .bind(&like)
+                    .execute(&self.store.db)
+                    .await;
+            }
         }
         self.emit(CoreEvent::ThreadsChanged);
         Ok(())
