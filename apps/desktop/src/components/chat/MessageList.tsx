@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, ChevronRight, MessageCircle, Sparkles, Zap } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Copy, MessageCircle, Pencil, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { useStore } from "../../lib/store";
 import type { Agent, Message, ToolCall } from "../../lib/types";
 import { clockTime, cx, splitThink } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
-import { Spinner, Typing } from "../ui";
+import { IconButton, Spinner, Typing } from "../ui";
 import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 import { AttachmentList } from "./Attachments";
@@ -64,6 +64,8 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
     if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
+  const lastUserId = useMemo(() => [...messages].reverse().find((m) => m.role === "user")?.id, [messages]);
+
   let lastDay = "";
   let prevAuthor: string | null = null;
 
@@ -85,7 +87,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
             <Fragment key={m.id}>
               <span data-mid={m.id} className="block h-0" />
               {divider && <div className="my-3 text-center text-[11.5px] font-medium text-faint">{divider}</div>}
-              {m.role === "user" && <UserBubble m={m} firstOfRun={firstOfRun} />}
+              {m.role === "user" && <UserBubble m={m} firstOfRun={firstOfRun} isLast={m.id === lastUserId} />}
               {m.role === "event" && <EventCard m={m} />}
               {m.role === "assistant" && (
                 <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
@@ -136,7 +138,7 @@ function AssistantText({ m }: { m: Message }) {
   const text = narrating ? "" : split.text;
   const thinking = split.thinking && m.status === "streaming";
   return (
-    <>
+    <div className="group/msg flex min-w-0 max-w-full flex-col items-start gap-0.5">
       {think && (
         <div className="max-w-full">
           <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-[12px] text-faint transition-colors hover:text-muted">
@@ -158,17 +160,108 @@ function AssistantText({ m }: { m: Message }) {
           <Typing />
         </div>
       )}
-    </>
+      {text && m.status !== "streaming" && (
+        <div className="ml-1 flex h-6 items-center opacity-0 transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100">
+          <CopyButton text={text} />
+        </div>
+      )}
+    </div>
   );
 }
 
-function UserBubble({ m, firstOfRun }: { m: Message; firstOfRun: boolean }) {
+/** Copies a reply to the clipboard and says so for a moment. */
+function CopyButton({ text }: { text: string }) {
+  const { t } = useTranslation();
+  const [done, setDone] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Clipboard blocked: fall back to a hidden selection.
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      ta.remove();
+    }
+    setDone(true);
+    window.setTimeout(() => setDone(false), 1500);
+  };
+  return (
+    <IconButton label={done ? t("chat.copied") : t("chat.copyReply")} onClick={() => void copy()} className="size-6">
+      {done ? <Check size={13} className="text-success" /> : <Copy size={13} />}
+    </IconButton>
+  );
+}
+
+function UserBubble({ m, firstOfRun, isLast }: { m: Message; firstOfRun: boolean; isLast: boolean }) {
+  const { t } = useTranslation();
+  const editLast = useStore((s) => s.editLast);
+  const regenerate = useStore((s) => s.regenerate);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(m.content);
+  const save = () => {
+    const text = draft.trim();
+    setEditing(false);
+    if (text && text !== m.content) void editLast(m.thread_id, text);
+    else if (text) void regenerate(m.thread_id);
+  };
   return (
     <div className={cx("flex justify-end", firstOfRun && "mt-3")}>
-      <div className="group flex max-w-[75%] flex-col items-end gap-1">
+      <div className={cx("group flex flex-col items-end gap-1", editing ? "w-[75%]" : "max-w-[75%]")}>
         {m.attachments?.length ? <AttachmentList items={m.attachments} align="end" /> : null}
-        {m.content && <div className="selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink">{m.content}</div>}
-        <span className="mt-0.5 h-4 text-[11px] text-faint opacity-0 transition-opacity group-hover:opacity-100">{clockTime(m.created_at)}</span>
+        {editing ? (
+          <div className="w-full rounded-[20px] border border-accent bg-bg p-2">
+            <textarea
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                  e.preventDefault();
+                  save();
+                }
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setEditing(false);
+                }
+              }}
+              rows={Math.min(8, Math.max(2, draft.split("\n").length))}
+              className="w-full resize-none bg-transparent px-2 py-1 text-[14px] leading-relaxed outline-none"
+            />
+            <div className="flex justify-end gap-1.5 px-1 pb-0.5">
+              <button onClick={() => setEditing(false)} className="rounded-lg px-2.5 py-1 text-[12.5px] text-muted hover:bg-hover">
+                {t("common.cancel")}
+              </button>
+              <button onClick={save} disabled={!draft.trim()} className="rounded-lg bg-accent px-2.5 py-1 text-[12.5px] font-medium text-white hover:bg-accent-hover disabled:opacity-40">
+                {t("chat.saveEdit")}
+              </button>
+            </div>
+          </div>
+        ) : (
+          m.content && <div className="selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink">{m.content}</div>
+        )}
+        <div className="mt-0.5 flex h-6 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <span className="mr-1 text-[11px] text-faint">{clockTime(m.created_at)}</span>
+          {isLast && !editing && (
+            <>
+              <IconButton
+                label={t("chat.edit")}
+                onClick={() => {
+                  setDraft(m.content);
+                  setEditing(true);
+                }}
+                className="size-6"
+              >
+                <Pencil size={13} />
+              </IconButton>
+              <IconButton label={t("chat.regenerate")} onClick={() => void regenerate(m.thread_id)} className="size-6">
+                <RefreshCw size={13} />
+              </IconButton>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronLeft, ChevronRight, KeyRound, Plus, Server, Sparkles, Terminal } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Plus, Sparkles } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { greetNewAgent } from "../../lib/greet";
 import { isConfigured } from "../../lib/models";
+import { ProviderLogo } from "../ProviderLogo";
 import type { Avatar, ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
@@ -161,7 +162,7 @@ export function Walkthrough() {
                       className={cx("flex items-center gap-2.5 rounded-xl border p-2.5 text-left transition-colors hover:bg-hover", ok ? "border-accent bg-accent-soft" : "border-line")}
                     >
                       <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-hover text-muted">
-                        {info.api === "cli" ? <Terminal size={14} /> : info.requires_key ? <KeyRound size={14} /> : <Server size={14} />}
+                        <ProviderLogo kind={info.kind} size={16} />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-[12.5px] font-medium">{info.label}</span>

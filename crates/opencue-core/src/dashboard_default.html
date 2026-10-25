@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard</title>
+<!--
+  OpenCue dashboard. This is plain HTML: edit it freely (ask your agent with /dashboard).
+
+  OpenCue sends the live data to this page as a message, now and every few seconds:
+    window.addEventListener("message", (e) => { if (e.data?.type === "opencue:data") render(e.data.data); });
+  and this page can ask for it at once with: parent.postMessage({ type: "opencue:ready" }, "*").
+  To open an agent's chat: parent.postMessage({ type: "opencue:open", agent_id: "..." }, "*").
+
+  The data (data = e.data.data):
+    now, theme ("light" | "dark"), user_name
+    agents:      { total, running, list: [{ id, name, model, busy, avatar: { color, shape, face } }] }
+    running:     [{ thread_id, name, kind: "agent" | "group" }]          chats being answered right now
+    automations: { total, enabled, upcoming: [...], list: [{ id, name, agent_id, agent_name, enabled,
+                   trigger ("schedule" | "email" | "webhook" | "group_message"), cron, next_run_at, last_run_at, last_status }] }
+    tasks:       [{ agent_id, agent_name, done, total, items: [{ text, status: "todo" | "doing" | "done" }] }]
+                 the plans agents are working through
+    usage:       { messages, input_tokens, output_tokens, by_agent: [{ agent_id, name, messages, tokens }] }
+    recent:      [{ thread_id, name, kind, last_message, last_at }]
+  There is no network access: keep scripts and styles inline.
+-->
+<style>
+  :root { --bg:#f7f7f8; --card:#fff; --ink:#1c1d21; --muted:#6b6e76; --line:#e4e5e9; --accent:#4f6bed; --ok:#2da44e; --warn:#d4a017; color-scheme: light; }
+  :root[data-theme="dark"] { --bg:#161618; --card:#1f2024; --ink:#ececee; --muted:#9a9ca5; --line:#2e3036; --accent:#7d93ff; --ok:#3fb950; --warn:#e3b341; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:28px 32px 40px; background:var(--bg); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  h1 { font-size:22px; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--muted); margin:0 0 22px; }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin-bottom:16px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:14px 16px; }
+  .stat b { display:block; font-size:28px; letter-spacing:-.02em; line-height:1.1; }
+  .stat span { color:var(--muted); font-size:12.5px; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; min-width:0; }
+  .card h2 { font-size:13px; margin:0 0 10px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:.04em; }
+  .row { display:flex; align-items:center; gap:10px; padding:7px 6px; margin:0 -6px; border-radius:9px; min-width:0; }
+  .row.click { cursor:pointer; } .row.click:hover { background:var(--bg); }
+  .dot { width:26px; height:26px; border-radius:50%; flex:none; display:inline-block; }
+  .grow { flex:1; min-width:0; } .grow > * { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .muted { color:var(--muted); font-size:12.5px; }
+  .pill { font-size:11.5px; padding:2px 8px; border-radius:999px; background:var(--bg); color:var(--muted); flex:none; }
+  .pill.live { background:color-mix(in srgb,var(--ok) 16%,transparent); color:var(--ok); }
+  .bar { height:6px; border-radius:99px; background:var(--line); overflow:hidden; margin-top:5px; } .bar i { display:block; height:100%; background:var(--accent); }
+  .empty { color:var(--muted); padding:10px 0; font-size:13px; }
+  .pulse { animation:p 1.4s ease-in-out infinite; } @keyframes p { 50% { opacity:.35; } }
+</style>
+</head>
+<body>
+  <h1 id="hello">Dashboard</h1>
+  <p class="sub" id="sub"></p>
+  <div class="stats" id="stats"></div>
+  <div class="grid">
+    <section class="card"><h2>Running now</h2><div id="running"></div></section>
+    <section class="card"><h2>Tasks in progress</h2><div id="tasks"></div></section>
+    <section class="card"><h2>Automations</h2><div id="automations"></div></section>
+    <section class="card"><h2>Recent chats</h2><div id="recent"></div></section>
+    <section class="card"><h2>Usage</h2><div id="usage"></div></section>
+  </div>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
+  const open = (id) => parent.postMessage({ type: "opencue:open", agent_id: id }, "*");
+  const ago = (iso) => { if (!iso) return ""; const s = (Date.now() - new Date(iso)) / 1000; if (s < 60) return "just now"; if (s < 3600) return Math.floor(s / 60) + " min ago"; if (s < 86400) return Math.floor(s / 3600) + " h ago"; return Math.floor(s / 86400) + " d ago"; };
+  const when = (iso) => { if (!iso) return ""; const d = new Date(iso); const today = new Date().toDateString() === d.toDateString(); return (today ? "" : d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }) + " ") + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
+  const n = (v) => (v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? (v / 1e3).toFixed(1) + "k" : String(v));
+  const fill = (id, nodes, empty) => { const box = $(id); box.replaceChildren(); if (!nodes.length) box.append(el("div", "empty", empty)); else nodes.forEach((x) => box.append(x)); };
+  const trig = (a) => ({ schedule: a.cron || "schedule", email: "new email", webhook: "webhook", group_message: "group message" }[a.trigger] || a.trigger);
+
+  function render(d) {
+    document.documentElement.dataset.theme = d.theme === "dark" ? "dark" : "light";
+    const hour = new Date().getHours();
+    $("hello").textContent = (hour < 12 ? "Good morning" : hour < 19 ? "Good afternoon" : "Good evening") + (d.user_name ? ", " + d.user_name : "");
+    $("sub").textContent = d.agents.running ? d.agents.running + " of " + d.agents.total + " agents working right now" : "All quiet. " + d.agents.total + " agents ready.";
+    const open_tasks = d.tasks.reduce((s, t) => s + (t.total - t.done), 0);
+    $("stats").replaceChildren(...[
+      [d.agents.running, "Running now"], [d.agents.total, "Agents"], [d.automations.enabled, "Active automations"], [open_tasks, "Open tasks"], [d.usage.messages, "Messages"],
+    ].map(([v, l]) => { const s = el("div", "stat"); s.append(el("b", "", String(v)), el("span", "", l)); return s; }));
+
+    fill("running", d.running.map((r) => { const row = el("div", "row" + (r.kind === "agent" ? " click" : "")); const a = d.agents.list.find((x) => x.id === r.thread_id);
+      const dot = el("span", "dot pulse"); dot.style.background = a ? a.avatar.color : "var(--accent)"; const g = el("span", "grow"); g.append(el("b", "", r.name), el("span", "muted", r.kind === "group" ? "Group chat" : (a && a.model) || ""));
+      row.append(dot, g, el("span", "pill live", "working")); if (r.kind === "agent") row.onclick = () => open(r.thread_id); return row; }), "No agent is working right now.");
+
+    fill("tasks", d.tasks.map((t) => { const row = el("div", "row click"); const g = el("span", "grow"); const doing = t.items.find((i) => i.status === "doing") || t.items.find((i) => i.status === "todo");
+      const bar = el("div", "bar"); const fillBar = el("i"); fillBar.style.width = (t.total ? (100 * t.done) / t.total : 0) + "%"; bar.append(fillBar);
+      g.append(el("b", "", t.agent_name), el("span", "muted", doing ? doing.text : ""), bar); row.append(g, el("span", "pill", t.done + "/" + t.total)); row.onclick = () => open(t.agent_id); return row; }), "No plans in progress.");
+
+    fill("automations", d.automations.list.slice(0, 8).map((a) => { const row = el("div", "row click"); const g = el("span", "grow"); g.append(el("b", "", a.name), el("span", "muted", a.agent_name + " · " + trig(a) + (a.next_run_at ? " · next " + when(a.next_run_at) : "")));
+      row.append(g, el("span", "pill" + (a.enabled ? " live" : ""), a.enabled ? "on" : "off")); row.onclick = () => open(a.agent_id); return row; }), "No automations yet. Ask an agent with /create-automation.");
+
+    fill("recent", d.recent.map((r) => { const row = el("div", "row click"); const a = d.agents.list.find((x) => x.id === r.thread_id); const dot = el("span", "dot"); dot.style.background = a ? a.avatar.color : "var(--line)";
+      const g = el("span", "grow"); g.append(el("b", "", r.name), el("span", "muted", r.last_message || "")); row.append(dot, g, el("span", "muted", ago(r.last_at))); row.onclick = () => open(r.thread_id); return row; }), "No conversations yet.");
+
+    const max = Math.max(1, ...d.usage.by_agent.map((u) => u.tokens));
+    const usage = d.usage.by_agent.slice(0, 6).map((u) => { const row = el("div", "row"); const g = el("span", "grow"); const bar = el("div", "bar"); const f = el("i"); f.style.width = (100 * u.tokens) / max + "%"; bar.append(f);
+      g.append(el("b", "", u.name), bar); row.append(g, el("span", "muted", n(u.tokens) + " tokens")); return row; });
+    fill("usage", usage, "No usage yet.");
+  }
+  window.addEventListener("message", (e) => { if (e.data && e.data.type === "opencue:data") render(e.data.data); });
+  parent.postMessage({ type: "opencue:ready" }, "*");
+</script>
+</body>
+</html>

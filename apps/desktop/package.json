@@ -1,7 +1,7 @@
 {
   "name": "opencue-desktop",
   "private": true,
-  "version": "0.4.1",
+  "version": "0.4.2",
   "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "scripts": {
@@ -19,6 +19,7 @@
     "@tauri-apps/plugin-updater": "^2.14.0",
     "i18next": "^25.6.0",
     "lucide-react": "^0.548.0",
+    "mermaid": "^11.17.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-i18next": "^16.2.0",

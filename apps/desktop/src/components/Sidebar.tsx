@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Bot, Eraser, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users } from "lucide-react";
+import { Bot, Eraser, LayoutDashboard, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cx, shortTime, splitThink } from "../lib/format";
 import { api } from "../lib/api";
@@ -99,6 +99,15 @@ export function Sidebar() {
           )}
         </div>
       </div>
+
+      <button
+        onClick={() => select(null)}
+        aria-current={selected === null ? "page" : undefined}
+        className={cx("mx-2 mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13.5px] font-medium transition-colors", selected === null ? "bg-active text-ink" : "text-muted hover:bg-hover hover:text-ink")}
+      >
+        <LayoutDashboard size={16} />
+        {t("dashboard.title")}
+      </button>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-2" aria-label="Agents">
         {threads.length === 0 ? (

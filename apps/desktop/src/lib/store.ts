@@ -4,7 +4,7 @@ import { onMessageForVoice } from "./voice";
 import i18n from "../i18n";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, ThreadSummary } from "./types";
 
-export type Panel = "profile" | "group" | "computer" | null;
+export type Panel = "profile" | "group" | "computer" | "artifact" | null;
 export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
 export type Dialog = "create-agent" | "create-group" | "templates" | "walkthrough" | null;
 
@@ -23,6 +23,8 @@ interface State {
   settings: Record<string, string>;
   selected: string | null;
   panel: Panel;
+  /** The artifact shown in the side panel. */
+  artifactView: { id: string; version?: number } | null;
   dialog: Dialog;
   settingsSection: SettingsSection | null;
   messages: Record<string, Message[]>;
@@ -57,11 +59,19 @@ interface State {
   openMessage: (threadId: string, messageId: string) => Promise<void>;
   closeDm: () => void;
   setPanel: (p: Panel) => void;
+  openArtifact: (id: string, version?: number) => void;
+  /** Text to put in the composer when the next chat opens (e.g. "/dashboard "). */
+  prefill: string | null;
+  setPrefill: (text: string | null) => void;
   setDialog: (d: Dialog) => void;
   openSettings: (s?: SettingsSection) => void;
   closeSettings: () => void;
   loadMessages: (threadId: string) => Promise<void>;
   send: (threadId: string, text: string, files?: File[]) => Promise<void>;
+  /** Answer the last user message again. */
+  regenerate: (threadId: string) => Promise<void>;
+  /** Edit the last user message and answer it again. */
+  editLast: (threadId: string, text: string) => Promise<void>;
   setSetting: (key: string, value: string) => Promise<void>;
   refreshProviders: () => Promise<void>;
   loadModels: (providerId: string, force?: boolean) => Promise<void>;
@@ -91,6 +101,8 @@ export const useStore = create<State>((set, get) => ({
   settings: {},
   selected: null,
   panel: null,
+  artifactView: null,
+  prefill: null,
   dialog: null,
   settingsSection: null,
   messages: {},
@@ -112,15 +124,10 @@ export const useStore = create<State>((set, get) => ({
       await onCoreEvent((ev) => handleEvent(ev, set, get));
     }
     const [settings] = await Promise.all([api.getSettings(), get().refresh(), get().refreshProviders()]);
-    let selected: string | null = null;
-    try {
-      selected = localStorage.getItem("opencue.selected");
-    } catch {}
-    const threads = get().threads;
-    if (!selected || !threads.some((t) => t.id === selected)) selected = threads[0]?.id ?? null;
     const pending = await api.pendingQuestions().catch(() => [] as Question[]);
     set({ settings, ready: true, questions: Object.fromEntries(pending.map((q) => [q.id, q])) });
-    get().select(selected);
+    // The dashboard is home: the app opens on it, and any chat is one click away.
+    get().select(null);
   },
 
   refresh: async () => {
@@ -131,7 +138,7 @@ export const useStore = create<State>((set, get) => ({
       groups: Object.fromEntries(groups.map((g) => [g.id, g])),
     });
     const sel = get().selected;
-    if (sel && !threads.some((t) => t.id === sel)) get().select(threads[0]?.id ?? null);
+    if (sel && !threads.some((t) => t.id === sel)) get().select(null);
   },
 
   refreshProviders: async () => set({ providers: await api.listProviders() }),
@@ -140,7 +147,7 @@ export const useStore = create<State>((set, get) => ({
     const { panel, groups } = get();
     const isGroup = !!(id && groups[id]);
     // Keep the right panel open but switch it to the matching kind.
-    const nextPanel: Panel = panel ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
+    const nextPanel: Panel = panel && panel !== "artifact" ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
     set({ selected: id, panel: nextPanel, dm: null });
     try {
       if (id) localStorage.setItem("opencue.selected", id);
@@ -163,6 +170,8 @@ export const useStore = create<State>((set, get) => ({
   startCall: (agentId) => set({ call: { threadId: agentId, agentId } }),
   endCall: () => set({ call: null }),
   setPanel: (panel) => set({ panel }),
+  setPrefill: (prefill) => set({ prefill }),
+  openArtifact: (id, version) => set({ panel: "artifact", artifactView: { id, version } }),
   setDialog: (dialog) => set({ dialog }),
   openSettings: (s = "general") => set({ settingsSection: s }),
   closeSettings: () => set({ settingsSection: null }),
@@ -176,6 +185,24 @@ export const useStore = create<State>((set, get) => ({
     try {
       const attachments = files.length ? await filesToAttachments(files) : undefined;
       await api.sendMessage(threadId, text, attachments);
+    } catch (e) {
+      get().showToast(String(e));
+    }
+  },
+
+  regenerate: async (threadId) => {
+    try {
+      await api.regenerateLast(threadId);
+      await get().loadMessages(threadId);
+    } catch (e) {
+      get().showToast(String(e));
+    }
+  },
+
+  editLast: async (threadId, text) => {
+    try {
+      await api.regenerateLast(threadId, text);
+      await get().loadMessages(threadId);
     } catch (e) {
       get().showToast(String(e));
     }
@@ -239,6 +266,11 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
   switch (ev.type) {
     case "message": {
       const m = ev.message;
+      // An agent just made something: show it next to the chat.
+      const made = m.attachments?.find((a) => a.artifact);
+      if (made?.artifact && get().selected === m.thread_id && !get().messages[m.thread_id]?.some((x) => x.id === m.id)) {
+        set(() => ({ panel: "artifact" as Panel, artifactView: { id: made.artifact!.id, version: made.artifact!.version } }));
+      }
       set((s) => (s.messages[m.thread_id] ? { messages: { ...s.messages, [m.thread_id]: upsertMessage(s.messages[m.thread_id], m) } } : {}));
       if (m.status !== "awaiting_approval") {
         set((s) => {
@@ -302,6 +334,9 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       break;
     case "mcp_changed":
       window.dispatchEvent(new CustomEvent("opencue:mcp-changed"));
+      break;
+    case "dashboard_changed":
+      window.dispatchEvent(new CustomEvent("opencue:dashboard-changed"));
       break;
     case "automations_changed":
       window.dispatchEvent(new CustomEvent("opencue:automations-changed"));

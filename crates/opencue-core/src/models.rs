@@ -192,6 +192,18 @@ pub struct Attachment {
     pub name: String,
     pub mime: String,
     pub size: u64,
+    /// Set when an agent made this file with `create_artifact`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub artifact: Option<ArtifactRef>,
+}
+
+/// Which artifact (and version of it) an attachment is.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ArtifactRef {
+    pub id: String,
+    pub version: u32,
+    pub kind: String,
+    pub title: String,
 }
 
 impl Attachment {

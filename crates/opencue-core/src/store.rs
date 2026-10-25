@@ -453,6 +453,26 @@ impl Store {
         Ok(())
     }
 
+    /// Change what a message says (the user edited it).
+    pub async fn set_message_content(&self, id: &str, content: &str) -> anyhow::Result<()> {
+        sqlx::query("UPDATE messages SET content = ? WHERE id = ?")
+            .bind(content)
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn delete_messages(&self, ids: &[String]) -> anyhow::Result<()> {
+        for id in ids {
+            sqlx::query("DELETE FROM messages WHERE id = ?")
+                .bind(id)
+                .execute(&self.db)
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Most recent `limit` messages of a thread, oldest first.
     pub async fn messages(&self, thread_id: &str, limit: i64) -> anyhow::Result<Vec<Message>> {
         let rows = sqlx::query(

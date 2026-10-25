@@ -3,6 +3,7 @@
 mod browser;
 mod commands;
 mod notify;
+mod views;
 
 use std::sync::Arc;
 
@@ -97,6 +98,7 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        .register_uri_scheme_protocol(views::SCHEME, views::handle)
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_main(app)
         }))
@@ -223,6 +225,13 @@ pub fn run() {
             commands::search_messages,
             commands::import_grok_template,
             commands::send_message,
+            commands::regenerate_last,
+            commands::get_artifact,
+            commands::list_artifacts,
+            commands::dashboard_data,
+            commands::dashboard_info,
+            commands::reset_dashboard,
+            commands::view_base,
             commands::thread_files,
             commands::read_attachment,
             commands::open_attachment,
@@ -298,6 +307,10 @@ pub fn run() {
             commands::browser_control,
             commands::browser_state,
             commands::browser_clear,
+            commands::browser_tabs,
+            commands::browser_tab_new,
+            commands::browser_tab_select,
+            commands::browser_tab_close,
             commands::computer_running,
             commands::agent_workspace,
             commands::default_workspace,

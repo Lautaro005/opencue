@@ -1,4 +1,4 @@
-//! "Backend CLI" providers: run the user's own logged-in `claude` / `codex` / `grok` binary so
+//! "Backend CLI" providers: run the user's own logged-in `claude` / `codex` / `grok` / `muse` / `vibe` / `agy` binary so
 //! their subscription is used through the official client. OpenCue never sees or stores those
 //! tokens.
 
@@ -17,6 +17,8 @@ pub enum CliKind {
     Codex,
     Grok,
     Muse,
+    Vibe,
+    Antigravity,
 }
 
 pub struct CliProvider {
@@ -47,6 +49,8 @@ impl CliProvider {
             CliKind::Codex => "codex",
             CliKind::Grok => "grok",
             CliKind::Muse => "muse",
+            CliKind::Vibe => "vibe",
+            CliKind::Antigravity => "agy",
         }
     }
 
@@ -60,6 +64,8 @@ impl CliProvider {
                     CliKind::Codex => "`codex login`",
                     CliKind::Grok => "`grok login`, or set XAI_API_KEY",
                     CliKind::Muse => "`muse`, then /login, or set META_API_KEY",
+                    CliKind::Vibe => "`vibe`, which opens the browser to sign in, or set MISTRAL_API_KEY",
+                    CliKind::Antigravity => "`agy`, which opens the browser to sign in with Google",
                 }
             )
         })
@@ -106,7 +112,28 @@ fn cli_models(kind: CliKind) -> Vec<String> {
                 }
             }
         }
-        CliKind::Muse => {}
+        CliKind::Muse | CliKind::Vibe => {}
+        CliKind::Antigravity => {
+            // `agy models` prints one model per line; anything odd just leaves "default".
+            if let Ok(o) = std::process::Command::new("agy").arg("models").output() {
+                for line in String::from_utf8_lossy(&o.stdout).lines() {
+                    let slug = line
+                        .trim()
+                        .trim_start_matches(['-', '*', '•'])
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("");
+                    let ok = !slug.is_empty()
+                        && slug.len() <= 60
+                        && slug
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || "._-".contains(c));
+                    if ok && slug.to_lowercase().contains("gemini") {
+                        out.push(slug.to_string());
+                    }
+                }
+            }
+        }
         CliKind::Grok => {
             out.extend(["grok-4.7", "grok-4.6", "grok-4.5"].map(String::from));
             let cfg = directories::UserDirs::new()
@@ -194,6 +221,8 @@ fn with_login_hint(kind: CliKind, msg: &str) -> String {
         CliKind::Codex => "open a terminal and run `codex login`",
         CliKind::Grok => "open a terminal and run `grok login` (or set XAI_API_KEY)",
         CliKind::Muse => "open a terminal, run `muse` and type /login (or set META_API_KEY)",
+        CliKind::Vibe => "open a terminal, run `vibe` to sign in again (or set MISTRAL_API_KEY)",
+        CliKind::Antigravity => "open a terminal and run `agy` to sign in with Google again",
     };
     format!("{msg}\n\nYour sign-in on this computer needs renewing: {how}, then send your message again.")
 }
@@ -356,6 +385,32 @@ impl LlmProvider for CliProvider {
                 prompt_file = Some(file);
                 String::new()
             }
+            CliKind::Vibe => {
+                // Headless: one prompt, plain text out. Vibe auto-approves its tools in this mode,
+                // so the prompt asks for text only and the run is capped at a single turn.
+                cmd.args(["--output", "text", "--max-turns", "1"]);
+                let mut p = transcript(&req, true);
+                p.insert_str(
+                    0,
+                    "Answer in plain text only, without using tools or touching files.\n\n",
+                );
+                cmd.arg("--prompt").arg(p);
+                String::new()
+            }
+            CliKind::Antigravity => {
+                // Headless: `-p` runs one prompt and prints the answer. Without
+                // --dangerously-skip-permissions every tool request is refused, so it answers in text.
+                if !req.model.is_empty() && req.model != "default" {
+                    cmd.arg("--model").arg(&req.model);
+                }
+                let mut p = transcript(&req, true);
+                p.insert_str(
+                    0,
+                    "Answer in plain text only, without using tools or touching files.\n\n",
+                );
+                cmd.arg("-p").arg(p);
+                String::new()
+            }
             CliKind::Grok => {
                 // Headless: one prompt, plain text out. Tools stay off (no auto-approve), so it
                 // answers in text instead of editing files in the scratch folder.
@@ -389,7 +444,10 @@ impl LlmProvider for CliProvider {
         let mut streamed = String::new();
         let mut final_text: Option<String> = None;
 
-        if matches!(self.kind, CliKind::Grok | CliKind::Muse) {
+        if matches!(
+            self.kind,
+            CliKind::Grok | CliKind::Muse | CliKind::Vibe | CliKind::Antigravity
+        ) {
             // Plain text: forward it as it arrives, holding back a cut-off UTF-8 character.
             let mut pending: Vec<u8> = Vec::new();
             let mut buf = [0u8; 4096];
@@ -490,7 +548,7 @@ impl LlmProvider for CliProvider {
                     }
                     _ => {}
                 },
-                CliKind::Grok | CliKind::Muse => {}
+                CliKind::Grok | CliKind::Muse | CliKind::Vibe | CliKind::Antigravity => {}
                 CliKind::Codex => {
                     let item = v.get("item").or_else(|| v.get("msg"));
                     let is_message = item

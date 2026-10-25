@@ -46,7 +46,66 @@ impl OpenAiProvider {
     }
 }
 
-pub(crate) fn to_openai_messages(req: &ChatRequest) -> Vec<Value> {
+/// Mistral only accepts tool-call ids of exactly nine letters and digits, so ids made by other
+/// providers (or earlier turns) are mapped to a stable nine-character one.
+pub(crate) fn mistral_call_id(id: &str) -> String {
+    if id.len() == 9 && id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return id.to_string();
+    }
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in id.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    const ALPHABET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    (0..9)
+        .map(|_| {
+            let c = ALPHABET[(h % 62) as usize] as char;
+            h /= 62;
+            c
+        })
+        .collect()
+}
+
+/// Text inside a delta's `content`: a string, or (Mistral's reasoning models) a list of chunks.
+fn content_parts(content: &Value) -> (String, String) {
+    match content {
+        Value::String(s) => (String::new(), s.clone()),
+        Value::Array(parts) => {
+            let (mut thought, mut text) = (String::new(), String::new());
+            for p in parts {
+                match p["type"].as_str() {
+                    Some("thinking") => {
+                        for t in p["thinking"].as_array().into_iter().flatten() {
+                            if let Some(s) = t["text"].as_str() {
+                                thought.push_str(s);
+                            }
+                        }
+                        if let Some(s) = p["thinking"].as_str() {
+                            thought.push_str(s);
+                        }
+                    }
+                    _ => {
+                        if let Some(s) = p["text"].as_str() {
+                            text.push_str(s);
+                        }
+                    }
+                }
+            }
+            (thought, text)
+        }
+        _ => (String::new(), String::new()),
+    }
+}
+
+pub(crate) fn to_openai_messages_for(req: &ChatRequest, mistral: bool) -> Vec<Value> {
+    let call_id = |id: &str| {
+        if mistral {
+            mistral_call_id(id)
+        } else {
+            id.to_string()
+        }
+    };
     let mut out = Vec::with_capacity(req.messages.len() + 1);
     if !req.system.is_empty() {
         out.push(json!({ "role": "system", "content": req.system }));
@@ -72,7 +131,7 @@ pub(crate) fn to_openai_messages(req: &ChatRequest) -> Vec<Value> {
                         .iter()
                         .map(|c| {
                             json!({
-                                "id": c.id,
+                                "id": call_id(&c.id),
                                 "type": "function",
                                 "function": { "name": c.name, "arguments": c.arguments.to_string() }
                             })
@@ -83,7 +142,7 @@ pub(crate) fn to_openai_messages(req: &ChatRequest) -> Vec<Value> {
             }
             ChatRole::Tool => out.push(json!({
                 "role": "tool",
-                "tool_call_id": m.tool_call_id.clone().unwrap_or_default(),
+                "tool_call_id": call_id(m.tool_call_id.as_deref().unwrap_or_default()),
                 "content": m.content,
             })),
         }
@@ -105,12 +164,16 @@ impl LlmProvider for OpenAiProvider {
         req: ChatRequest,
         on_delta: DeltaSink<'_>,
     ) -> anyhow::Result<ChatResponse> {
+        let mistral = self.kind == ProviderKind::MistralApi;
         let mut body = json!({
             "model": req.model,
-            "messages": to_openai_messages(&req),
+            "messages": to_openai_messages_for(&req, mistral),
             "stream": true,
-            "stream_options": { "include_usage": true },
         });
+        // Mistral rejects request fields it doesn't know and reports usage on its own.
+        if !mistral {
+            body["stream_options"] = json!({ "include_usage": true });
+        }
         if let Some(t) = req.temperature {
             body["temperature"] = json!(t);
         }
@@ -169,9 +232,15 @@ impl LlmProvider for OpenAiProvider {
                 out.text.push_str(&piece);
                 on_delta(&piece);
             }
-            if let Some(text) = delta.get("content").and_then(Value::as_str) {
+            if let Some(content) = delta.get("content") {
+                let (thought, text) = content_parts(content);
+                if !thought.is_empty() {
+                    let piece = think.reasoning(&thought);
+                    out.text.push_str(&piece);
+                    on_delta(&piece);
+                }
                 if !text.is_empty() {
-                    let piece = think.answer(text);
+                    let piece = think.answer(&text);
                     out.text.push_str(&piece);
                     on_delta(&piece);
                 }
@@ -244,7 +313,43 @@ impl LlmProvider for OpenAiProvider {
                     .collect()
             })
             .unwrap_or_default();
+        // Groq and Mistral list speech, embedding and moderation models next to the chat ones.
+        if matches!(self.kind, ProviderKind::Groq | ProviderKind::MistralApi) {
+            const NOT_CHAT: [&str; 8] = [
+                "whisper",
+                "tts",
+                "orpheus",
+                "embed",
+                "moderation",
+                "ocr",
+                "guard",
+                "transcribe",
+            ];
+            models.retain(|m| !NOT_CHAT.iter().any(|k| m.to_lowercase().contains(k)));
+        }
         models.sort();
+        models.dedup();
         Ok(models)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mistral_ids_are_nine_alphanumerics_and_stable() {
+        let a = mistral_call_id("call_0b3f-long-id");
+        assert_eq!(a.len(), 9);
+        assert!(a.chars().all(|c| c.is_ascii_alphanumeric()));
+        assert_eq!(a, mistral_call_id("call_0b3f-long-id"));
+        assert_eq!(mistral_call_id("abc123XYZ"), "abc123XYZ");
+    }
+
+    #[test]
+    fn content_chunks_split_reasoning_from_the_answer() {
+        let v = json!([{"type":"thinking","thinking":[{"type":"text","text":"hm"}]},{"type":"text","text":"Hi"}]);
+        assert_eq!(content_parts(&v), ("hm".to_string(), "Hi".to_string()));
+        assert_eq!(content_parts(&json!("yo")).1, "yo");
     }
 }

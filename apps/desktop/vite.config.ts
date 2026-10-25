@@ -12,6 +12,8 @@ export default defineConfig({
     strictPort: true,
     host: host || false,
     hmr: host ? { protocol: "ws", host, port: 1421 } : undefined,
+    // The preview shows the dashboard page that ships in the Rust crate.
+    fs: { allow: [".", "../../crates/opencue-core/src"] },
     watch: { ignored: ["**/src-tauri/**"] },
   },
   build: {

@@ -114,6 +114,48 @@ export interface Attachment {
   name: string;
   mime: string;
   size: number;
+  /** Set when an agent made this file with `create_artifact`. */
+  artifact?: ArtifactRef;
+}
+
+export type ArtifactKind = "html" | "svg" | "markdown" | "mermaid" | "code" | "text" | "json" | "csv" | "xlsx" | "docx" | "pptx" | "pdf";
+
+export interface ArtifactRef {
+  id: string;
+  version: number;
+  kind: ArtifactKind;
+  title: string;
+}
+
+export interface ArtifactVersion {
+  version: number;
+  attachment: Attachment;
+  created_at: string;
+  /** The text the agent sent for this version. */
+  source: string;
+}
+
+export interface Artifact {
+  id: string;
+  thread_id: string;
+  agent_id: string;
+  title: string;
+  kind: ArtifactKind;
+  language: string | null;
+  versions: ArtifactVersion[];
+}
+
+/** What the dashboard page draws (see the contract in the built-in page). */
+export interface DashboardData {
+  now: string;
+  theme?: "light" | "dark";
+  user_name: string;
+  agents: { total: number; running: number; list: { id: string; name: string; model: string | null; busy: boolean; avatar: Avatar }[] };
+  running: { thread_id: string; name: string; kind: "agent" | "group" }[];
+  automations: { total: number; enabled: number; upcoming: unknown[]; list: unknown[] };
+  tasks: { agent_id: string; agent_name: string; done: number; total: number; items: { text: string; status: "todo" | "doing" | "done" }[] }[];
+  usage: { messages: number; input_tokens: number; output_tokens: number; by_agent: { agent_id: string; name: string; messages: number; tokens: number }[] };
+  recent: { thread_id: string; name: string; kind: "agent" | "group"; last_message: string | null; last_at: string | null }[];
 }
 
 /** A file the user is about to send (base64 bytes). */
@@ -154,7 +196,11 @@ export type ProviderKind =
   | "grok_cli"
   | "muse_cli"
   | "gemini"
-  | "muse";
+  | "muse"
+  | "mistral_api"
+  | "groq"
+  | "vibe_cli"
+  | "antigravity_cli";
 
 export interface ProviderInfo {
   kind: ProviderKind;
@@ -282,6 +328,7 @@ export type CoreEvent =
   | { type: "mcp_changed" }
   | { type: "profile_changed"; agent_id: string }
   | { type: "automations_changed" }
+  | { type: "dashboard_changed" }
   | { type: "computer_output"; agent_id: string; text: string; stderr: boolean }
   | { type: "error"; thread_id: string | null; message: string };
 
@@ -434,4 +481,11 @@ export interface GrokTemplate {
   integrations: string[];
   /** "marketplace" has everything; "shared" only a name and a description. */
   source: "marketplace" | "shared";
+}
+
+export interface BrowserTab {
+  id: number;
+  url: string;
+  title: string;
+  active: boolean;
 }

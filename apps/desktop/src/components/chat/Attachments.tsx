@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Download, FileArchive, FileImage, FileSpreadsheet, FileText, FolderOpen } from "lucide-react";
-import type { Attachment } from "../../lib/types";
+import { Code2, Download, FileArchive, FileImage, FileSpreadsheet, FileText, FolderOpen, Globe, GitBranch, Presentation, Braces } from "lucide-react";
+import type { ArtifactKind, Attachment } from "../../lib/types";
+import { KIND_LABEL } from "../../lib/artifacts";
 import { api, isTauri, saveAttachmentAs } from "../../lib/api";
 import { cx, formatBytes } from "../../lib/format";
 import { useStore } from "../../lib/store";
@@ -19,6 +20,29 @@ export function FileIcon({ a, size = 18 }: { a: Attachment; size?: number }) {
   if (/csv|sheet|excel|tab-separated/.test(a.mime)) return <FileSpreadsheet size={size} />;
   if (/zip|tar|gzip/.test(a.mime)) return <FileArchive size={size} />;
   return <FileText size={size} />;
+}
+
+/** The icon of an artifact type. */
+export function ArtifactIcon({ kind, size = 18 }: { kind: ArtifactKind; size?: number }) {
+  switch (kind) {
+    case "html":
+      return <Globe size={size} />;
+    case "svg":
+      return <FileImage size={size} />;
+    case "mermaid":
+      return <GitBranch size={size} />;
+    case "code":
+      return <Code2 size={size} />;
+    case "json":
+      return <Braces size={size} />;
+    case "xlsx":
+    case "csv":
+      return <FileSpreadsheet size={size} />;
+    case "pptx":
+      return <Presentation size={size} />;
+    default:
+      return <FileText size={size} />;
+  }
 }
 
 const toastError = (e: unknown) => useStore.getState().showToast(String(e));
@@ -77,7 +101,36 @@ function ImageThumb({ a }: { a: Attachment }) {
   );
 }
 
+/** What an agent made with `create_artifact`: a card that opens it in the side panel. */
+export function ArtifactCard({ a }: { a: Attachment }) {
+  const { t } = useTranslation();
+  const openArtifact = useStore((s) => s.openArtifact);
+  const art = a.artifact!;
+  const open = () => openArtifact(art.id, art.version);
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={open}
+      onKeyDown={(e) => e.key === "Enter" && open()}
+      className="group/file flex w-[300px] max-w-full cursor-pointer items-center gap-3 rounded-2xl border border-line bg-bg px-3 py-3 text-left transition-colors hover:bg-hover"
+    >
+      <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+        <ArtifactIcon kind={art.kind} />
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[13.5px] font-medium">{art.title}</span>
+        <span className="block truncate text-[11.5px] text-muted">
+          {KIND_LABEL[art.kind]} · {t("artifact.version", { n: art.version })} · {formatBytes(a.size)}
+        </span>
+      </span>
+      <FileActions a={a} />
+    </div>
+  );
+}
+
 export function FileCard({ a }: { a: Attachment }) {
+  if (a.artifact) return <ArtifactCard a={a} />;
   return (
     <div
       role="button"

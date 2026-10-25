@@ -1,10 +1,12 @@
 //! OpenCue core: everything except the UI. The desktop app and the CLI both drive a [`Core`].
 
+pub mod artifacts;
 pub mod automations;
 pub mod bridge;
 pub mod browser;
 pub mod catalog;
 pub mod computer;
+pub mod dashboard;
 pub mod db;
 pub mod email;
 pub mod events;
@@ -15,6 +17,7 @@ pub mod mcp_server;
 pub mod memory;
 pub mod messenger;
 pub mod models;
+pub mod office;
 pub mod paths;
 pub mod providers;
 pub mod secrets;

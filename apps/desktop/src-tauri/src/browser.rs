@@ -41,15 +41,35 @@ struct Bounds {
     known: bool,
 }
 
-/// What one agent's page is doing.
+/// What one tab is doing, and the address and title it showed last (so the tab strip can name
+/// tabs that are out of sight).
 #[derive(Default)]
 struct Page {
     loading: AtomicBool,
     loads: AtomicU64,
+    last: Mutex<(String, String)>,
 }
 
-/// Every agent has its own webview (its own page, cookies and storage); the UI shows one at a
-/// time, the one of the agent whose Computer panel is open.
+/// One agent's tabs.
+#[derive(Default)]
+struct Tabs {
+    ids: Vec<u32>,
+    active: u32,
+    next: u32,
+}
+
+/// A tab as the UI's strip shows it.
+#[derive(serde::Serialize)]
+pub struct TabInfo {
+    pub id: u32,
+    pub url: String,
+    pub title: String,
+    pub active: bool,
+}
+
+/// Every agent has its own tabs, and every tab its own webview (own page; the cookies and
+/// storage are shared by the agent's tabs and kept from everyone else's). The UI shows one at a
+/// time: the active tab of the agent whose Computer panel is open.
 pub struct TauriBrowser {
     app: AppHandle,
     #[cfg_attr(target_os = "macos", allow(dead_code))]
@@ -58,14 +78,19 @@ pub struct TauriBrowser {
     /// The agent whose page is on screen right now.
     shown: Mutex<Option<String>>,
     pages: Mutex<HashMap<String, Arc<Page>>>,
+    tabs: Mutex<HashMap<String, Tabs>>,
 }
 
-fn label(agent_id: &str) -> String {
-    let id: String = agent_id
+/// The agent's name as it appears in webview labels and profile folders.
+fn slug(agent_id: &str) -> String {
+    agent_id
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
-        .collect();
-    format!("{LABEL}-{id}")
+        .collect()
+}
+
+fn label(agent_id: &str, tab: u32) -> String {
+    format!("{LABEL}-{}-{tab}", slug(agent_id))
 }
 
 /// A stable 16-byte name for an agent's storage (macOS keys it by an identifier).
@@ -94,44 +119,90 @@ impl TauriBrowser {
             bounds: Mutex::new(Bounds::default()),
             shown: Mutex::new(None),
             pages: Mutex::new(HashMap::new()),
+            tabs: Mutex::new(HashMap::new()),
         })
     }
 
-    fn page(&self, agent_id: &str) -> Arc<Page> {
+    fn page(&self, agent_id: &str, tab: u32) -> Arc<Page> {
         self.pages
             .lock()
             .unwrap()
-            .entry(agent_id.to_string())
+            .entry(label(agent_id, tab))
             .or_default()
             .clone()
     }
 
+    /// The tab the agent is looking at, if it has any.
+    fn active(&self, agent_id: &str) -> Option<u32> {
+        let tabs = self.tabs.lock().unwrap();
+        tabs.get(agent_id)
+            .filter(|t| t.ids.contains(&t.active))
+            .map(|t| t.active)
+    }
+
     fn webview(&self, agent_id: &str) -> Option<Webview> {
-        self.app.get_webview(&label(agent_id))
+        let tab = self.active(agent_id)?;
+        self.app.get_webview(&label(agent_id, tab))
     }
 
     fn is_shown(&self, agent_id: &str) -> bool {
         self.shown.lock().unwrap().as_deref() == Some(agent_id)
     }
 
-    /// The agent's page webview, created on first use. It is born out of sight and only appears
-    /// when the UI has placed it, so it never flashes over the app while the panel opens.
-    fn ensure(&self, agent_id: &str, url: &str) -> anyhow::Result<Webview> {
-        if let Some(w) = self.webview(agent_id) {
-            return Ok(w);
+    /// On macOS the system places a child view from the top of the window frame, title bar
+    /// included, so everything lands that much too high (over the toolbar). The difference between
+    /// the window and its content is the title bar (zero in full screen); other systems need none.
+    fn origin_shift(&self) -> f64 {
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(window) = self.app.get_window("main") {
+                if let (Ok(outer), Ok(inner), Ok(scale)) = (
+                    window.outer_size(),
+                    window.inner_size(),
+                    window.scale_factor(),
+                ) {
+                    let bar = (outer.height as f64 - inner.height as f64) / scale;
+                    if (0.0..200.0).contains(&bar) {
+                        return bar;
+                    }
+                }
+            }
         }
+        0.0
+    }
+
+    /// A new tab (and its webview), born out of sight: it only appears when the UI has placed it,
+    /// so it never flashes over the app while the panel opens. It becomes the active tab.
+    fn open_tab(&self, agent_id: &str, url: &str) -> anyhow::Result<(u32, Webview)> {
         let window = self
             .app
             .get_window("main")
             .ok_or_else(|| anyhow::anyhow!("the app window is not open"))?;
         let url: url::Url = url.parse()?;
-        let page = self.page(agent_id);
-        let mut builder = WebviewBuilder::new(label(agent_id), WebviewUrl::External(url))
-            .on_page_load(move |_, payload| match payload.event() {
+        let tab = {
+            let mut all = self.tabs.lock().unwrap();
+            let t = all.entry(agent_id.to_string()).or_default();
+            t.next += 1;
+            t.next
+        };
+        let page = self.page(agent_id, tab);
+        let loaded = page.clone();
+        let mut builder = WebviewBuilder::new(label(agent_id, tab), WebviewUrl::External(url))
+            .on_page_load(move |view, payload| match payload.event() {
                 PageLoadEvent::Started => page.loading.store(true, Ordering::SeqCst),
                 PageLoadEvent::Finished => {
                     page.loading.store(false, Ordering::SeqCst);
                     page.loads.fetch_add(1, Ordering::SeqCst);
+                    let page = loaded.clone();
+                    let _ = view.eval_with_callback(
+                        "JSON.stringify([location.href, document.title])".to_string(),
+                        move |out| {
+                            let raw = serde_json::from_str::<String>(&out).unwrap_or(out);
+                            if let Ok(pair) = serde_json::from_str::<(String, String)>(&raw) {
+                                *page.last.lock().unwrap() = pair;
+                            }
+                        },
+                    );
                 }
             });
         #[cfg(target_os = "macos")]
@@ -140,25 +211,51 @@ impl TauriBrowser {
         }
         #[cfg(not(target_os = "macos"))]
         {
-            let dir = self.data_dir.join(label(agent_id));
+            // Tabs of one agent share its profile folder.
+            let dir = self.data_dir.join(format!("{LABEL}-{}", slug(agent_id)));
             let _ = std::fs::create_dir_all(&dir);
             builder = builder.data_directory(dir);
         }
         let b = *self.bounds.lock().unwrap();
         let on_screen = b.known && self.is_shown(agent_id);
         let (x, y, w, h) = if on_screen {
-            (b.x, b.y, b.w, b.h)
+            (b.x, b.y + self.origin_shift(), b.w, b.h)
         } else {
             (-10000.0, -10000.0, 900.0, 600.0)
         };
+        // Hide whatever else this agent had on screen: the new tab takes its place.
+        let others: Vec<u32> = self
+            .tabs
+            .lock()
+            .unwrap()
+            .get(agent_id)
+            .map(|t| t.ids.clone())
+            .unwrap_or_default();
+        for o in others {
+            if let Some(v) = self.app.get_webview(&label(agent_id, o)) {
+                let _ = v.hide();
+            }
+        }
         let view = window.add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w, h))?;
         if !on_screen {
             let _ = view.hide();
         }
-        Ok(view)
+        let mut all = self.tabs.lock().unwrap();
+        let t = all.entry(agent_id.to_string()).or_default();
+        t.ids.push(tab);
+        t.active = tab;
+        Ok((tab, view))
     }
 
-    /// Show this agent's page at these window coordinates (and hide everyone else's).
+    /// The agent's current page, opening a first tab if it has none.
+    fn ensure(&self, agent_id: &str, url: &str) -> anyhow::Result<Webview> {
+        if let Some(w) = self.webview(agent_id) {
+            return Ok(w);
+        }
+        Ok(self.open_tab(agent_id, url)?.1)
+    }
+
+    /// Show this agent's active tab at these window coordinates (and hide everything else).
     pub fn place(&self, agent_id: &str, x: f64, y: f64, w: f64, h: f64) {
         *self.bounds.lock().unwrap() = Bounds {
             x,
@@ -168,14 +265,17 @@ impl TauriBrowser {
             known: true,
         };
         *self.shown.lock().unwrap() = Some(agent_id.to_string());
-        let mine = label(agent_id);
+        let mine = self
+            .active(agent_id)
+            .map(|t| label(agent_id, t))
+            .unwrap_or_default();
         for (l, v) in self.app.webviews() {
             if l.starts_with(LABEL) && l != mine {
                 let _ = v.hide();
             }
         }
         if let Some(v) = self.webview(agent_id) {
-            let _ = v.set_position(LogicalPosition::new(x, y));
+            let _ = v.set_position(LogicalPosition::new(x, y + self.origin_shift()));
             let _ = v.set_size(LogicalSize::new(w.max(1.0), h.max(1.0)));
             let _ = v.show();
         }
@@ -197,6 +297,88 @@ impl TauriBrowser {
         Ok(())
     }
 
+    /// The agent's tabs, with the address and title each last showed.
+    pub async fn tabs(&self, agent_id: &str) -> Vec<TabInfo> {
+        // Refresh the visible one; the others keep what they showed when they were left.
+        if let Some(active) = self.active(agent_id) {
+            let (url, title) = self.state(agent_id).await;
+            if !url.is_empty() {
+                *self.page(agent_id, active).last.lock().unwrap() = (url, title);
+            }
+        }
+        let (ids, active) = {
+            let all = self.tabs.lock().unwrap();
+            match all.get(agent_id) {
+                Some(t) => (t.ids.clone(), t.active),
+                None => return vec![],
+            }
+        };
+        ids.into_iter()
+            .map(|id| {
+                let (url, title) = self.page(agent_id, id).last.lock().unwrap().clone();
+                TabInfo {
+                    id,
+                    url,
+                    title,
+                    active: id == active,
+                }
+            })
+            .collect()
+    }
+
+    /// Open a new tab (blank, or on an address) and make it the current one.
+    pub fn new_tab(&self, agent_id: &str, url: Option<String>) -> anyhow::Result<u32> {
+        let target = match url.filter(|u| !u.trim().is_empty()) {
+            Some(u) => checked_url(&u)?.to_string(),
+            None => "about:blank".to_string(),
+        };
+        Ok(self.open_tab(agent_id, &target)?.0)
+    }
+
+    /// Bring a tab to the front.
+    pub fn select_tab(&self, agent_id: &str, tab: u32) {
+        {
+            let mut all = self.tabs.lock().unwrap();
+            match all.get_mut(agent_id) {
+                Some(t) if t.ids.contains(&tab) => t.active = tab,
+                _ => return,
+            }
+        }
+        let b = *self.bounds.lock().unwrap();
+        if b.known && self.is_shown(agent_id) {
+            self.place(agent_id, b.x, b.y, b.w, b.h);
+        }
+    }
+
+    /// Close a tab; the one next to it takes over.
+    pub fn close_tab(&self, agent_id: &str, tab: u32) {
+        let next = {
+            let mut all = self.tabs.lock().unwrap();
+            let Some(t) = all.get_mut(agent_id) else {
+                return;
+            };
+            let Some(pos) = t.ids.iter().position(|i| *i == tab) else {
+                return;
+            };
+            t.ids.remove(pos);
+            if t.active == tab {
+                t.active = t
+                    .ids
+                    .get(pos.min(t.ids.len().saturating_sub(1)))
+                    .copied()
+                    .unwrap_or(0);
+            }
+            t.active
+        };
+        if let Some(v) = self.app.get_webview(&label(agent_id, tab)) {
+            let _ = v.close();
+        }
+        self.pages.lock().unwrap().remove(&label(agent_id, tab));
+        if next != 0 {
+            self.select_tab(agent_id, next);
+        }
+    }
+
     /// Run a script in the page and read what it returns (a string).
     async fn eval(&self, view: &Webview, js: String) -> anyhow::Result<String> {
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -215,7 +397,10 @@ impl TauriBrowser {
 
     /// Wait for a page that started loading to finish (and for one to start, briefly).
     async fn settle(&self, agent_id: &str, after_click: bool) {
-        let page = self.page(agent_id);
+        let Some(tab) = self.active(agent_id) else {
+            return;
+        };
+        let page = self.page(agent_id, tab);
         if after_click {
             tokio::time::sleep(Duration::from_millis(700)).await;
         }
@@ -281,29 +466,38 @@ fn js_str(s: &str) -> String {
 #[async_trait]
 impl BrowserHost for TauriBrowser {
     async fn run(&self, agent_id: &str, action: &str, args: Value) -> anyhow::Result<String> {
-        let page = self.page(agent_id);
         let view = match action {
             "open" => {
                 let url = args["url"].as_str().unwrap_or_default().to_string();
-                let existing = self.webview(agent_id);
-                match existing {
+                let existing = if args["new_tab"].as_bool().unwrap_or(false) {
+                    None
+                } else {
+                    self.webview(agent_id)
+                };
+                let v = match existing {
                     Some(v) => {
-                        page.loading.store(true, Ordering::SeqCst);
+                        if let Some(tab) = self.active(agent_id) {
+                            self.page(agent_id, tab)
+                                .loading
+                                .store(true, Ordering::SeqCst);
+                        }
                         v.navigate(url.parse()?)?;
-                        self.settle(agent_id, true).await;
                         v
                     }
                     None => {
-                        let v = self.ensure(agent_id, &url)?;
-                        page.loading.store(true, Ordering::SeqCst);
-                        self.settle(agent_id, true).await;
+                        let (tab, v) = self.open_tab(agent_id, &url)?;
+                        self.page(agent_id, tab)
+                            .loading
+                            .store(true, Ordering::SeqCst);
                         v
                     }
-                }
+                };
+                self.settle(agent_id, true).await;
+                v
             }
             "close" => {
-                if let Some(v) = self.webview(agent_id) {
-                    v.close()?;
+                if let Some(tab) = self.active(agent_id) {
+                    self.close_tab(agent_id, tab);
                 }
                 return Ok("Closed.".into());
             }
