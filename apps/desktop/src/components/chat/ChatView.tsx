@@ -5,10 +5,10 @@ import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { AvatarView, GroupAvatar } from "../AvatarView";
 import { IconButton, Typing } from "../ui";
-import { Logo } from "../Sidebar";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { DmView } from "./DmView";
+import { Dashboard } from "../dashboard/Dashboard";
 
 const NO_WORKERS: string[] = [];
 
@@ -21,7 +21,6 @@ export function ChatView() {
   const panel = useStore((s) => s.panel);
   const setPanel = useStore((s) => s.setPanel);
   const send = useStore((s) => s.send);
-  const setDialog = useStore((s) => s.setDialog);
   const working = useStore((s) => (selected ? s.working[selected] ?? NO_WORKERS : NO_WORKERS));
   const messageCount = useStore((s) => (selected ? s.messages[selected]?.length ?? 0 : 0));
   const dm = useStore((s) => s.dm);
@@ -42,18 +41,7 @@ export function ChatView() {
   // In a 1:1 chat any other agent can be @mentioned: the agent asks them without a group.
   const others = useMemo(() => (agent ? Object.values(agents).filter((a) => a.id !== agent.id) : undefined), [agent, agents]);
 
-  if (!selected || (!agent && !group)) {
-    return (
-      <main className="flex flex-1 flex-col items-center justify-center gap-3 bg-bg text-center">
-        <Logo size={48} />
-        <h1 className="text-[19px] font-semibold tracking-tight">{t("chat.selectTitle")}</h1>
-        <p className="max-w-xs text-[13.5px] text-muted">{t("chat.selectHint")}</p>
-        <button onClick={() => setDialog("create-agent")} className="mt-1 rounded-lg bg-accent px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
-          {t("sidebar.createAgent")}
-        </button>
-      </main>
-    );
-  }
+  if (!selected || (!agent && !group)) return <Dashboard />;
 
   if (dm && dm.a === selected && agent) return <DmView />;
 

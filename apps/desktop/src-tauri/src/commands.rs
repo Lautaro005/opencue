@@ -287,6 +287,60 @@ pub async fn send_message(
         .map_err(e)
 }
 
+/// Answer the last user message again, optionally after editing it.
+#[tauri::command]
+pub async fn regenerate_last(
+    state: State<'_, AppState>,
+    thread_id: String,
+    text: Option<String>,
+) -> R<()> {
+    state
+        .core
+        .regenerate_last(&thread_id, text.as_deref())
+        .await
+        .map_err(e)
+}
+
+// ---------- artifacts and dashboard ----------
+
+#[tauri::command]
+pub fn get_artifact(
+    state: State<'_, AppState>,
+    id: String,
+) -> R<opencue_core::artifacts::Artifact> {
+    state.core.get_artifact(&id).map_err(e)
+}
+
+#[tauri::command]
+pub fn list_artifacts(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> Vec<opencue_core::artifacts::Artifact> {
+    state.core.list_artifacts(&agent_id)
+}
+
+#[tauri::command]
+pub async fn dashboard_data(state: State<'_, AppState>) -> R<serde_json::Value> {
+    state.core.dashboard_data().await.map_err(e)
+}
+
+/// The page itself (for the preview outside the desktop app) and whether it is the built-in one.
+#[tauri::command]
+pub fn dashboard_info(state: State<'_, AppState>) -> serde_json::Value {
+    serde_json::json!({ "html": state.core.dashboard_html(), "is_default": state.core.dashboard_is_default() })
+}
+
+#[tauri::command]
+pub fn reset_dashboard(state: State<'_, AppState>) -> R<()> {
+    state.core.reset_dashboard().map_err(e)
+}
+
+/// Where sandboxed frames load artifacts and the dashboard from.
+#[tauri::command]
+pub fn view_base() -> String {
+    crate::views::base()
+}
+
 // ---------- files ----------
 
 #[tauri::command]
@@ -393,6 +447,33 @@ pub async fn browser_state(state: State<'_, AppState>, agent_id: String) -> R<(S
 #[tauri::command]
 pub fn browser_clear(state: State<'_, AppState>, agent_id: String) -> R<()> {
     state.browser.clear(&agent_id).map_err(e)
+}
+
+#[tauri::command]
+pub async fn browser_tabs(
+    state: State<'_, AppState>,
+    agent_id: String,
+) -> R<Vec<crate::browser::TabInfo>> {
+    Ok(state.browser.tabs(&agent_id).await)
+}
+
+#[tauri::command]
+pub fn browser_tab_new(
+    state: State<'_, AppState>,
+    agent_id: String,
+    url: Option<String>,
+) -> R<u32> {
+    state.browser.new_tab(&agent_id, url).map_err(e)
+}
+
+#[tauri::command]
+pub fn browser_tab_select(state: State<'_, AppState>, agent_id: String, tab: u32) {
+    state.browser.select_tab(&agent_id, tab);
+}
+
+#[tauri::command]
+pub fn browser_tab_close(state: State<'_, AppState>, agent_id: String, tab: u32) {
+    state.browser.close_tab(&agent_id, tab);
 }
 
 /// Open the file with the system's default app.

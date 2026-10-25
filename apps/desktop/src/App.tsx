@@ -6,6 +6,7 @@ import { ChatView } from "./components/chat/ChatView";
 import { AgentProfile } from "./components/panel/AgentProfile";
 import { GroupDetails } from "./components/panel/GroupDetails";
 import { ComputerPanel } from "./components/panel/ComputerPanel";
+import { ArtifactPanel } from "./components/panel/ArtifactPanel";
 import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
@@ -55,6 +56,22 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
+      // Escape in a chat goes back to the dashboard, unless something on top (a dialog, the search,
+      // a half-written message) should get the key first.
+      if (e.key === "Escape" && !e.defaultPrevented) {
+        const st = useStore.getState();
+        const el = e.target as HTMLElement | null;
+        const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+        const busy = st.settingsSection !== null || st.dialog !== null || st.searchOpen || st.call !== null || document.querySelector('[role="dialog"]');
+        if (st.selected && !busy) {
+          if (st.dm) st.closeDm();
+          else if (typing && (el as HTMLInputElement).value) (el as HTMLElement).blur();
+          else {
+            (el as HTMLElement | null)?.blur?.();
+            st.select(null);
+          }
+        }
+      }
       if (mod && e.key === ",") {
         e.preventDefault();
         useStore.getState().openSettings();
@@ -87,6 +104,7 @@ export default function App() {
       {panel === "profile" && agent && <AgentProfile key={selected} agent={agent} />}
       {panel === "group" && group && <GroupDetails key={selected} group={group} />}
       {panel === "computer" && agent && <ComputerPanel key={selected} agent={agent} />}
+      {panel === "artifact" && selected && <ArtifactPanel />}
       <CreateAgentDialog />
       <CreateGroupDialog />
       <SettingsModal />

@@ -29,6 +29,9 @@ pub const UPDATE_SOUL: &str = "update_soul";
 pub const UPDATE_PLAN: &str = "update_plan";
 pub const RESEARCH: &str = "research";
 pub const ASK_USER: &str = "ask_user";
+pub const CREATE_ARTIFACT: &str = "create_artifact";
+pub const READ_DASHBOARD: &str = "read_dashboard";
+pub const UPDATE_DASHBOARD: &str = "update_dashboard";
 pub const BROWSER_OPEN: &str = "browser_open";
 pub const BROWSER_SNAPSHOT: &str = "browser_snapshot";
 pub const BROWSER_CLICK: &str = "browser_click";
@@ -61,6 +64,8 @@ pub struct Capabilities {
     pub computer: ComputerBackend,
     pub email: bool,
     pub browser: bool,
+    /// This agent was given the dashboard page to edit.
+    pub dashboard: bool,
 }
 
 /// Everything an agent may call in one turn.
@@ -321,13 +326,51 @@ impl Toolbox {
                 }),
             ));
         }
+        specs.push(spec(
+            CREATE_ARTIFACT,
+            "Show the user something you made as an artifact: a side panel opens next to the chat and the file is kept in your Files. Use it for substantial, standalone content they will keep, edit or reuse (a page, a diagram, a document, a spreadsheet, a deck), not for short answers. \
+             Types and what `content` must be: html (a complete page with inline CSS and JS; no network except cdnjs, jsDelivr and unpkg scripts), svg (an <svg> image), markdown (a formatted text), mermaid (diagram source: flowchart, sequence, gantt…), code (source code; set `language`), text, json, csv, \
+             xlsx (JSON {\"sheets\":[{\"name\":\"Sales\",\"rows\":[[\"Item\",\"Qty\"],[\"Pen\",3],[\"Total\",\"=SUM(B2:B2)\"]]}]}; strings starting with = are formulas; the first row is the header), \
+             docx and pdf (Markdown: # headings, **bold**, lists, | tables |, ``` code), pptx (Markdown, slides separated by a line of ---: # title, - bullets, Notes: speaker notes). \
+             To change an artifact you made, call it again with its `artifact_id` and the COMPLETE new content: it becomes a new version.",
+            json!({
+                "type": "object",
+                "properties": {
+                    "title": { "type": "string", "description": "Short name shown on the card and used for the file name." },
+                    "type": { "type": "string", "enum": crate::artifacts::KINDS, "description": "Required for a new artifact." },
+                    "content": { "type": "string", "description": "The complete content, in the format of the type." },
+                    "language": { "type": "string", "description": "For type code: python, javascript, rust…" },
+                    "artifact_id": { "type": "string", "description": "Update this artifact (new version) instead of creating one." }
+                },
+                "required": ["content"]
+            }),
+        ));
+        if caps.dashboard {
+            specs.push(spec(
+                READ_DASHBOARD,
+                "Read the user's dashboard (the home screen page you were given) and how it receives live data. Call it before changing it.",
+                json!({ "type": "object", "properties": {} }),
+            ));
+            specs.push(spec(
+                UPDATE_DASHBOARD,
+                "Replace the user's dashboard with a new complete HTML page. Read it first with read_dashboard and keep what the user liked. Pass the full page.",
+                json!({
+                    "type": "object",
+                    "properties": { "html": { "type": "string", "description": "The complete HTML document." } },
+                    "required": ["html"]
+                }),
+            ));
+        }
         if caps.browser {
             specs.push(spec(
                 BROWSER_OPEN,
                 "Open a web page in your browser pane (the user watches it). Use it for sites that need real browsing: logins, forms, dashboards, pages built with JavaScript. For plain reading prefer web_fetch. The user may be asked to approve a new site.",
                 json!({
                     "type": "object",
-                    "properties": { "url": { "type": "string" } },
+                    "properties": {
+                        "url": { "type": "string" },
+                        "new_tab": { "type": "boolean", "description": "Open it in a new tab instead of the current one" }
+                    },
                     "required": ["url"]
                 }),
             ));

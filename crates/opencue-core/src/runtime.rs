@@ -182,6 +182,11 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
              and clear step-by-step Markdown instructions. Use what you know from this conversation and from their request. \
              If that tool is not available, tell them to turn Skills on in your profile. Confirm the skill's name when it is saved.\n\nRequest: {request}"
         ),
+        "dashboard" => format!(
+            "The user ran /dashboard. You are in charge of their dashboard (the home screen). Read the current page with `read_dashboard`, then rewrite it with `update_dashboard` \
+             (the complete HTML page) the way they ask: layout, colors, which numbers and lists to show, anything. If they asked for nothing specific, ask what they would like to see. \
+             Keep what already works. When it is saved, say in one sentence what changed.\n\nRequest: {request}"
+        ),
         name => match skill(name) {
             Some(k) => format!(
                 "The user ran the skill /{}. Follow it for this request.\n\n# Skill: {}\n\n{}\n\nUser request: {request}",
@@ -239,27 +244,76 @@ impl Core {
 
         if let Some(g) = &group {
             self.on_group_message(g, text).await;
-        } else if let Ok(all) = self.store.list_agents().await {
-            let names: Vec<String> = mentions(text, &all, Some(thread_id))
-                .into_iter()
-                .filter_map(|id| {
-                    all.iter()
-                        .find(|a| a.id == id)
-                        .map(|a| format!("@{}", a.name))
-                })
-                .collect();
-            if !names.is_empty() {
-                self.mention_hints.lock().unwrap().insert(
-                    thread_id.to_string(),
-                    format!(
-                        "The user mentioned {} in their message: use `send_to_agent` to ask them for what is needed, then answer the user with the result.",
-                        names.join(", ")
-                    ),
-                );
-            }
+        } else {
+            self.note_mentions(thread_id, text).await;
         }
         self.start_run(thread_id, group, text.to_string());
         Ok(msg)
+    }
+
+    /// When a 1:1 message names other agents, remind the agent to ask them.
+    async fn note_mentions(&self, thread_id: &str, text: &str) {
+        let Ok(all) = self.store.list_agents().await else {
+            return;
+        };
+        let names: Vec<String> = mentions(text, &all, Some(thread_id))
+            .into_iter()
+            .filter_map(|id| {
+                all.iter()
+                    .find(|a| a.id == id)
+                    .map(|a| format!("@{}", a.name))
+            })
+            .collect();
+        if !names.is_empty() {
+            self.mention_hints.lock().unwrap().insert(
+                thread_id.to_string(),
+                format!(
+                    "The user mentioned {} in their message: use `send_to_agent` to ask them for what is needed, then answer the user with the result.",
+                    names.join(", ")
+                ),
+            );
+        }
+    }
+
+    /// Answer the user's last message again: everything after it is dropped and the agents run
+    /// anew. With `text` the message is edited first (its files stay).
+    pub async fn regenerate_last(
+        self: &Arc<Self>,
+        thread_id: &str,
+        text: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let group = self.store.get_group(thread_id).await?;
+        if group.is_none() {
+            self.store.get_agent(thread_id).await?;
+        }
+        self.stop(thread_id);
+        let all = self.store.messages(thread_id, 100_000).await?;
+        let idx = all
+            .iter()
+            .rposition(|m| m.role == Role::User)
+            .ok_or_else(|| anyhow::anyhow!("there is no message to answer again"))?;
+        let mut user = all[idx].clone();
+        if let Some(t) = text {
+            let t = t.trim();
+            anyhow::ensure!(
+                !t.is_empty() || !user.attachments.is_empty(),
+                "message is empty"
+            );
+            user.content = t.to_string();
+            self.store
+                .set_message_content(&user.id, &user.content)
+                .await?;
+        }
+        let later: Vec<String> = all[idx + 1..].iter().map(|m| m.id.clone()).collect();
+        self.store.delete_messages(&later).await?;
+        if let Some(g) = &group {
+            self.on_group_message(g, &user.content).await;
+        } else {
+            self.note_mentions(thread_id, &user.content).await;
+        }
+        let content = user.content.clone();
+        self.start_run(thread_id, group, content);
+        Ok(())
     }
 
     /// Post a system event (automation, incoming email…) to an agent's chat and let it respond.
@@ -1319,6 +1373,10 @@ impl Core {
                     att.name,
                     crate::files::human_size(att.size)
                 ))
+            }
+            tools::CREATE_ARTIFACT => self.artifact_tool(thread_id, agent, args).await,
+            tools::READ_DASHBOARD | tools::UPDATE_DASHBOARD => {
+                self.dashboard_tool(agent, call.name.as_str(), args).await
             }
             tools::RESEARCH => {
                 let task =

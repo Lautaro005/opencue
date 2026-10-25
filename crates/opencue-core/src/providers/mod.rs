@@ -36,6 +36,10 @@ pub enum ProviderKind {
     MuseCli,
     Gemini,
     Muse,
+    MistralApi,
+    Groq,
+    VibeCli,
+    AntigravityCli,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -108,6 +112,26 @@ pub const CATALOG: &[ProviderInfo] = &[
         requires_key: true,
         supports_tools: true,
         note: "API key from dev.meta.ai (Muse Spark)",
+    },
+    ProviderInfo {
+        kind: ProviderKind::MistralApi,
+        label: "Mistral API",
+        api: ApiStyle::Openai,
+        default_base_url: Some("https://api.mistral.ai/v1"),
+        default_model: Some("mistral-large-latest"),
+        requires_key: true,
+        supports_tools: true,
+        note: "API key from console.mistral.ai",
+    },
+    ProviderInfo {
+        kind: ProviderKind::Groq,
+        label: "Groq",
+        api: ApiStyle::Openai,
+        default_base_url: Some("https://api.groq.com/openai/v1"),
+        default_model: Some("llama-3.3-70b-versatile"),
+        requires_key: true,
+        supports_tools: true,
+        note: "API key from console.groq.com (fast open models)",
     },
     ProviderInfo {
         kind: ProviderKind::Openrouter,
@@ -198,6 +222,26 @@ pub const CATALOG: &[ProviderInfo] = &[
         requires_key: false,
         supports_tools: false,
         note: "Uses your installed `muse` CLI (Meta Muse Code) and its login. Answers in text; OpenCue tools are not available.",
+    },
+    ProviderInfo {
+        kind: ProviderKind::VibeCli,
+        label: "Mistral via Vibe CLI",
+        api: ApiStyle::Cli,
+        default_base_url: None,
+        default_model: None,
+        requires_key: false,
+        supports_tools: false,
+        note: "Uses your installed `vibe` CLI (Mistral Vibe) and its login or MISTRAL_API_KEY. Answers in text; OpenCue tools are not available.",
+    },
+    ProviderInfo {
+        kind: ProviderKind::AntigravityCli,
+        label: "Gemini via Antigravity CLI",
+        api: ApiStyle::Cli,
+        default_base_url: None,
+        default_model: None,
+        requires_key: false,
+        supports_tools: false,
+        note: "Uses your installed `agy` CLI (Google Antigravity) and its Google login. Answers in text; OpenCue tools are not available.",
     },
     ProviderInfo {
         kind: ProviderKind::ClaudeCli,
@@ -445,6 +489,8 @@ pub fn build(
             ProviderKind::CodexCli => CliKind::Codex,
             ProviderKind::GrokCli => CliKind::Grok,
             ProviderKind::MuseCli => CliKind::Muse,
+            ProviderKind::VibeCli => CliKind::Vibe,
+            ProviderKind::AntigravityCli => CliKind::Antigravity,
             _ => CliKind::Claude,
         })),
     })
@@ -527,6 +573,24 @@ mod tests {
             info(ProviderKind::Cheaperinference).label,
             "CheaperInference"
         );
+    }
+
+    #[test]
+    fn mistral_groq_vibe_and_antigravity_are_in_the_catalog() {
+        assert_eq!(
+            info(ProviderKind::MistralApi).default_base_url,
+            Some("https://api.mistral.ai/v1")
+        );
+        assert_eq!(
+            info(ProviderKind::Groq).default_base_url,
+            Some("https://api.groq.com/openai/v1")
+        );
+        assert_eq!(info(ProviderKind::VibeCli).api, ApiStyle::Cli);
+        assert_eq!(info(ProviderKind::AntigravityCli).api, ApiStyle::Cli);
+        let kind: ProviderKind = serde_json::from_str("\"mistral_api\"").unwrap();
+        assert_eq!(kind, ProviderKind::MistralApi);
+        let kind: ProviderKind = serde_json::from_str("\"antigravity_cli\"").unwrap();
+        assert_eq!(kind, ProviderKind::AntigravityCli);
     }
 
     #[test]

@@ -2,6 +2,43 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.4.2 — 2026-10-25
+
+### New
+
+- **Artifacts** (like Claude's Artifacts and Canvas). An agent can now hand you something it made with `create_artifact`:
+  the chat shows a card and a side panel opens next to it with a **Preview** and a **Code** view, a version picker, copy
+  and save. Types: **HTML** (runs in a sandbox, scripts allowed), **SVG**, **Markdown**, **Mermaid** diagrams, **code**
+  (any language), text, JSON, CSV and real **Excel (.xlsx)**, **Word (.docx)**, **PowerPoint (.pptx)** and **PDF** files,
+  written by OpenCue itself. Asking for a change makes a new version. **Every version is a file in the agent's
+  profile → Files**, where the card opens the same panel.
+- **Dashboard.** The home screen (and the first thing you see): agents working right now, plans in progress, automations
+  with their next run, recent chats and usage. **Esc** inside a chat takes you back to it, and so does the new
+  **Dashboard** entry at the top of the sidebar.
+- **Make the dashboard yours.** Settings → General → **Dashboard**: pick the agent in charge, then run **`/dashboard`** in
+  its chat and say what you want to see. The page is plain HTML that the agent rewrites (`read_dashboard` /
+  `update_dashboard`); OpenCue feeds it live data. "Reset" brings back the built-in page.
+- **Copy, edit and regenerate.** Hover an agent's reply for a copy button. On your **last** message, hover for **Edit**
+  (it resends the edited text) and **Regenerate** (the agents answer again); everything after that message is replaced.
+- **Four new providers**: **Mistral API** (`api.mistral.ai`, with Mistral's nine-character tool-call ids and reasoning
+  chunks handled), **Groq** (`api.groq.com/openai/v1`), **Mistral Vibe CLI** (your installed, signed-in `vibe`) and
+  **Antigravity CLI** (your installed, signed-in `agy`, Google's successor to the Gemini CLI). The two CLIs answer in
+  text, like the Grok CLI. Speech, embedding and moderation models are left out of their model lists.
+- **Logos for every provider** in Settings → Providers and in the first-run walkthrough, in place of the generic icons
+  (the API and the CLI of one company share their logo).
+- **Browser tabs.** The built-in browser has a tab strip: open, switch and close pages (an agent can open one in a
+  new tab with `browser_open` + `new_tab`).
+
+### Changed
+
+- The app opens on the dashboard instead of the first chat.
+- Site: Mistral (one logo for the API and Vibe), Groq and Antigravity join the provider logos.
+
+### Fixed
+
+- **Built-in browser header.** On macOS the page was drawn about one title-bar too high and covered the address bar and
+  back / forward buttons as soon as a page loaded; the position now accounts for the title bar.
+
 ## 0.4.1 — 2026-10-21
 
 ### New

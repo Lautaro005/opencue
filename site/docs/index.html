@@ -39,6 +39,8 @@
         <a href="#memory">Instructions &amp; memory</a>
         <a href="#groups">Group chats</a>
         <a href="#files">Files</a>
+        <a href="#artifacts">Artifacts</a>
+        <a href="#dashboard">Dashboard</a>
         <a href="#approvals">Approvals</a>
         <div class="group">Capabilities</div>
         <a href="#apps">Apps, MCP &amp; Catalog</a>
@@ -98,9 +100,9 @@
         <p>Every agent uses one provider and model, picked when you create it or later in its profile → <strong>Model</strong>. <strong>Settings → Providers</strong> shows a container for every supported provider; click one to connect it. <strong>Settings → Models</strong> lists the models of the providers that are ready — search them and switch off the ones that shouldn't appear in pickers; the star sets a provider's default model.</p>
         <table>
           <tr><th>Provider</th><th>How it signs in</th></tr>
-          <tr><td>OpenAI, Anthropic, xAI (Grok), OpenRouter, CheaperInference, Ollama Cloud</td><td>API key, stored on this computer (<code>secrets.json</code>, mode 0600)</td></tr>
+          <tr><td>OpenAI, Anthropic, xAI (Grok), Google Gemini, Meta Muse, Mistral, Groq, OpenRouter, CheaperInference, Ollama Cloud</td><td>API key, stored on this computer (<code>secrets.json</code>, mode 0600)</td></tr>
           <tr><td>Ollama, LM Studio, any OpenAI-compatible server</td><td>Base URL, no key needed for local servers</td></tr>
-          <tr><td>ChatGPT / Codex, Claude Code, Grok Build, Muse Code</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code>, <code>claude</code>, <code>grok</code> or <code>muse</code> program you are already logged in to (Grok and Muse answer in text only). Models listed are the ones each CLI accepts.</td></tr>
+          <tr><td>ChatGPT / Codex, Claude Code, Grok Build, Muse Code, Mistral Vibe, Antigravity</td><td>“Backend CLI”: OpenCue runs the official <code>codex</code>, <code>claude</code>, <code>grok</code>, <code>muse</code>, <code>vibe</code> or <code>agy</code> program you are already logged in to (Grok, Muse, Vibe and Antigravity answer in text only). Models listed are the ones each CLI accepts. Vibe also reads <code>MISTRAL_API_KEY</code> and Antigravity signs in with your Google account in the browser the first time you run it.</td></tr>
         </table>
         <p>Why the CLI route? OpenAI and Anthropic don't offer sign-in for third-party apps with consumer subscriptions, and copying their tokens breaks their terms. Running the official CLI keeps your subscription inside the official client.</p>
         <h3>OpenCue tools for CLI agents</h3>
@@ -144,6 +146,26 @@
         </ul>
         <p>Files are kept in the <code>files/</code> folder of your data folder.</p>
 
+        <h2 id="artifacts">Artifacts</h2>
+        <p>When you ask for something substantial — a page or small app, a diagram, a report, a spreadsheet, a deck, a script — the agent makes it with <code>create_artifact</code> instead of pasting it in the chat. The chat shows a card and a panel opens next to it, with a <strong>Preview</strong> and a <strong>Code</strong> view, a version picker, copy and <em>Save as…</em>.</p>
+        <table>
+          <tr><th>Type</th><th>What you get</th></tr>
+          <tr><td>HTML</td><td>The page running in a sandbox: scripts and styles work, but it cannot reach the network (only cdnjs, jsDelivr and unpkg scripts load) or the app.</td></tr>
+          <tr><td>SVG, Markdown, Mermaid</td><td>An image, a formatted document and a drawn diagram (flowcharts, sequences, Gantt…).</td></tr>
+          <tr><td>Code, text, JSON, CSV</td><td>The file with the right extension for the language; CSV is also shown as a table.</td></tr>
+          <tr><td>Excel (.xlsx)</td><td>A real workbook with several sheets, a bold header row and formulas (text starting with <code>=</code>).</td></tr>
+          <tr><td>Word (.docx), PDF</td><td>Real files made from Markdown: headings, bold and italic, lists, tables and code blocks.</td></tr>
+          <tr><td>PowerPoint (.pptx)</td><td>A 16:9 deck made from Markdown, one slide per section split by <code>---</code>.</td></tr>
+        </table>
+        <ul>
+          <li>Asking for a change makes a <strong>new version</strong>; the old ones stay selectable in the panel.</li>
+          <li>Every version is a file in the agent's profile → <strong>Files</strong>, where clicking it opens the same panel. The Word, Excel, PowerPoint and PDF previews are drawn from the text the agent sent, so they show the content, not Office's exact layout.</li>
+        </ul>
+
+        <h2 id="dashboard">Dashboard</h2>
+        <p>The home screen shows what is going on: the agents working right now, plans in progress, automations with their next run, recent chats and usage. Click the <strong>Dashboard</strong> entry at the top of the sidebar, or press <kbd>Esc</kbd> inside a chat, to come back to it (a half-written message keeps its first <kbd>Esc</kbd> for itself).</p>
+        <p>The page is plain HTML. To make it yours, go to <strong>Settings → General → Dashboard</strong> and pick the agent in charge; then run <code>/dashboard</code> in that agent's chat and say what you want (“big numbers on top, my automations as a list, dark colors”). The agent reads the current page with <code>read_dashboard</code> and rewrites it with <code>update_dashboard</code>; OpenCue sends the page live data as a window message. <em>Reset</em> goes back to the built-in page. The page runs in a sandbox with no network access.</p>
+
         <h2 id="approvals">Approvals</h2>
         <p>In <strong>Ask first</strong> mode (the default) these wait for you to click Allow in the chat:</p>
         <ul>
@@ -185,7 +207,9 @@ description: Write the Friday status report from this week's notes and emails.
 3. Write a short report with Done / Next / Blocked.</code></pre>
         <p>Agents see each skill's name and description and load the full instructions with <code>use_skill</code> when a task matches. Create and edit skills in <strong>Settings → Skills</strong>, import one from a URL (GitHub links work), or let an agent save one with <code>save_skill</code> after you teach it something. Skills live in the <code>skills/</code> folder and are shared by all agents; turn them off per agent in its Skills page.</p>
         <h3>Slash commands</h3>
-        <p>Type <code>/</code> in the chat input to list commands; arrows and Enter pick one. Every installed skill is a command (<code>/weekly-report for this month</code> loads it and follows it). Two are built in: <code>/create-automation</code> makes the agent create an automation for itself (a schedule or new-email trigger; it asks first in Ask-first mode) and <code>/create-skill</code> makes it write a reusable skill from what you described.</p>
+        <p>Type <code>/</code> in the chat input to list commands; arrows and Enter pick one. Every installed skill is a command (<code>/weekly-report for this month</code> loads it and follows it). Three are built in: <code>/create-automation</code> makes the agent create an automation for itself (a schedule or new-email trigger; it asks first in Ask-first mode), <code>/create-skill</code> makes it write a reusable skill from what you described, and <code>/dashboard</code> (only for the agent in charge of the dashboard) has it redesign your home screen.</p>
+        <h3>Copy, edit and regenerate</h3>
+        <p>Hover an agent's reply for a copy button. On your <em>last</em> message, hover for <strong>Edit</strong> (resends the edited text) and <strong>Regenerate</strong> (the agents answer again); the answer after it is replaced.</p>
 
         <h2 id="email">Email</h2>
         <p>Profile → <strong>Mails</strong> → Add. Two account types:</p>
@@ -247,6 +271,7 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
         <h2 id="browser">Built-in browser</h2>
         <p>Turn on <strong>Browser</strong> in an agent's <strong>Computer</strong> page and the agent can use a browser pane: <code>browser_open</code>, <code>browser_snapshot</code> (the page text and a numbered list of what can be clicked or typed into), <code>browser_click</code>, <code>browser_type</code> and <code>browser_close</code>. The Computer panel opens by itself on its <strong>Browser</strong> tab (next to the VM; the terminal is always below) so you watch it work, and you can type an address or log in yourself.</p>
         <ul>
+          <li>A tab strip lets you open, switch and close pages; agents can open a page in a new tab.</li>
           <li>The pane has its own cookies and storage, separate from your browsers; <em>Clear browsing data</em> wipes them.</li>
           <li>In <em>Ask first</em> mode a new site asks first. Only public http/https pages open, and the agent never types passwords: it asks you to.</li>
           <li>It uses your system's web engine (WebKit or WebView2), so a few sites may look slightly different from Chrome.</li>

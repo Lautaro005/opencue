@@ -4,12 +4,13 @@ import type { SharedFile } from "../../lib/types";
 import { api } from "../../lib/api";
 import { formatBytes, shortTime } from "../../lib/format";
 import { useStore } from "../../lib/store";
-import { FileActions, FileIcon } from "../chat/Attachments";
+import { ArtifactIcon, FileActions, FileIcon } from "../chat/Attachments";
 
 /** Files shared in a chat (by the user or by agents), newest first. */
 export function SharedFiles({ threadId }: { threadId: string }) {
   const { t } = useTranslation();
   const agents = useStore((s) => s.agents);
+  const openArtifact = useStore((s) => s.openArtifact);
   const count = useStore((s) => s.messages[threadId]?.length ?? 0);
   const [files, setFiles] = useState<SharedFile[] | null>(null);
 
@@ -28,14 +29,18 @@ export function SharedFiles({ threadId }: { threadId: string }) {
           key={f.attachment.id}
           role="button"
           tabIndex={0}
-          onClick={() => void api.openAttachment(f.attachment.id).catch((e) => useStore.getState().showToast(String(e)))}
+          onClick={() => {
+            const art = f.attachment.artifact;
+            if (art) openArtifact(art.id, art.version);
+            else void api.openAttachment(f.attachment.id).catch((e) => useStore.getState().showToast(String(e)));
+          }}
           className="group/file flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 hover:bg-hover"
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
-            <FileIcon a={f.attachment} size={16} />
+            {f.attachment.artifact ? <ArtifactIcon kind={f.attachment.artifact.kind} size={16} /> : <FileIcon a={f.attachment} size={16} />}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px]">{f.attachment.name}</span>
+            <span className="block truncate text-[13px]">{f.attachment.artifact ? `${f.attachment.artifact.title} · v${f.attachment.artifact.version}` : f.attachment.name}</span>
             <span className="block truncate text-[11.5px] text-muted">
               {formatBytes(f.attachment.size)} · {f.agent_id ? agents[f.agent_id]?.name ?? "" : t("files.you")} · {shortTime(f.created_at)}
             </span>

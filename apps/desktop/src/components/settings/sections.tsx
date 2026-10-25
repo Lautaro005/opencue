@@ -1,14 +1,84 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { RefreshCw, Search } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, checkForUpdate, openUrl } from "../../lib/api";
+import { confirmDialog } from "../../lib/confirm";
 import type { AppInfo, CliLimits, MemoryEntry, UsageRow } from "../../lib/types";
 import { compact, cx } from "../../lib/format";
 import { LANGUAGES, setLanguage } from "../../i18n";
 import { getTheme, setTheme, type Theme } from "../../lib/theme";
 import { Button, IconButton, Input, Select, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
+
+/** Who edits the dashboard (the page on the home screen) and how to ask for changes. */
+function DashboardCard() {
+  const { t } = useTranslation();
+  const agentMap = useStore((s) => s.agents);
+  const agents = useMemo(() => Object.values(agentMap), [agentMap]);
+  const settings = useStore((s) => s.settings);
+  const setSetting = useStore((s) => s.setSetting);
+  const select = useStore((s) => s.select);
+  const closeSettings = useStore((s) => s.closeSettings);
+  const [custom, setCustom] = useState(false);
+  const chosen = agents.find((a) => a.id === settings.dashboard_agent);
+  const load = () => void api.dashboardInfo().then((i) => setCustom(!i.is_default)).catch(() => {});
+  useEffect(() => {
+    load();
+    window.addEventListener("opencue:dashboard-changed", load);
+    return () => window.removeEventListener("opencue:dashboard-changed", load);
+  }, []);
+  return (
+    <Card title={t("settings.general.dashboard")}>
+      <CardRow label={t("settings.general.dashboardAgent")} hint={t("settings.general.dashboardAgentHint")}>
+        <Select
+          className="w-44"
+          value={chosen?.id ?? ""}
+          onChange={(v) => void setSetting("dashboard_agent", v)}
+          options={[{ value: "", label: t("settings.general.dashboardNone") }, ...agents.map((a) => ({ value: a.id, label: a.name }))]}
+        />
+      </CardRow>
+      <CardRow label={custom ? t("settings.general.dashboardCustom") : t("settings.general.dashboardBuiltIn")} hint={chosen ? t("settings.general.dashboardHowTo", { name: chosen.name }) : t("settings.general.dashboardPick")}>
+        <div className="flex items-center gap-2">
+          {chosen && (
+            <Button
+              size="sm"
+              onClick={() => {
+                closeSettings();
+                select(chosen.id);
+                useStore.getState().setPrefill("/dashboard ");
+              }}
+            >
+              /dashboard
+            </Button>
+          )}
+          {custom && (
+            <Button
+              size="sm"
+              onClick={async () => {
+                if (await confirmDialog(t("settings.general.dashboardResetConfirm"), { danger: false, confirmLabel: t("settings.general.dashboardReset") })) {
+                  await api.resetDashboard();
+                  load();
+                }
+              }}
+            >
+              {t("settings.general.dashboardReset")}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            onClick={() => {
+              closeSettings();
+              select(null);
+            }}
+          >
+            {t("settings.general.dashboardOpen")}
+          </Button>
+        </div>
+      </CardRow>
+    </Card>
+  );
+}
 
 export function GeneralSection() {
   const { t, i18n } = useTranslation();
@@ -64,6 +134,7 @@ export function GeneralSection() {
           <Toggle checked={settings.auto_open_computer !== "false"} onChange={(v) => void setSetting("auto_open_computer", String(v))} />
         </CardRow>
       </Card>
+      <DashboardCard />
       <Card title={t("settings.general.sharedMemory")}>
         <CardRow label={t("settings.general.sharedMemoryToggle")} hint={t("settings.general.sharedMemoryHint")}>
           <Toggle checked={sharedOn} onChange={(v) => void setSetting("global_memory_enabled", String(v))} />

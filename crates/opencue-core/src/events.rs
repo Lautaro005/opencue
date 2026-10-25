@@ -59,6 +59,8 @@ pub enum CoreEvent {
         agent_id: String,
     },
     AutomationsChanged,
+    /// The dashboard page was rewritten (or reset).
+    DashboardChanged,
     /// Output from a command running on an agent's computer.
     ComputerOutput {
         agent_id: String,

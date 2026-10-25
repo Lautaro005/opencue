@@ -571,3 +571,181 @@ async fn an_agent_can_talk_to_another_one_without_a_group() {
     assert!(core.store.messages(&boss.id, 50).await.unwrap().is_empty());
     assert!(core.store.messages(&dm, 50).await.unwrap().is_empty());
 }
+
+async fn quiet_agent(core: &Arc<Core>, provider: Option<String>) -> opencue_core::models::Agent {
+    core.create_agent(NewAgent {
+        name: "Maker".into(),
+        provider_id: provider,
+        settings: Some(opencue_core::models::AgentSettings {
+            auto_memory: false,
+            auto_profile: false,
+            ..Default::default()
+        }),
+        ..Default::default()
+    })
+    .await
+    .unwrap()
+}
+
+#[tokio::test]
+async fn artifacts_are_files_with_versions() {
+    use serde_json::json;
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let agent = quiet_agent(&core, None).await;
+
+    let made = core
+        .call_external_tool(
+            &agent.id,
+            "create_artifact",
+            json!({ "title": "Sales table", "type": "xlsx", "content": r#"{"sheets":[{"name":"Q1","rows":[["Item","Qty"],["Pen",3]]}]}"# }),
+        )
+        .await
+        .unwrap();
+    let id = made
+        .split("artifact_id \"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_string();
+    core.call_external_tool(
+        &agent.id,
+        "create_artifact",
+        json!({ "artifact_id": id, "content": r#"{"rows":[["Item","Qty"],["Pen",4]]}"# }),
+    )
+    .await
+    .unwrap();
+
+    let artifact = core.get_artifact(&id).unwrap();
+    assert_eq!(artifact.kind, "xlsx");
+    assert_eq!(artifact.versions.len(), 2);
+    assert_eq!(artifact.versions[1].attachment.name, "sales-table-v2.xlsx");
+    // Every version is a real file that also shows up in the agent's Files.
+    let files = core.thread_files(&agent.id).await.unwrap();
+    assert_eq!(files.len(), 2);
+    let (att, bytes) = core
+        .read_attachment(&artifact.versions[0].attachment.id)
+        .await
+        .unwrap();
+    assert_eq!(att.artifact.as_ref().unwrap().version, 1);
+    assert!(bytes.starts_with(b"PK"));
+    assert_eq!(core.list_artifacts(&agent.id).len(), 1);
+
+    // Bad input is refused with a reason the agent can act on.
+    let err = core
+        .call_external_tool(
+            &agent.id,
+            "create_artifact",
+            json!({ "title": "x", "type": "json", "content": "{nope" }),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("not valid JSON"));
+    let err = core
+        .call_external_tool(
+            &agent.id,
+            "create_artifact",
+            json!({ "artifact_id": id, "type": "pdf", "content": "# x" }),
+        )
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("keeps its type"));
+}
+
+#[tokio::test]
+async fn only_the_chosen_agent_edits_the_dashboard() {
+    use serde_json::json;
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let agent = quiet_agent(&core, None).await;
+    let other = quiet_agent(&core, None).await;
+
+    assert!(core.dashboard_is_default());
+    assert!(core
+        .call_external_tool(&agent.id, "update_dashboard", json!({ "html": "<p>x</p>" }))
+        .await
+        .is_err());
+
+    core.store
+        .set_setting("dashboard_agent", &agent.id)
+        .await
+        .unwrap();
+    let page = core
+        .call_external_tool(&agent.id, "read_dashboard", json!({}))
+        .await
+        .unwrap();
+    assert!(page.contains("opencue:data"));
+    core.call_external_tool(
+        &agent.id,
+        "update_dashboard",
+        json!({ "html": "<h1>Mine</h1>" }),
+    )
+    .await
+    .unwrap();
+    assert_eq!(core.dashboard_html(), "<h1>Mine</h1>");
+    assert!(!core.dashboard_is_default());
+    assert!(core
+        .call_external_tool(&other.id, "update_dashboard", json!({ "html": "<p>y</p>" }))
+        .await
+        .is_err());
+
+    let data = core.dashboard_data().await.unwrap();
+    assert_eq!(data["agents"]["total"], 2);
+    assert_eq!(data["agents"]["running"], 0);
+    assert!(data["tasks"].as_array().unwrap().is_empty());
+
+    core.reset_dashboard().unwrap();
+    assert!(core.dashboard_is_default());
+}
+
+#[tokio::test]
+async fn regenerating_drops_the_old_answer_and_edits_the_question() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let (base, _hits) = mock_llm().await;
+    let provider = core
+        .save_provider(
+            ProviderConfig {
+                id: String::new(),
+                kind: ProviderKind::OpenaiCompatible,
+                name: "Mock".into(),
+                base_url: Some(base),
+                default_model: Some("mock-1".into()),
+                enabled: true,
+                has_key: false,
+            },
+            None,
+        )
+        .await
+        .unwrap();
+    let agent = quiet_agent(&core, Some(provider.id)).await;
+
+    async fn wait_idle(core: &Arc<Core>, id: &str) {
+        let mut events = core.subscribe();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while core.is_busy(id) {
+                let _ = events.recv().await;
+            }
+        })
+        .await
+        .expect("run finished");
+    }
+
+    core.send_message(&agent.id, "first question")
+        .await
+        .unwrap();
+    wait_idle(&core, &agent.id).await;
+    assert_eq!(core.store.messages(&agent.id, 50).await.unwrap().len(), 4);
+
+    core.regenerate_last(&agent.id, Some("edited question"))
+        .await
+        .unwrap();
+    wait_idle(&core, &agent.id).await;
+    let msgs = core.store.messages(&agent.id, 50).await.unwrap();
+    let roles: Vec<Role> = msgs.iter().map(|m| m.role.clone()).collect();
+    assert_eq!(roles, vec![Role::User, Role::Assistant]);
+    assert_eq!(msgs[0].content, "edited question");
+    assert_eq!(msgs[1].content, "Noted, you like green tea.");
+}

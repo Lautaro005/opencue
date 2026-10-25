@@ -33,6 +33,7 @@ export function Composer({
   const [sub, setSub] = useState<"agents" | "skills" | null>(null);
   const [mention, setMention] = useState<{ query: string; index: number } | null>(null);
   const [slashIndex, setSlashIndex] = useState(0);
+  const dashboardAgent = useStore((s) => s.settings.dashboard_agent);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
@@ -92,11 +93,25 @@ export function Composer({
     ref.current?.focus();
   }, [name]);
 
+  // Something (Settings → Dashboard) asked for a starting text.
+  const prefill = useStore((s) => s.prefill);
+  useEffect(() => {
+    if (prefill === null) return;
+    setText(prefill);
+    useStore.getState().setPrefill(null);
+    requestAnimationFrame(() => {
+      const el = ref.current;
+      el?.focus();
+      el?.setSelectionRange(prefill.length, prefill.length);
+    });
+  }, [prefill]);
+
   // "/" at the start of the message opens the command list: built-ins first, then skills.
   const slashMatch = text.match(/^\/([\w-]*)$/);
   const commands: { name: string; description: string; kind: "builtin" | "skill" }[] = [
     { name: "create-automation", description: t("slash.createAutomation"), kind: "builtin" },
     { name: "create-skill", description: t("slash.createSkill"), kind: "builtin" },
+    ...(dashboardAgent === threadId ? [{ name: "dashboard", description: t("slash.dashboard"), kind: "builtin" as const }] : []),
     ...skills.map((k) => ({ name: k.name, description: k.description, kind: "skill" as const })),
   ];
   const slashQuery = slashMatch?.[1].toLowerCase() ?? "";

@@ -65,7 +65,7 @@ enum ProvidersCmd {
     List,
     /// Add a provider, e.g. `providers add anthropic --key sk-...`
     Add {
-        /// openai | anthropic | xai | openrouter | cheaperinference | ollama | ollama_cloud | lmstudio | openai_compatible | codex_cli | claude_cli | grok_cli | muse_cli | gemini | muse
+        /// openai | anthropic | xai | openrouter | cheaperinference | ollama | ollama_cloud | lmstudio | openai_compatible | codex_cli | claude_cli | grok_cli | muse_cli | gemini | muse | mistral_api | groq | vibe_cli | antigravity_cli
         kind: String,
         #[arg(long)]
         name: Option<String>,

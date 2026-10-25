@@ -76,10 +76,15 @@ creates your first agent. Replay it any time from **Settings → General**.
     <td valign="top"><b>🎙️ Talk &amp; chat</b><br>ElevenLabs voice and calls, and WhatsApp: link a number with a QR and an agent answers its chats.</td>
     <td valign="top"><b>🌐 Browse</b><br>Free web search (DuckDuckGo, Wikipedia, optional SearXNG), page → Markdown, and a built-in browser pane agents can click and type in while you watch.</td>
   </tr>
+  <tr>
+    <td valign="top"><b>🧱 Make things (Artifacts)</b><br>Agents hand you web pages, diagrams, code, and real <code>.xlsx</code>, <code>.docx</code>, <code>.pptx</code> and <code>.pdf</code> files in a side panel, with versions. Each one is kept in the agent's Files.</td>
+    <td valign="top"><b>📊 Start from a dashboard</b><br>A home screen with what is running, plans, automations and usage. Press <code>Esc</code> in any chat to return, and run <code>/dashboard</code> to have an agent redesign it in HTML.</td>
+  </tr>
 </table>
 
-**Bring your own model:** OpenAI, Anthropic, xAI (Grok), Google Gemini, Meta Muse, OpenRouter, CheaperInference, Ollama (local and cloud),
-LM Studio, any OpenAI-compatible API — or the **Codex**, **Claude Code**, **Grok** and **Muse Code** CLIs you're already signed in to.
+**Bring your own model:** OpenAI, Anthropic, xAI (Grok), Google Gemini, Meta Muse, Mistral, Groq, OpenRouter, CheaperInference,
+Ollama (local and cloud), LM Studio, any OpenAI-compatible API — or the **Codex**, **Claude Code**, **Grok**, **Muse Code**,
+**Mistral Vibe** and **Antigravity** CLIs you're already signed in to.
 
 **Safe by default:** in *Ask first* mode, sending email, commands on your machine, deletions and data-changing tools wait
 for your OK. No account, no telemetry; secrets stay in a private file on your computer.
@@ -89,7 +94,7 @@ Not planned: phone numbers, payments/wallet, QR "scan & create".
 ### ChatGPT and Claude subscriptions, the allowed way
 
 OpenAI and Anthropic don't offer third-party sign-in for consumer subscriptions, and reusing their tokens elsewhere breaks
-their terms. OpenCue runs **your installed, logged-in** `codex`, `claude`, `grok` or `muse` binary instead, so your subscription stays in
+their terms. OpenCue runs **your installed, logged-in** `codex`, `claude`, `grok`, `muse`, `vibe` or `agy` binary instead, so your subscription stays in
 the official client and OpenCue never sees the tokens. Those agents still get OpenCue's tools — memory, web, skills,
 computer, files, email, catalog apps — through a local MCP server (`opencue mcp-serve --agent <id>`).
 
@@ -187,6 +192,10 @@ Changes to `site/` deploy the website.
   weekly limits of your Codex and Claude Code subscriptions.
 - [x] **0.4.1**: Google Gemini, Meta Muse (API and Muse Code CLI), complete templates (soul, skills, memories), agent chat
   cards in each agent's color, one browser page per agent and a reliable test notification.
+- [x] **0.4.2**: Artifacts (HTML, SVG, Markdown, Mermaid, code, and real Excel, Word, PowerPoint and PDF files, with
+  versions, kept in each agent's Files), a dashboard home screen with `Esc` to return and `/dashboard` to redesign it,
+  copy / edit / regenerate on messages, Mistral API, Groq, Mistral Vibe and Antigravity providers with their logos, and
+  browser tabs.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

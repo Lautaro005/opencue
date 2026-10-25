@@ -101,6 +101,7 @@ impl Core {
             mime: mime_for(&name).to_string(),
             size: bytes.len() as u64,
             name,
+            artifact: None,
         };
         let path = self.paths().attachment_file(&att.id, &att.name);
         if let Some(dir) = path.parent() {
@@ -236,6 +237,7 @@ impl Core {
             mime: mime_for(&name).to_string(),
             size: bytes.len() as u64,
             name,
+            artifact: None,
         };
         let path = self.paths().attachment_file(&att.id, &att.name);
         if let Some(dir) = path.parent() {

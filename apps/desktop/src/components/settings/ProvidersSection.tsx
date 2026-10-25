@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, KeyRound, Plus, Server, Terminal, Trash2 } from "lucide-react";
+import { Check, Plus, Trash2 } from "lucide-react";
+import { ProviderLogo } from "../ProviderLogo";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
@@ -9,12 +10,6 @@ import type { ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Spinner, Toggle } from "../ui";
 import { PageTitle } from "./SettingsModal";
-
-function Icon({ info, size = 16 }: { info?: ProviderInfo; size?: number }) {
-  if (info?.api === "cli") return <Terminal size={size} />;
-  if (info && !info.requires_key) return <Server size={size} />;
-  return <KeyRound size={size} />;
-}
 
 /** One container per provider the app supports; click one to set it up. */
 export function ProvidersSection() {
@@ -48,8 +43,8 @@ export function ProvidersSection() {
               )}
             >
               <span className="flex w-full items-center gap-2.5">
-                <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", ready ? "bg-accent-soft text-accent" : "bg-hover text-muted")}>
-                  <Icon info={info} />
+                <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", ready ? "bg-accent-soft" : "bg-hover")}>
+                  <ProviderLogo kind={info.kind} size={18} />
                 </span>
                 <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{provider && provider.kind === "openai_compatible" ? provider.name : info.label}</span>
                 {provider ? (

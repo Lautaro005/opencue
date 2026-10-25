@@ -1,7 +1,8 @@
 // In-browser stand-in for the Rust core, used by `npm run dev` outside Tauri so the UI can be
 // developed and previewed. Data lives in memory only.
 
-import type { Agent, Automation, CoreEvent, EmailAccount, Group, McpServerConfig, Message, ProviderConfig, ProviderInfo } from "./types";
+import dashboardHtml from "../../../../crates/opencue-core/src/dashboard_default.html?raw";
+import type { Agent, Artifact, ArtifactKind, Attachment, Automation, CoreEvent, EmailAccount, Group, McpServerConfig, Message, ProviderConfig, ProviderInfo } from "./types";
 
 const listeners = new Set<(ev: CoreEvent) => void>();
 const emit = (ev: CoreEvent) => listeners.forEach((l) => l(ev));
@@ -95,6 +96,8 @@ const catalog: ProviderInfo[] = [
   { kind: "xai", label: "xAI (Grok)", api: "openai", default_base_url: "https://api.x.ai/v1", default_model: "grok-4", requires_key: true, supports_tools: true, note: "API key from console.x.ai" },
   { kind: "gemini", label: "Google (Gemini API)", api: "openai", default_base_url: "https://generativelanguage.googleapis.com/v1beta/openai", default_model: "gemini-3-flash-preview", requires_key: true, supports_tools: true, note: "API key from aistudio.google.com (Gemini's OpenAI-compatible endpoint)" },
   { kind: "muse", label: "Meta (Muse API)", api: "openai", default_base_url: "https://api.meta.ai/v1", default_model: "muse-spark-1.3", requires_key: true, supports_tools: true, note: "API key from dev.meta.ai (Muse Spark)" },
+  { kind: "mistral_api", label: "Mistral API", api: "openai", default_base_url: "https://api.mistral.ai/v1", default_model: "mistral-large-latest", requires_key: true, supports_tools: true, note: "API key from console.mistral.ai" },
+  { kind: "groq", label: "Groq", api: "openai", default_base_url: "https://api.groq.com/openai/v1", default_model: "llama-3.3-70b-versatile", requires_key: true, supports_tools: true, note: "API key from console.groq.com (fast open models)" },
   { kind: "openrouter", label: "OpenRouter", api: "openai", default_base_url: "https://openrouter.ai/api/v1", default_model: "openrouter/auto", requires_key: true, supports_tools: true, note: "Hundreds of models behind one key" },
   { kind: "cheaperinference", label: "CheaperInference", api: "openai", default_base_url: "https://api.cheaperinference.com/v1", default_model: null, requires_key: true, supports_tools: true, note: "Flat-rate open models" },
   { kind: "ollama", label: "Ollama (local)", api: "openai", default_base_url: "http://localhost:11434/v1", default_model: "llama3.2", requires_key: false, supports_tools: true, note: "Runs models on this machine" },
@@ -104,6 +107,8 @@ const catalog: ProviderInfo[] = [
   { kind: "codex_cli", label: "ChatGPT via Codex CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed codex CLI login" },
   { kind: "grok_cli", label: "Grok via Grok Build CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed grok CLI login" },
   { kind: "muse_cli", label: "Muse via Muse Code CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed muse CLI login" },
+  { kind: "vibe_cli", label: "Mistral via Vibe CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed vibe CLI login" },
+  { kind: "antigravity_cli", label: "Gemini via Antigravity CLI", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed agy CLI login" },
   { kind: "claude_cli", label: "Claude via Claude Code", api: "cli", default_base_url: null, default_model: null, requires_key: false, supports_tools: false, note: "Uses your installed claude CLI login" },
 ];
 
@@ -122,6 +127,8 @@ function threads() {
   return rows.sort((a, b) => (b.last_at ?? "").localeCompare(a.last_at ?? ""));
 }
 
+const artifacts: Record<string, Artifact> = {};
+
 async function simulateReply(threadId: string, text: string) {
   // Preview-only triggers for the cards that need a real agent to show up.
   if (/^\/(ask|permission)\b/.test(text)) {
@@ -138,6 +145,28 @@ async function simulateReply(threadId: string, text: string) {
         options: permission ? [] : ["cue-agents", "personal"],
       },
     });
+    return;
+  }
+  // Preview-only: "/artifact html|xlsx|pptx|mermaid|docx|code" shows what an agent-made file looks like.
+  const art = text.match(/^\/artifact\s*(\w+)?/);
+  if (art) {
+    const kind = (art[1] ?? "html") as ArtifactKind;
+    const samples: Record<string, [string, string]> = {
+      html: ["Habit tracker", "<!doctype html><html><body style=\"font-family:system-ui;padding:24px\"><h1>Habits</h1><button id=b>+1 day</button> <b id=n>0</b><script>b.onclick=()=>n.textContent=+n.textContent+1</script></body></html>"],
+      xlsx: ["Sales table", JSON.stringify({ sheets: [{ name: "Q1", rows: [["Item", "Qty", "Price"], ["Pen", 3, 1.5], ["Book", 10, 12], ["Total", "=SUM(B2:B3)", ""]] }, { name: "Notes", rows: [["Prices in USD"]] }] })],
+      pptx: ["Launch plan", "# Launch plan\n---\n# Goals\n- Ship **fast**\n- Keep quality\nNotes: keep it short\n---\n# Next steps\n- Review\n- Release"],
+      mermaid: ["Release flow", "flowchart LR\n  A[Idea] --> B{Ready?}\n  B -- yes --> C[Ship]\n  B -- no --> A"],
+      docx: ["Quarterly report", "# Quarterly report\n\nRevenue grew **12%**.\n\n- North\n- South\n\n| Region | Sales |\n|---|---|\n| North | 10 |"],
+      code: ["Fibonacci", "def fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)"],
+    };
+    const [title, source] = samples[kind] ?? samples.html;
+    const aid = id();
+    const att: Attachment = { id: id(), name: `${title.toLowerCase().replace(/\s+/g, "-")}.${kind}`, mime: "text/plain", size: source.length, artifact: { id: aid, version: 1, kind, title } };
+    artifacts[aid] = { id: aid, thread_id: threadId, agent_id: threadId, title, kind, language: kind === "code" ? "python" : null, versions: [{ version: 1, attachment: att, created_at: new Date().toISOString(), source }] };
+    const m = msg(threadId, "assistant", "", 0, threadId);
+    m.attachments = [att];
+    messages.push(m);
+    emit({ type: "message", message: { ...m } });
     return;
   }
   if (text.startsWith("/dm")) {
@@ -203,7 +232,7 @@ const voice = { configured: false, voice_id: "", auto_speak: true };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.4.1-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.4.2-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -305,10 +334,46 @@ const handlers: Record<string, (a: Args) => unknown> = {
   browser_control: () => undefined,
   browser_state: () => ["", ""],
   browser_clear: () => undefined,
+  get_artifact: ({ id }) => artifacts[id],
+  list_artifacts: ({ agentId }) => Object.values(artifacts).filter((a) => a.agent_id === agentId),
+  dashboard_data: () => ({
+    now: new Date().toISOString(),
+    user_name: "Lautaro",
+    agents: { total: agents.length, running: busy.size, list: agents.map((a) => ({ id: a.id, name: a.name, model: a.model, busy: busy.has(a.id), avatar: a.avatar })) },
+    running: [...busy].map((tid) => ({ thread_id: tid, name: agents.find((a) => a.id === tid)?.name ?? "Group", kind: "agent" })),
+    automations: {
+      total: 2,
+      enabled: 1,
+      upcoming: [],
+      list: [
+        { id: "a1", name: "Morning brief", agent_id: agents[0]?.id, agent_name: agents[0]?.name, enabled: true, trigger: "schedule", cron: "0 9 * * 1-5", next_run_at: new Date(Date.now() + 3600e3).toISOString(), last_run_at: null, last_status: null },
+        { id: "a2", name: "Inbox triage", agent_id: agents[0]?.id, agent_name: agents[0]?.name, enabled: false, trigger: "email", cron: "", next_run_at: null, last_run_at: null, last_status: null },
+      ],
+    },
+    tasks: [{ agent_id: agents[0]?.id, agent_name: agents[0]?.name, done: 1, total: 3, items: [{ text: "Collect sources", status: "done" }, { text: "Draft the summary", status: "doing" }, { text: "Send to the team", status: "todo" }] }],
+    usage: { messages: 42, input_tokens: 120000, output_tokens: 18000, by_agent: agents.map((a, i) => ({ agent_id: a.id, name: a.name, messages: 10 - i, tokens: 60000 - i * 15000 })) },
+    recent: messages.filter((m) => m.role === "assistant" && m.content).slice(-4).reverse().map((m) => ({ thread_id: m.thread_id, name: agents.find((a) => a.id === m.thread_id)?.name ?? "Chat", kind: "agent", last_message: m.content.slice(0, 80), last_at: m.created_at })),
+  }),
+  dashboard_info: () => ({ html: dashboardHtml, is_default: true }),
+  reset_dashboard: () => undefined,
+  view_base: () => "",
+  browser_tabs: () => [],
+  browser_tab_new: () => 1,
+  browser_tab_select: () => undefined,
+  browser_tab_close: () => undefined,
   docker_start_engine: () => undefined,
   stop_all_computers: () => 2,
   computer_running: () => true,
   stop_thread: ({ threadId }) => void busy.delete(threadId),
+  regenerate_last: ({ threadId, text }) => {
+    const i = messages.map((x) => x.role).lastIndexOf("user");
+    if (i < 0) return;
+    if (text) messages[i].content = text;
+    const keep = messages.filter((x, j) => x.thread_id !== threadId || j <= i);
+    messages.length = 0;
+    messages.push(...keep);
+    void simulateReply(threadId, messages[i].content);
+  },
   clear_thread: ({ threadId }) => {
     for (let i = messages.length - 1; i >= 0; i--) if (messages[i].thread_id === threadId) messages.splice(i, 1);
     emit({ type: "threads_changed" });
