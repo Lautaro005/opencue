@@ -120,7 +120,7 @@ export function CreateGroupDialog() {
     setBusy(true);
     try {
       const g = await api.createGroup(name.trim(), picked, kind);
-      if (kind === "coding" && repo) await api.codingSetRepo(g.id, repo, true).catch((e) => useStore.getState().showToast(String(e)));
+      if (kind === "coding" && repo) await api.codingSetRepo(g.id, repo, false).catch((e) => useStore.getState().showToast(String(e)));
       await useStore.getState().refresh();
       useStore.getState().select(g.id);
       close();

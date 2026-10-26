@@ -100,7 +100,7 @@ export async function createGroupFromTemplate(g: GroupTemplate, opts: { name?: s
     ids.push(have ? have.id : (await createAgentFromTemplate(t, { greet: false })).id);
   }
   const group = await api.createGroup(opts.name?.trim() || g.name, ids, g.kind ?? "chat");
-  if (g.kind === "coding" && opts.dir) await api.codingSetRepo(group.id, opts.dir, true);
+  if (g.kind === "coding" && opts.dir) await api.codingSetRepo(group.id, opts.dir, false);
   return group.id;
 }
 

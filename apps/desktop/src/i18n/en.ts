@@ -518,8 +518,8 @@ export const en = {
     branch: "Branch",
     default: "Default branch",
     sync: "Ahead / behind",
-    worktrees: "A worktree for each agent",
-    worktreesHint: "Teammates work in their own folder and branch (agent/<name>/work), so parallel work never collides.",
+    worktrees: "Separate copy for each agent",
+    worktreesHint: "Off by default: everyone works in the group's folder. Turn it on so each teammate gets its own hidden copy (.opencue/worktrees) and branch.",
   },
   terminal: {
     section: "Terminals",
@@ -539,6 +539,8 @@ export const en = {
     unpin: "Stop keeping on top",
   },
   plan: {
+    untitled: "Plan",
+    checklist: "Plan checklist",
     agentsWorking: "{{names}} are working",
     team: "Agents on this run",
     activity: "Everything that happened",
@@ -941,7 +943,9 @@ export const en = {
       body: "Instructions (Markdown)",
     },
     computers: {
-      auto: { title: "Install and connect automatically", running: "Running", stopped: "Stopped", failed: "Failed", hint: "OpenCue downloads SPACE, installs what it needs (Kind, Firecracker…), builds and starts it, and fills in the address and token below. It takes a while the first time (about 30 GiB of disk).", start: "Start SPACE", stop: "Stop SPACE", reinstall: "Reinstall", install: "Install SPACE", fix: "Fix {{count}} things first", note: "Linux x86_64 with KVM and Docker. The password for its local admin account stays on this computer." },
+      auto: { title: "Install and connect automatically", running: "Running", stopped: "Stopped", failed: "Failed", hint: "OpenCue downloads SPACE, installs what it needs (Kind, Firecracker…), builds and starts it, and fills in the address and token below. It takes a while the first time (about 30 GiB of disk).", start: "Start SPACE", stop: "Stop SPACE", reinstall: "Reinstall", install: "Install SPACE", fix: "Fix {{count}} things first", note: "Linux x86_64 with KVM and Docker. The password for its local admin account stays on this computer.", unsupported: "Not on this computer", unsupportedHint: "The automatic install needs Linux x86_64 with KVM, so it cannot run on this Mac or Windows PC. SPACE itself can still be used from here:", alt1: "Install SPACE on a Linux machine (or a cloud VM) with the steps in the GitHub repo.", alt2: "Then paste its address and token under Connection below and press Test." },
+      tab: { sandbox: "Sandbox", space: "Perplexity SPACE", vmpal: "VMPal", more: "Host & webhooks" },
+      connection: "Connection",
       desktop: "Desktop view",
       desktopHint: "Run Docker computers from a desktop image and show it in the Computer panel.",
       desktopImage: "Desktop image",

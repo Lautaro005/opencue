@@ -67,7 +67,7 @@ const changes = {
 };
 const groups: Group[] = [
   { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), kind: "chat", config: {}, members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
-  { id: "g2", name: "Coding team", max_auto_turns: 8, created_at: ago(900), kind: "coding", config: { repo_dir: "/Users/you/code/opencue", worktrees: true }, members: [{ agent_id: "a3", is_owner: true }, { agent_id: "a4", is_owner: false }] },
+  { id: "g2", name: "Coding team", max_auto_turns: 8, created_at: ago(900), kind: "coding", config: { repo_dir: "/Users/you/code/opencue", isolate: false }, members: [{ agent_id: "a3", is_owner: true }, { agent_id: "a4", is_owner: false }] },
 ];
 
 const souls: Record<string, string> = { a1: "Calm, precise and a little dry. Never pads an answer." };
@@ -252,7 +252,7 @@ const voice = { configured: false, has_key: false, voice_id: "", auto_speak: tru
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.5.1-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.5.2-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -295,7 +295,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   set_memory_raw: ({ scope, agentId, text }) => void (memory[scope === "global" ? "global" : agentId] = String(text).split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2))),
   coding_set_repo: ({ groupId, dir, worktrees }) => {
     const g = groups.find((x) => x.id === groupId)!;
-    g.config = { ...g.config, repo_dir: String(dir), worktrees: !!worktrees };
+    g.config = { ...g.config, repo_dir: String(dir), isolate: !!worktrees };
     return repoStatus;
   },
   github_status: () => repoStatus,

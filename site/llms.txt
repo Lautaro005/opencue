@@ -5,7 +5,7 @@
 Key facts:
 
 - Install on macOS/Linux: `curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh`. On Windows (PowerShell): `irm https://lautaro005.github.io/opencue/install.ps1 | iex`. Start with `opencue`. Installers (.dmg, .AppImage, .deb, .rpm, .exe, .msi) are on GitHub Releases.
-- Current version: 0.5.1 (October 26, 2026). The app updates itself with signed releases from GitHub.
+- Current version: 0.5.2 (October 26, 2026). The app updates itself with signed releases from GitHub.
 - License: Apache-2.0 with the Commons Clause — free to use, modify and share, not to sell.
 - Built with a Rust core and a Tauri 2 + React desktop shell. A companion CLI, `opencue-cli`, shares the data folder.
 - Approvals: in "Ask first" mode (default) sending email, commands or file writes on the host/WSL, deleting memories and data-changing tools wait for the user. "Fully autonomous" runs everything.

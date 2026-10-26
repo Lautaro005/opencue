@@ -133,6 +133,7 @@ export function ComputersSection() {
   const [s, setS] = useState<ComputerSettings | null>(null);
   const [token, setToken] = useState("");
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null);
+  const [tab, setTab] = useState<"sandbox" | "space" | "vmpal" | "more">("sandbox");
   useEffect(() => void api.computerSettings().then(setS), []);
   if (!s) return null;
 
@@ -143,6 +144,21 @@ export function ComputersSection() {
   return (
     <>
       <PageTitle title={t("settings.computers.title")} hint={t("settings.computers.hint")} />
+      <div className="mb-4 flex flex-wrap gap-1 rounded-xl border border-line p-1" role="tablist" aria-label={t("settings.computers.title")}>
+        {(["sandbox", "space", "vmpal", "more"] as const).map((k) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => setTab(k)}
+            className={`flex-1 rounded-lg px-3 py-1.5 text-[13px] font-medium whitespace-nowrap ${tab === k ? "bg-accent text-white" : "text-muted hover:bg-hover"}`}
+          >
+            {t(`settings.computers.tab.${k}`)}
+          </button>
+        ))}
+      </div>
+      {tab === "sandbox" && (
+        <>
       <Card title={t("settings.computers.docker")}>
         <CardRow label={t("settings.computers.runtime")} hint={t("settings.computers.runtimeHint")}>
           <span className="inline-flex rounded-lg border border-line p-0.5" role="group" aria-label={t("settings.computers.runtime")}>
@@ -196,6 +212,10 @@ export function ComputersSection() {
         )}
       </Card>
       <DockerSetupCard s={s} save={save} />
+        </>
+      )}
+      {tab === "space" && (
+        <>
       <Card
         title="Perplexity SPACE"
         action={
@@ -214,6 +234,7 @@ export function ComputersSection() {
           <span>{s.os === "linux" ? t("settings.computers.spaceHint") : t("settings.computers.spaceRemote")}</span>
         </div>
         <SpaceSetup onChanged={() => void api.computerSettings().then(setS)} />
+        <p className="px-4 pt-3 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("settings.computers.connection")}</p>
         <div className="grid grid-cols-2 gap-2 px-4 py-3">
           <Field label={t("settings.computers.spaceUrl")}>
             <Input value={s.space_url} placeholder="http://localhost:8080/v1" onChange={(e) => setS({ ...s, space_url: e.target.value })} onBlur={() => void save(s)} />
@@ -243,7 +264,11 @@ export function ComputersSection() {
         </div>
         {test && <p className={`px-4 pb-3 text-[12px] ${test.ok ? "text-success" : "text-danger"}`}>{test.text}</p>}
       </Card>
-      <VmPalCard />
+        </>
+      )}
+      {tab === "vmpal" && <VmPalCard />}
+      {tab === "more" && (
+        <>
       <Card title={t("settings.computers.host")}>
         <div className="flex items-start gap-3 px-4 py-3.5 text-[12.5px] text-muted">
           <Terminal size={16} className="mt-0.5 shrink-0" />
@@ -255,7 +280,9 @@ export function ComputersSection() {
           <Input className="w-24" value={s.webhook_port} onChange={(e) => setS({ ...s, webhook_port: Number(e.target.value) || 7777 })} onBlur={() => void save(s)} />
         </CardRow>
       </Card>
-      <p className="flex items-center gap-1.5 text-[12px] text-faint">
+        </>
+      )}
+      <p className="mt-2 flex items-center gap-1.5 text-[12px] text-faint">
         <Box size={13} /> {t("settings.computers.perAgent")}
       </p>
     </>

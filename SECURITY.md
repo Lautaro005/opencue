@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.5.x`, currently `0.5.1`) | ✅ |
+| Latest release (`0.5.x`, currently `0.5.2`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -76,8 +76,8 @@ In scope:
 - **Terminals** — a terminal session (Claude Code, Codex, a shell…) started without the user choosing it, one session
   reading another's output or input, or content from a chat opening a session or typing into one
 - **Coding groups** — `git` / `gh` run outside the repository folder the user picked, a pull request created, merged or
-  commented on without the user pressing the button (or an agent's own approved action), or an agent's worktree
-  reaching files outside the repository
+  commented on without the user pressing the button (or an agent's own approved action), or an agent (all of them now work in the group's folder, or in an opt-in worktree)
+  reaching files outside that folder
 - **Floating windows** — a floating window being given more commands or access than the main window
 - **Supply chain** — compromised dependencies, release artifacts, update signatures or the website produced by our
   GitHub Actions workflows

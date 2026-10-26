@@ -2,6 +2,31 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.5.2 — 2026-10-26
+
+### New
+
+- **A plan is a checklist.** `/plan` now opens a card with the task as its title and, below, the steps as a checklist that
+  ticks itself as the agents finish them (the lead's list; "handed off to…" lines are gone from the card and live under
+  **Open run**). Parallel agents that ask at the same time each get their own **Approve / Deny** row in the card.
+- **Computers, reorganised.** Settings → Computers has tabs: **Sandbox**, **Perplexity SPACE**, **VMPal** and **Host & webhooks**.
+  The SPACE tab always shows the automatic install: where it cannot run (it needs Linux x86_64 with KVM) it now says so and
+  how to connect a SPACE running elsewhere, instead of disappearing; address, template and token sit under *Connection*.
+- **Ideas from OpenBot** (nightly-labs/openbot): agents in a coding team put the status note in the same message as the next
+  action, say what they did not verify and where they looked, and only stop when blocked or before something destructive.
+
+### Fixed
+
+- **Coding groups work in the group's folder.** Agents no longer get a hidden copy under `.opencue/worktrees` (it hid the files
+  of a new project and kept each agent apart): everyone works in the folder you picked, a new app goes at its top level, and
+  files appear in the Files list. Separate copies are now an opt-in toggle in the panel.
+- **Permissions of parallel agents show in the group.** A card from an agent working in the group is shown in the group even
+  when it was raised from the agent's own chat.
+- **/plan in a coding group.** Replies keep their order, each with its own header (they no longer run together), and the card
+  holds only the checklist; the activity stays in **Open run**.
+- **A finished plan stays finished.** When every step is done the agent's plan is cleared, so the next message no longer
+  brings the planning card back.
+
 ## 0.5.1 — 2026-10-26
 
 ### New

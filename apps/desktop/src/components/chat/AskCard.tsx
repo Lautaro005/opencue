@@ -109,7 +109,13 @@ export function QuestionCards({ threadId, isGroup }: { threadId: string; isGroup
   const { t } = useTranslation();
   const questions = useStore((s) => s.questions);
   const agents = useStore((s) => s.agents);
-  const mine = Object.values(questions).filter((q) => q.thread_id === threadId);
+  const working = useStore((s) => s.working[threadId]);
+  const members = useStore((s) => s.groups[threadId]?.members);
+  // An agent working in this group may ask from its own chat id (a CLI agent's own tools do not
+  // say where they are running): its card belongs here, where the work is.
+  const mine = Object.values(questions).filter(
+    (q) => q.thread_id === threadId || (isGroup && q.thread_id === q.agent_id && !!members?.some((m) => m.agent_id === q.agent_id) && !!working?.includes(q.agent_id)),
+  );
   if (mine.length === 0) return null;
   return (
     <div className="mt-3 flex flex-col gap-3">
