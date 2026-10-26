@@ -638,8 +638,8 @@ export const en = {
   },
   call: {
     normal: "Normal call",
-    persona: "PersonaPlex (real time)",
-    personaHint: "Full-duplex voice, running on your computer",
+    persona: "Real-time voice model",
+    personaHint: "Two-way voice (PersonaPlex or Moshi), running on your computer",
     title: "Call with {{name}}",
     needKey: "Add your ElevenLabs API key in Settings → Voice to use calls",
     start: "Call",
@@ -659,6 +659,10 @@ export const en = {
     hint: "An agent that runs on a command-line tool, with that tool's own harness. The tool must be installed.",
     ready: "Installed · create an agent",
     notInstalled: "Not installed · {{how}}",
+  },
+  notch: {
+    finished: "finished",
+    working: "{{count}} agents working",
   },
   ask: {
     other: "Other…",
@@ -727,6 +731,12 @@ export const en = {
       localOnly: "OpenCue is local-first: there is no cloud account. Chats, memory and keys stay on this computer; API keys are kept in a private file (secrets.json) in the data folder.",
     },
     notifications: {
+        where: "Where",
+        whereHint: "Show these alerts as system notifications, or in the notch at the top of the screen.",
+        whereSystem: "System",
+        whereNotch: "Notch",
+        working: "Show who is working",
+        workingHint: "In the notch: a thin pill with the faces of the agents that are working.",
       hint: "System notifications for what your agents do while you're elsewhere.",
       enable: "Show system notifications",
       enableHint: "Turn everything below on or off at once.",
@@ -779,6 +789,16 @@ export const en = {
       test: "Test",
       sample: "Hello! This is how I sound running on your computer.",
       persona: {
+        title: "Voice call model (real time)",
+        engine: "Engine",
+        needsMac: "Needs a Mac with Apple silicon",
+        aboutMlx: "Kyutai Moshi, 4-bit on Apple silicon: a real two-way voice model that listens while it talks, so you can interrupt and talk over it like on a phone call. It is the lightest one that does this (about 5 GB of memory, no graphics card, no token) and speaks English. It opens on this computer; a phone cannot use it because browsers only allow the microphone on https.",
+        engines: {
+          moshi_mlx: "Light · Moshi (Mac)",
+          moshi_mlxHint: "Apple silicon, ~5 GB, no token",
+          personaplex: "NVIDIA PersonaPlex",
+          personaplexHint: "NVIDIA GPU (CUDA), personas and phone",
+        },
         about: "A real-time voice model that listens and talks at the same time, like a phone call (NVIDIA PersonaPlex 7B). It runs on your own computer; call it from here or from your phone on the same network.",
         noGpu: "No NVIDIA GPU found",
         noPython: "Python 3.10+ not found",

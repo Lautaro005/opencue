@@ -91,6 +91,18 @@ pub async fn on_event(app: &AppHandle, core: &Core, ev: &CoreEvent) {
     if !flag(core, "notify_enabled", true).await || !flag(core, kind, true).await {
         return;
     }
+    // With the notch chosen, it shows these itself (see notch.rs and the NotchApp page).
+    if core
+        .store
+        .setting("notify_channel")
+        .await
+        .ok()
+        .flatten()
+        .as_deref()
+        == Some("notch")
+    {
+        return;
+    }
     if flag(core, "notify_background_only", true).await && window_in_view(app) {
         return;
     }

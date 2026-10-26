@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Main and floating window permissions",
-  "windows": ["main", "float-*"],
+  "windows": ["main", "float-*", "notch"],
   "permissions": [
     "core:default",
     "dialog:allow-open",

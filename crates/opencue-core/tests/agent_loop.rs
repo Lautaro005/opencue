@@ -528,8 +528,11 @@ async fn ask_user_waits_for_the_answer() {
     })
     .await
     .expect("a question was asked");
-    assert_eq!(asked.body, "Which color?");
-    assert_eq!(asked.options, ["blue", "red"]);
+    // A question card has the question as its heading and the subtitle (none here) as its text.
+    assert_eq!(asked.title, "Which color?");
+    assert_eq!(asked.body, "");
+    let titles: Vec<&str> = asked.options.iter().map(|o| o.title.as_str()).collect();
+    assert_eq!(titles, ["blue", "red"]);
     assert_eq!(asked.thread_id, agent.id);
     assert!(core.answer_question(&asked.id, "blue").await);
     finish(&core, &mut events, &agent.id).await;
@@ -924,11 +927,16 @@ async fn coding_agents_get_the_repository_and_a_worktree_each() {
         .as_deref()
         .unwrap()
         .ends_with("dee"));
-    // Not a repository: refused with a reason.
-    assert!(core
-        .coding_set_repo(&group.id, dir.path().to_str().unwrap(), true)
+    // A folder that is not a repository yet becomes one (git init, with a first commit), and a
+    // folder that does not exist is made.
+    let fresh = tempfile::tempdir().unwrap();
+    let app = fresh.path().join("my-app");
+    let status = core
+        .coding_set_repo(&group.id, app.to_str().unwrap(), true)
         .await
-        .is_err());
+        .unwrap();
+    assert!(status.is_repo);
+    assert!(app.join(".git").exists());
     assert!(core.github_status(&group.id).await.unwrap().is_repo);
 }
 
@@ -945,4 +953,99 @@ async fn quiet_pair(core: &Arc<Core>) -> Vec<opencue_core::models::Agent> {
         );
     }
     out
+}
+
+/// Wait for a question card from a given agent.
+async fn next_question(
+    events: &mut tokio::sync::broadcast::Receiver<CoreEvent>,
+) -> opencue_core::bridge::Question {
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if let Ok(CoreEvent::QuestionRequested { question }) = events.recv().await {
+                return question;
+            }
+        }
+    })
+    .await
+    .expect("a question was asked")
+}
+
+#[tokio::test]
+async fn a_message_sent_while_the_agent_works_is_queued_and_read_at_the_next_step() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let agent = agents_on(&core, ASK_CALL, &["Asker"]).await.remove(0);
+    let mut events = core.subscribe();
+    core.send_message(&agent.id, "pick for me").await.unwrap();
+    let asked = next_question(&mut events).await;
+    // The agent is busy waiting for the answer: this one waits in the queue, no second run starts.
+    let queued = core
+        .send_message(&agent.id, "and make it short")
+        .await
+        .unwrap();
+    assert_eq!(queued.status, "queued");
+    assert_eq!(
+        core.store.queued_messages(&agent.id).await.unwrap().len(),
+        1
+    );
+    assert!(core.answer_question(&asked.id, "blue").await);
+    finish(&core, &mut events, &agent.id).await;
+    // It was read before the agent finished: it is part of the conversation now, and answered.
+    assert!(core
+        .store
+        .queued_messages(&agent.id)
+        .await
+        .unwrap()
+        .is_empty());
+    let msgs = core.store.messages(&agent.id, 50).await.unwrap();
+    let at = msgs
+        .iter()
+        .position(|m| m.content == "and make it short")
+        .expect("the queued message is in the chat");
+    assert_eq!(msgs[at].status, "done");
+    assert!(msgs[at + 1..]
+        .iter()
+        .any(|m| m.role == Role::Assistant && m.content.contains("green tea")));
+
+    // A queued message can be taken back while it waits.
+    let agent = agents_on(&core, ASK_CALL, &["Second"]).await.remove(0);
+    core.send_message(&agent.id, "first").await.unwrap();
+    let asked = next_question(&mut events).await;
+    let queued = core.send_message(&agent.id, "never mind").await.unwrap();
+    core.unqueue_message(&agent.id, &queued.id).await.unwrap();
+    assert!(core
+        .store
+        .queued_messages(&agent.id)
+        .await
+        .unwrap()
+        .is_empty());
+    assert!(core.unqueue_message(&agent.id, &queued.id).await.is_err());
+    core.answer_question(&asked.id, "x").await;
+    finish(&core, &mut events, &agent.id).await;
+}
+
+#[tokio::test]
+async fn agents_in_a_group_work_in_parallel() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let alpha = agents_on(&core, ASK_CALL, &["Alpha"]).await.remove(0);
+    let beta = agents_on(&core, ASK_CALL, &["Beta"]).await.remove(0);
+    let group = core
+        .create_group("Pair", &[alpha.id.clone(), beta.id.clone()])
+        .await
+        .unwrap();
+    let mut events = core.subscribe();
+    core.send_message(&group.id, "@Alpha @Beta go")
+        .await
+        .unwrap();
+    // Both ask before either is answered: they are running at the same time. The cards land in the
+    // group, not in the agents' own chats.
+    let first = next_question(&mut events).await;
+    let second = next_question(&mut events).await;
+    assert_ne!(first.agent_id, second.agent_id);
+    assert_eq!(first.thread_id, group.id);
+    assert_eq!(second.thread_id, group.id);
+    assert!(core.answer_question(&first.id, "a").await);
+    assert!(core.answer_question(&second.id, "b").await);
+    finish(&core, &mut events, &group.id).await;
 }

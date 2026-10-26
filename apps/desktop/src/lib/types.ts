@@ -549,6 +549,9 @@ export interface LocalModel {
 }
 
 export interface PersonaStatus {
+  /** "personaplex" (NVIDIA, CUDA) or "moshi_mlx" (light, Apple silicon). */
+  engine: string;
+  mlx_supported: boolean;
   installed: boolean;
   installing: boolean;
   running: boolean;

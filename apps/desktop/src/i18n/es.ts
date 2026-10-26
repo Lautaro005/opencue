@@ -640,8 +640,8 @@ export const es: Dict = {
   },
   call: {
     normal: "Llamada normal",
-    persona: "PersonaPlex (tiempo real)",
-    personaHint: "Voz simultánea, corriendo en tu computadora",
+    persona: "Modelo de voz en tiempo real",
+    personaHint: "Voz simultánea (PersonaPlex o Moshi), corriendo en tu computadora",
     title: "Llamada con {{name}}",
     needKey: "Configurá tu API key de ElevenLabs en Ajustes → Voz para usar llamadas",
     start: "Llamar",
@@ -661,6 +661,10 @@ export const es: Dict = {
     hint: "Un agente que corre sobre una herramienta de línea de comandos, con el harness de esa herramienta. Tiene que estar instalada.",
     ready: "Instalada · crear un agente",
     notInstalled: "No instalada · {{how}}",
+  },
+  notch: {
+    finished: "terminó",
+    working: "{{count}} agentes trabajando",
   },
   ask: {
     other: "Otra respuesta…",
@@ -729,6 +733,12 @@ export const es: Dict = {
       localOnly: "OpenCue es local-first: no hay cuenta en la nube. Los chats, la memoria y las claves quedan en esta computadora; las API keys se guardan en un archivo privado (secrets.json) de la carpeta de datos.",
     },
     notifications: {
+        where: "Dónde",
+        whereHint: "Mostrar estos avisos como notificaciones del sistema, o en el notch, arriba de la pantalla.",
+        whereSystem: "Sistema",
+        whereNotch: "Notch",
+        working: "Mostrar quién está trabajando",
+        workingHint: "En el notch: una píldora finita con las caras de los agentes que están trabajando.",
       hint: "Notificaciones del sistema por lo que hacen tus agentes mientras estás en otra cosa.",
       enable: "Mostrar notificaciones del sistema",
       enableHint: "Activa o desactiva todo lo de abajo de una vez.",
@@ -781,6 +791,16 @@ export const es: Dict = {
       test: "Probar",
       sample: "¡Hola! Así sueno corriendo en tu computadora.",
       persona: {
+        title: "Modelo de llamada (tiempo real)",
+        engine: "Motor",
+        needsMac: "Necesita una Mac con Apple silicon",
+        aboutMlx: "Kyutai Moshi, en 4 bits sobre Apple silicon: un modelo de voz bidireccional de verdad que escucha mientras habla, así podés interrumpirlo y hablarle encima como en una llamada. Es el más liviano que hace esto (unos 5 GB de memoria, sin placa de video ni token) y habla inglés. Se abre en esta compu; un celular no lo puede usar porque los navegadores solo dejan usar el micrófono en https.",
+        engines: {
+          moshi_mlx: "Liviano · Moshi (Mac)",
+          moshi_mlxHint: "Apple silicon, ~5 GB, sin token",
+          personaplex: "NVIDIA PersonaPlex",
+          personaplexHint: "GPU NVIDIA (CUDA), personas y celular",
+        },
         about: "Un modelo de voz en tiempo real que escucha y habla a la vez, como una llamada (NVIDIA PersonaPlex 7B). Corre en tu propia computadora; llámalo desde aquí o desde tu teléfono en la misma red.",
         noGpu: "No se encontró una GPU NVIDIA",
         noPython: "No se encontró Python 3.10+",

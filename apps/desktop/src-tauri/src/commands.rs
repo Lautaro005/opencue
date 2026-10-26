@@ -625,8 +625,51 @@ pub async fn get_settings(state: State<'_, AppState>) -> R<BTreeMap<String, Stri
 }
 
 #[tauri::command]
-pub async fn set_setting(state: State<'_, AppState>, key: String, value: String) -> R<()> {
-    state.core.store.set_setting(&key, &value).await.map_err(e)
+pub async fn set_setting(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    key: String,
+    value: String,
+) -> R<()> {
+    state
+        .core
+        .store
+        .set_setting(&key, &value)
+        .await
+        .map_err(e)?;
+    // Choosing where notifications go (system, or the notch) takes effect at once.
+    if key == "notify_channel" {
+        if value == "notch" {
+            crate::notch::ensure(&app)?;
+        } else {
+            crate::notch::close(&app);
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn notch_info(app: tauri::AppHandle) -> crate::notch::Info {
+    crate::notch::info(&app)
+}
+
+#[tauri::command]
+pub fn notch_place(app: tauri::AppHandle, width: f64, height: f64) -> R<()> {
+    crate::notch::place(&app, width, height)
+}
+
+#[tauri::command]
+pub fn notch_hide(app: tauri::AppHandle) {
+    crate::notch::hide(&app)
+}
+
+/// Whether the main window is in front: the notch has nothing to add then.
+#[tauri::command]
+pub fn main_in_view(app: tauri::AppHandle) -> bool {
+    use tauri::Manager;
+    app.get_webview_window("main")
+        .map(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false))
+        .unwrap_or(false)
 }
 
 #[tauri::command]
@@ -1015,10 +1058,11 @@ pub async fn personaplex_configure(
     lan: bool,
     offload: bool,
     token: Option<String>,
+    engine: Option<String>,
 ) -> R<()> {
     state
         .core
-        .personaplex_configure(lan, offload, token)
+        .personaplex_configure(lan, offload, token, engine)
         .await
         .map_err(e)
 }

@@ -24,9 +24,16 @@ pub const HF_TOKEN_KEY: &str = "huggingface";
 const ARCHIVE: &str =
     "https://github.com/NVIDIA/personaplex/archive/refs/heads/main.zip#subdirectory=moshi";
 const LOG_LINES: usize = 400;
+/// Kyutai's Moshi on Apple's MLX, 4-bit: the smallest real full-duplex voice model (about 5 GB of
+/// memory, no GPU card and no token). PersonaPlex is built on Moshi and needs a CUDA GPU.
+const MLX_PACKAGE: &str = "moshi_mlx";
+const MLX_REPO: &str = "kyutai/moshiko-mlx-q4";
+pub const ENGINE_SETTING: &str = "personaplex_engine";
 
 #[derive(Default)]
 pub(crate) struct Runtime {
+    /// "personaplex" (NVIDIA, CUDA) or "moshi_mlx" (Apple silicon).
+    engine: Mutex<String>,
     child: Mutex<Option<Child>>,
     log: Mutex<Vec<String>>,
     installing: std::sync::atomic::AtomicBool,
@@ -43,6 +50,10 @@ impl Runtime {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PersonaStatus {
+    /// Which engine is chosen: "personaplex" or "moshi_mlx".
+    pub engine: String,
+    /// This computer can run the light Moshi engine (a Mac with Apple silicon).
+    pub mlx_supported: bool,
     pub installed: bool,
     pub installing: bool,
     pub running: bool,
@@ -107,6 +118,21 @@ pub fn server_args(ssl_dir: &std::path::Path, lan: bool, offload: bool) -> Vec<S
     a
 }
 
+/// The `python -m moshi_mlx.local_web` arguments (it serves plain http).
+pub fn mlx_args(lan: bool) -> Vec<String> {
+    let _ = lan;
+    vec![
+        "-m".into(),
+        "moshi_mlx.local_web".into(),
+        "--hf-repo".into(),
+        MLX_REPO.into(),
+        "-q".into(),
+        "4".into(),
+        "--port".into(),
+        PORT.to_string(),
+    ]
+}
+
 async fn capture(cmd: &mut Command, secs: u64) -> Option<String> {
     cmd.stdin(Stdio::null())
         .stderr(Stdio::null())
@@ -159,8 +185,17 @@ async fn port_open() -> bool {
 }
 
 impl Core {
+    fn mlx(&self) -> bool {
+        self.persona.engine.lock().unwrap().as_str() == "moshi_mlx"
+    }
+
     fn persona_dir(&self) -> PathBuf {
-        self.paths().root().join("models").join("personaplex")
+        let name = if self.mlx() {
+            "moshi-mlx"
+        } else {
+            "personaplex"
+        };
+        self.paths().root().join("models").join(name)
     }
 
     fn persona_installed(&self) -> bool {
@@ -169,6 +204,20 @@ impl Core {
 
     pub async fn personaplex_status(&self) -> PersonaStatus {
         let rt = &self.persona;
+        let engine = self
+            .store
+            .setting(ENGINE_SETTING)
+            .await
+            .ok()
+            .flatten()
+            .filter(|e| e == "moshi_mlx")
+            .unwrap_or_else(|| "personaplex".into());
+        *rt.engine.lock().unwrap() = engine.clone();
+        let scheme = if engine == "moshi_mlx" {
+            "http"
+        } else {
+            "https"
+        };
         let running = {
             let mut child = rt.child.lock().unwrap();
             match child.as_mut().map(|c| c.try_wait()) {
@@ -183,8 +232,10 @@ impl Core {
         let lan = self.setting_flag("personaplex_lan").await;
         let offload = self.setting_flag("personaplex_offload").await;
         let ready = running && port_open().await;
-        let lan_url = lan_ip().map(|ip| format!("https://{ip}:{PORT}"));
+        let lan_url = lan_ip().map(|ip| format!("{scheme}://{ip}:{PORT}"));
         PersonaStatus {
+            engine,
+            mlx_supported: cfg!(all(target_os = "macos", target_arch = "aarch64")),
             installed: self.persona_installed(),
             installing: rt.installing.load(std::sync::atomic::Ordering::SeqCst),
             running,
@@ -197,7 +248,7 @@ impl Core {
             offload,
             gpu: gpu_name().await,
             python: find_python().await.map(|(_, v)| v),
-            url: running.then(|| format!("https://localhost:{PORT}")),
+            url: running.then(|| format!("{scheme}://localhost:{PORT}")),
             qr_svg: if lan && running {
                 lan_url.as_deref().and_then(qr_svg)
             } else {
@@ -218,7 +269,20 @@ impl Core {
         lan: bool,
         offload: bool,
         token: Option<String>,
+        engine: Option<String>,
     ) -> anyhow::Result<()> {
+        if let Some(e) = engine {
+            anyhow::ensure!(
+                e == "personaplex" || e == "moshi_mlx",
+                "unknown voice engine {e}"
+            );
+            anyhow::ensure!(
+                e == "personaplex" || cfg!(all(target_os = "macos", target_arch = "aarch64")),
+                "The light Moshi engine runs on a Mac with Apple silicon."
+            );
+            self.store.set_setting(ENGINE_SETTING, &e).await?;
+            *self.persona.engine.lock().unwrap() = e;
+        }
         if let Some(t) = token
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty())
@@ -319,8 +383,13 @@ impl Core {
                 let py = venv_python(&dir).display().to_string();
                 core.persona_run(&py, &["-m", "pip", "install", "--upgrade", "pip"])
                     .await?;
-                core.persona_run(&py, &["-m", "pip", "install", ARCHIVE, "accelerate"])
-                    .await?;
+                if core.mlx() {
+                    core.persona_run(&py, &["-m", "pip", "install", "-U", MLX_PACKAGE])
+                        .await?;
+                } else {
+                    core.persona_run(&py, &["-m", "pip", "install", ARCHIVE, "accelerate"])
+                        .await?;
+                }
                 std::fs::write(dir.join(".complete"), "ok")?;
                 Ok(())
             }
@@ -346,15 +415,15 @@ impl Core {
             self.persona_installed(),
             "Install PersonaPlex first (Settings → Models → Local)."
         );
-        let token = self
-            .secrets
-            .get(HF_TOKEN_KEY)
-            .filter(|t| !t.is_empty())
-            .ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Add your Hugging Face token first, and accept the license at huggingface.co/nvidia/personaplex-7b-v1."
-                )
-            })?;
+        let token = self.secrets.get(HF_TOKEN_KEY).filter(|t| !t.is_empty());
+        let mlx = self.mlx();
+        let token = match (mlx, token) {
+            (true, t) => t.unwrap_or_default(),
+            (false, Some(t)) => t,
+            (false, None) => anyhow::bail!(
+                "Add your Hugging Face token first, and accept the license at huggingface.co/nvidia/personaplex-7b-v1."
+            ),
+        };
         {
             let mut child = self.persona.child.lock().unwrap();
             if let Some(c) = child.as_mut() {
@@ -370,7 +439,12 @@ impl Core {
         let lan = self.setting_flag("personaplex_lan").await;
         let offload = self.setting_flag("personaplex_offload").await;
         let mut cmd = Command::new(venv_python(&dir));
-        cmd.args(server_args(&ssl, lan, offload))
+        let args = if mlx {
+            mlx_args(lan)
+        } else {
+            server_args(&ssl, lan, offload)
+        };
+        cmd.args(args)
             .env("HF_TOKEN", token)
             .env("PYTHONUNBUFFERED", "1")
             .current_dir(&dir)
@@ -380,8 +454,11 @@ impl Core {
             .kill_on_drop(true);
         #[cfg(windows)]
         cmd.creation_flags(0x08000000);
-        self.persona
-            .push("— starting PersonaPlex (the first start downloads the model) —");
+        self.persona.push(if mlx {
+            "— starting Moshi (the first start downloads the model, about 5 GB) —"
+        } else {
+            "— starting PersonaPlex (the first start downloads the model) —"
+        });
         let mut child = cmd.spawn()?;
         self.persona_pipe(&mut child);
         *self.persona.child.lock().unwrap() = Some(child);
