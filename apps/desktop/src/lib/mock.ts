@@ -252,7 +252,7 @@ const voice = { configured: false, has_key: false, voice_id: "", auto_speak: tru
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.5.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.5.1-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -304,7 +304,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   notch_info: () => ({ macos: true, notch_height: 32 }),
   notch_place: () => undefined,
   notch_hide: () => undefined,
-  main_in_view: () => true,
+  main_in_view: () => !!(window as unknown as { __inView?: boolean }).__inView,
   unqueue_message: ({ threadId, messageId }) => { const i = messages.findIndex((x) => x.id === messageId); if (i >= 0) messages.splice(i, 1); emit({ type: "messages_removed", thread_id: String(threadId), ids: [String(messageId)] }); },
   coding_activity: ({ groupId }) => {
     const g = groups.find((x) => x.id === groupId);
@@ -605,7 +605,8 @@ const handlers: Record<string, (a: Args) => unknown> = {
 };
 
 // Lets the browser preview be driven from a test or the console.
-(window as unknown as { __emit: typeof emit }).__emit = emit;
+(window as unknown as { __emit: typeof emit; __settings: typeof settings }).__emit = emit;
+(window as unknown as { __settings: typeof settings }).__settings = settings;
 
 export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
   const h = handlers[cmd];

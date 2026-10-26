@@ -85,7 +85,7 @@ creates your first agent. Replay it any time from **Settings → General**.
     <td valign="top"><b>⚖️ Ask a council</b><br>A group where every member answers alone, reviews the others anonymously and a chair writes the verdict (<code>/ai-council</code>, or the AI Council template).</td>
   </tr>
   <tr>
-    <td valign="top"><b>👩‍💻 Code as a team</b><br>Coding groups on a repository: sessions (working / pending / blocked), the diff, pull requests with their checks, a worktree per agent, and Claude Code, Codex or Grok as teammates — talking with ACK / STATUS / DONE.</td>
+    <td valign="top"><b>👩‍💻 Code as a team</b><br>Coding groups on a repository: sessions (working / pending / blocked), the diff, pull requests with their checks, a worktree per agent, the files each one is writing right now, and Claude Code, Codex or Grok as teammates working in parallel — talking with ACK / STATUS / DONE.</td>
     <td valign="top"><b>⌨️ CLI chats</b><br>Claude Code, Codex, Grok Build, Gemini CLI, Antigravity, Vibe or Muse Code in a real terminal inside the app, from the sidebar's <b>+</b>.</td>
   </tr>
   <tr>
@@ -215,6 +215,11 @@ Changes to `site/` deploy the website.
   and `/artifact`, artifact cards with progress, resizable and floating panels, terminals for Claude Code, Codex, Grok
   and more, the AI council, coding groups with pull requests and a protocol for agents to talk, SPACE that installs
   itself, ordered providers and a fix for the browser covering its toolbar.
+- [x] **0.5.1**: agents in a group work in parallel (and you see it in the plan card and the sidebar), a message queue
+  while an agent works, question cards with three options, permissions answerable inside groups, a coding-team window
+  (name and folder, `git init` for you), live files per agent, coding-agent CLIs as agents, drag-to-reorder and a
+  collapsible sidebar, notifications in the **notch**, the light Moshi voice engine for Apple silicon, and the browser
+  placed inside the app's own page.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

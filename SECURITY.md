@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.5.x`, currently `0.5.0`) | ✅ |
+| Latest release (`0.5.x`, currently `0.5.1`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -64,6 +64,11 @@ In scope:
   or instruction files through OpenCue's fault
 - **IPC / webview** — the UI calling privileged commands from untrusted content (rendered Markdown, links, email bodies),
   or the microphone being enabled without the user pressing the button
+- **The notch and floating windows** — the notch window or a popped-out panel calling privileged commands, showing an
+  agent's question or permission card for a different agent than the one asking, answering a card without the user's
+  click, or the browser view of an agent (a native view placed inside the app's own page) receiving input meant for the app
+- **Queued messages and parallel agents** — a message waiting in the queue reaching an agent the user did not address, or
+  agents of a group acting on a permission another agent was asked for
 - **Downloads and installers OpenCue runs for you** — local speech models and the `sherpa-onnx` runtime (from GitHub
   releases), PersonaPlex's Python environment (`pip`) and the SPACE installer (`git clone` of perplexityai/SPACE, then its
   own scripts): anything fetched from somewhere other than the sources named in Settings, archives that write outside
