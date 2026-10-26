@@ -30,14 +30,54 @@ pub struct Tool {
 }
 
 pub const TOOLS: &[Tool] = &[
-    Tool { key: "claude", label: "Claude Code", command: &["claude"], install: "npm install -g @anthropic-ai/claude-code" },
-    Tool { key: "codex", label: "Codex", command: &["codex"], install: "npm install -g @openai/codex" },
-    Tool { key: "grok", label: "Grok Build", command: &["grok"], install: "see x.ai/cli" },
-    Tool { key: "gemini", label: "Gemini CLI", command: &["gemini"], install: "npm install -g @google/gemini-cli" },
-    Tool { key: "agy", label: "Antigravity", command: &["agy"], install: "see antigravity.google" },
-    Tool { key: "vibe", label: "Mistral Vibe", command: &["vibe"], install: "uv tool install mistral-vibe" },
-    Tool { key: "muse", label: "Muse Code", command: &["muse"], install: "see dev.meta.ai" },
-    Tool { key: "shell", label: "Terminal", command: &[], install: "" },
+    Tool {
+        key: "claude",
+        label: "Claude Code",
+        command: &["claude"],
+        install: "npm install -g @anthropic-ai/claude-code",
+    },
+    Tool {
+        key: "codex",
+        label: "Codex",
+        command: &["codex"],
+        install: "npm install -g @openai/codex",
+    },
+    Tool {
+        key: "grok",
+        label: "Grok Build",
+        command: &["grok"],
+        install: "see x.ai/cli",
+    },
+    Tool {
+        key: "gemini",
+        label: "Gemini CLI",
+        command: &["gemini"],
+        install: "npm install -g @google/gemini-cli",
+    },
+    Tool {
+        key: "agy",
+        label: "Antigravity",
+        command: &["agy"],
+        install: "see antigravity.google",
+    },
+    Tool {
+        key: "vibe",
+        label: "Mistral Vibe",
+        command: &["vibe"],
+        install: "uv tool install mistral-vibe",
+    },
+    Tool {
+        key: "muse",
+        label: "Muse Code",
+        command: &["muse"],
+        install: "see dev.meta.ai",
+    },
+    Tool {
+        key: "shell",
+        label: "Terminal",
+        command: &[],
+        install: "",
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -95,10 +135,17 @@ fn resolve(t: &Tool) -> anyhow::Result<(PathBuf, Vec<String>)> {
         anyhow::anyhow!(
             "{} is not installed on this computer ({}). Install it, then try again.",
             t.label,
-            if t.install.is_empty() { "see its website".to_string() } else { format!("`{}`", t.install) }
+            if t.install.is_empty() {
+                "see its website".to_string()
+            } else {
+                format!("`{}`", t.install)
+            }
         )
     })?;
-    Ok((program, t.command[1..].iter().map(|s| s.to_string()).collect()))
+    Ok((
+        program,
+        t.command[1..].iter().map(|s| s.to_string()).collect(),
+    ))
 }
 
 impl Core {
@@ -136,7 +183,9 @@ impl Core {
         saved
             .into_iter()
             .map(|mut t| {
-                t.alive = live.get(&t.id).is_some_and(|l| l.alive.load(Ordering::SeqCst));
+                t.alive = live
+                    .get(&t.id)
+                    .is_some_and(|l| l.alive.load(Ordering::SeqCst));
                 t
             })
             .collect()
@@ -166,11 +215,19 @@ impl Core {
         list.push(info.clone());
         self.term_save(&list).await?;
         self.emit(CoreEvent::ThreadsChanged);
-        Ok(TermInfo { alive: true, ..info })
+        Ok(TermInfo {
+            alive: true,
+            ..info
+        })
     }
 
     /// Start the program of a saved session again (after it ended, or the app restarted).
-    pub async fn term_restart(self: &Arc<Self>, id: &str, cols: u16, rows: u16) -> anyhow::Result<()> {
+    pub async fn term_restart(
+        self: &Arc<Self>,
+        id: &str,
+        cols: u16,
+        rows: u16,
+    ) -> anyhow::Result<()> {
         let info = self
             .term_saved()
             .await
@@ -197,9 +254,10 @@ impl Core {
         cmd.cwd(&info.cwd);
         cmd.env("TERM", "xterm-256color");
         cmd.env("COLORTERM", "truecolor");
-        let mut child = pair.slave.spawn_command(cmd).map_err(|e| {
-            anyhow::anyhow!("could not start {}: {e}", program.display())
-        })?;
+        let mut child = pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| anyhow::anyhow!("could not start {}: {e}", program.display()))?;
         drop(pair.slave);
         let mut reader = pair.master.try_clone_reader()?;
         let writer = pair.master.take_writer()?;
@@ -275,7 +333,9 @@ impl Core {
     /// What the session has printed so far (base64), to draw it again when it is reopened.
     pub fn term_snapshot(&self, id: &str) -> String {
         self.term_live(id)
-            .map(|l| base64::engine::general_purpose::STANDARD.encode(&*l.scrollback.lock().unwrap()))
+            .map(|l| {
+                base64::engine::general_purpose::STANDARD.encode(&*l.scrollback.lock().unwrap())
+            })
             .unwrap_or_default()
     }
 
@@ -289,7 +349,12 @@ impl Core {
     /// Stop the program and forget the session.
     pub async fn term_close(&self, id: &str) -> anyhow::Result<()> {
         self.term_kill(id);
-        let list: Vec<TermInfo> = self.term_saved().await.into_iter().filter(|t| t.id != id).collect();
+        let list: Vec<TermInfo> = self
+            .term_saved()
+            .await
+            .into_iter()
+            .filter(|t| t.id != id)
+            .collect();
         self.term_save(&list).await?;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(())
@@ -317,16 +382,22 @@ mod tests {
             .await
             .unwrap();
         let mut events = core.subscribe();
-        let info = core.term_create("shell", dir.path().to_str().unwrap(), 80, 24).await.unwrap();
+        let info = core
+            .term_create("shell", dir.path().to_str().unwrap(), 80, 24)
+            .await
+            .unwrap();
         assert!(info.alive);
-        core.term_write(&info.id, "echo opencue-$((20+22))\nexit\n").unwrap();
+        core.term_write(&info.id, "echo opencue-$((20+22))\nexit\n")
+            .unwrap();
         let mut seen = String::new();
         tokio::time::timeout(std::time::Duration::from_secs(10), async {
             while let Ok(ev) = events.recv().await {
                 match ev {
-                    CoreEvent::TermOutput { data, .. } => seen.push_str(
-                        &String::from_utf8_lossy(&base64::engine::general_purpose::STANDARD.decode(data).unwrap()),
-                    ),
+                    CoreEvent::TermOutput { data, .. } => seen.push_str(&String::from_utf8_lossy(
+                        &base64::engine::general_purpose::STANDARD
+                            .decode(data)
+                            .unwrap(),
+                    )),
                     CoreEvent::TermExit { .. } => break,
                     _ => {}
                 }
@@ -336,7 +407,9 @@ mod tests {
         .expect("the session ended");
         assert!(seen.contains("opencue-42"), "output was: {seen}");
         let again = String::from_utf8_lossy(
-            &base64::engine::general_purpose::STANDARD.decode(core.term_snapshot(&info.id)).unwrap(),
+            &base64::engine::general_purpose::STANDARD
+                .decode(core.term_snapshot(&info.id))
+                .unwrap(),
         )
         .to_string();
         assert!(again.contains("opencue-42"));

@@ -78,7 +78,19 @@ creates your first agent. Replay it any time from **Settings → General**.
   </tr>
   <tr>
     <td valign="top"><b>🧱 Make things (Artifacts)</b><br>Agents hand you web pages, diagrams, code, and real <code>.xlsx</code>, <code>.docx</code>, <code>.pptx</code> and <code>.pdf</code> files in a side panel, with versions. Each one is kept in the agent's Files.</td>
-    <td valign="top"><b>📊 Start from a dashboard</b><br>A home screen with what is running, plans, automations and usage. Press <code>Esc</code> in any chat to return, and run <code>/dashboard</code> to have an agent redesign it in HTML.</td>
+    <td valign="top"><b>📊 Start from a dashboard</b><br>A home screen with what is running, plans, automations and usage. Click the logo or press <code>Esc</code> in any chat to return, and run <code>/dashboard</code> to have an agent redesign it in HTML.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>🗺️ Plan, then do</b><br><code>/plan</code> has an agent plan and carry the work out, with a live status card (steps, timings, Approve / Deny). <code>/canvas</code> opens a document you and the agent edit together; <code>/artifact</code> makes a file.</td>
+    <td valign="top"><b>⚖️ Ask a council</b><br>A group where every member answers alone, reviews the others anonymously and a chair writes the verdict (<code>/ai-council</code>, or the AI Council template).</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>👩‍💻 Code as a team</b><br>Coding groups on a repository: sessions (working / pending / blocked), the diff, pull requests with their checks, a worktree per agent, and Claude Code, Codex or Grok as teammates — talking with ACK / STATUS / DONE.</td>
+    <td valign="top"><b>⌨️ CLI chats</b><br>Claude Code, Codex, Grok Build, Gemini CLI, Antigravity, Vibe or Muse Code in a real terminal inside the app, from the sidebar's <b>+</b>.</td>
+  </tr>
+  <tr>
+    <td valign="top"><b>🔊 Voice on your computer</b><br>Local speech-to-text (Parakeet, Canary, Whisper, SenseVoice) and text-to-speech (Kokoro), and NVIDIA PersonaPlex for real-time calls — also from your phone.</td>
+    <td valign="top"><b>🪟 Your layout</b><br>Resize the side panels or pop any of them into a window you can drag around the desktop.</td>
   </tr>
 </table>
 
@@ -123,7 +135,8 @@ Release builds sign update bundles, so a local `npm run tauri build` needs `TAUR
 
 ```
 crates/opencue-core     Rust core: agents, providers, runtime, memory, files, MCP client and server, web, skills,
-                        automations, email, catalog apps, computers (Docker/Podman/SPACE/WSL/host), voice, storage
+                        automations, email, catalog apps, computers (Docker/Podman/SPACE/WSL/host), voice and local
+                        speech models, PersonaPlex, terminals, the AI council, coding groups (git/GitHub), storage
 crates/opencue-cli      opencue-cli companion
 apps/desktop            Tauri 2 shell (src-tauri) + React/Tailwind UI (src)
 site/                   website (GitHub Pages): home, /docs, /privacy, /changelog, install scripts, llms.txt
@@ -140,7 +153,8 @@ docs/                   design doc, SPACE setup guide
 |---|---|---|
 | `~/Library/Application Support/opencue` | `~/.local/share/opencue` | `%APPDATA%\opencue\data` |
 
-Inside: `opencue.db` (SQLite: agents, groups, messages, providers, MCP servers, automations, email accounts, settings,
+Inside: `models/` (downloaded speech models, the sherpa-onnx runtime and PersonaPlex's Python environment), `space/`
+(the SPACE checkout, when OpenCue installed it), `opencue.db` (SQLite: agents, groups, messages, providers, MCP servers, automations, email accounts, settings,
 web cache), `agents/<id>/` (`INSTRUCTIONS.md`, `MEMORY.md`, `workspace/`, `space.json`), `files/` (shared files),
 `memory/GLOBAL.md` and `skills/<name>/SKILL.md`. Set `OPENCUE_HOME` to use another folder. API keys, email passwords and
 tokens live in `secrets.json` (mode `0600`) in the data folder; catalog app tokens are in `oauth/<app>.json` (also `0600`).
@@ -196,6 +210,11 @@ Changes to `site/` deploy the website.
   versions, kept in each agent's Files), a dashboard home screen with `Esc` to return and `/dashboard` to redesign it,
   copy / edit / regenerate on messages, Mistral API, Groq, Mistral Vibe and Antigravity providers with their logos, and
   browser tabs.
+- [x] **0.5.0**: local speech models (Parakeet, Canary, Whisper, SenseVoice, Kokoro) and NVIDIA PersonaPlex for
+  real-time voice (also from a phone), `/plan` with a live status card, system and user skills in the chat's +, `/canvas`
+  and `/artifact`, artifact cards with progress, resizable and floating panels, terminals for Claude Code, Codex, Grok
+  and more, the AI council, coding groups with pull requests and a protocol for agents to talk, SPACE that installs
+  itself, ordered providers and a fix for the browser covering its toolbar.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

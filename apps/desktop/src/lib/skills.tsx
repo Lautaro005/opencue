@@ -9,9 +9,10 @@ export interface SystemSkill {
 
 /** The commands OpenCue itself understands, in the order they are listed. */
 export function systemSkills(opts: { dashboard: boolean; group: boolean }): SystemSkill[] {
+  // /dashboard is always listed; only the agent chosen in Settings → General can run it.
   return [
     { name: "plan", desc: "slash.plan", icon: "plan" },
-    ...(opts.dashboard ? [{ name: "dashboard", desc: "slash.dashboard", icon: "dashboard" }] : []),
+    { name: "dashboard", desc: opts.dashboard ? "slash.dashboard" : "slash.dashboardSet", icon: "dashboard" },
     { name: "create-skill", desc: "slash.createSkill", icon: "skill" },
     { name: "create-automation", desc: "slash.createAutomation", icon: "automation" },
     { name: "artifact", desc: "slash.artifact", icon: "artifact" },

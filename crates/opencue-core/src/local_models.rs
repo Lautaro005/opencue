@@ -856,7 +856,11 @@ impl Core {
         let wav_path = tmp.join(format!("{}.wav", new_id()));
         std::fs::write(&wav_path, &wav)?;
         let lang = lang.map(|l| l.split(['-', '_']).next().unwrap_or(l).to_ascii_lowercase());
-        let args = stt_args(d.engine, &self.model_dir(id), lang.as_deref().filter(|l| !l.is_empty() && *l != "system"));
+        let args = stt_args(
+            d.engine,
+            &self.model_dir(id),
+            lang.as_deref().filter(|l| !l.is_empty() && *l != "system"),
+        );
         let result = match args {
             Ok(a) => {
                 self.run_sherpa("sherpa-onnx-offline", a, Some(&wav_path))
@@ -905,7 +909,9 @@ mod tests {
         ids.sort();
         ids.dedup();
         assert_eq!(ids.len(), CATALOG.len());
-        assert!(CATALOG.iter().all(|d| d.size > 0 && d.asset.ends_with(".tar.bz2")));
+        assert!(CATALOG
+            .iter()
+            .all(|d| d.size > 0 && d.asset.ends_with(".tar.bz2")));
         assert!(def(DEFAULT_STT).is_some_and(|d| d.kind == Kind::Stt));
         assert!(def(DEFAULT_TTS).is_some_and(|d| d.kind == Kind::Tts));
     }
@@ -936,7 +942,9 @@ mod tests {
             std::fs::write(dir.path().join(f), b"x").unwrap();
         }
         let a = stt_args(Engine::Whisper, dir.path(), Some("es")).unwrap();
-        assert!(a.iter().any(|x| x.starts_with("--whisper-encoder=") && x.contains("int8")));
+        assert!(a
+            .iter()
+            .any(|x| x.starts_with("--whisper-encoder=") && x.contains("int8")));
         assert!(a.contains(&"--whisper-language=es".to_string()));
         assert!(stt_args(Engine::Transducer, dir.path(), None).is_err());
         let c = stt_args(Engine::Canary, dir.path(), Some("pt")).unwrap();

@@ -219,6 +219,7 @@ pub fn run() {
             commands::create_group,
             commands::update_group,
             commands::delete_group,
+            commands::set_group_kind,
             commands::add_group_member,
             commands::remove_group_member,
             commands::get_messages,

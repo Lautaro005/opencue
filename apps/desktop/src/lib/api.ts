@@ -112,6 +112,7 @@ export const api = {
   githubComment: (groupId: string, number: number, body: string) => invokeImpl<void>("github_comment", { groupId, number, body }),
   codingFixCi: (groupId: string, number: number) => invokeImpl<void>("coding_fix_ci", { groupId, number }),
   updateGroup: (id: string, name?: string, maxAutoTurns?: number) => invokeImpl<void>("update_group", { id, name, maxAutoTurns }),
+  setGroupKind: (id: string, kind: GroupKind) => invokeImpl<void>("set_group_kind", { id, kind }),
   deleteGroup: (id: string) => invokeImpl<void>("delete_group", { id }),
   addGroupMember: (groupId: string, agentId: string) => invokeImpl<void>("add_group_member", { groupId, agentId }),
   removeGroupMember: (groupId: string, agentId: string) => invokeImpl<void>("remove_group_member", { groupId, agentId }),

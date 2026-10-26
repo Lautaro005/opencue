@@ -265,6 +265,9 @@ export const es: Dict = {
     autonomousShort: "Autónomo",
   },
   group: {
+    council: "Consejo de IA",
+    councilToggle: "Cada mensaje va al consejo",
+    councilHint: "Los miembros responden por su cuenta, se revisan sin nombres y {{chair}} (el dueño) escribe el veredicto. Usa /ai-council para hacerlo una vez, o @menciona a alguien para saltarlo.",
     details: "Detalles del grupo",
     name: "Nombre",
     members: "Miembros",
@@ -537,6 +540,7 @@ export const es: Dict = {
     failedHint: "Mira el mensaje de abajo.",
   },
   slash: {
+    dashboardSet: "Rediseña el dashboard (primero elige este agente en Ajustes → General)",
     plan: "Que un agente planifique el trabajo y lo ejecute paso a paso",
     artifact: "Que el agente cree una página, documento, diagrama o archivo",
     canvas: "Abre un canvas que el agente y tú editan juntos",

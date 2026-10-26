@@ -252,7 +252,7 @@ const voice = { configured: false, has_key: false, voice_id: "", auto_speak: tru
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.4.2-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.5.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -305,6 +305,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   github_merge_pr: ({ number, auto }) => (auto ? `Auto-merge is on for #${number}.` : `Merged #${number}.`),
   github_comment: () => undefined,
   coding_fix_ci: () => undefined,
+  set_group_kind: ({ id: gid, kind }) => { groups.find((g) => g.id === gid)!.kind = kind as Group["kind"]; emit({ type: "threads_changed" }); },
   list_groups: () => groups,
   get_group: ({ id }) => groups.find((g) => g.id === id) ?? null,
   create_group: ({ name, agentIds, kind, config }) => {

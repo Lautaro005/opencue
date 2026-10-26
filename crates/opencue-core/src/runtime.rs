@@ -247,7 +247,11 @@ pub(crate) fn partial_title(head: &str) -> Option<String> {
                 't' => out.push(' '),
                 'u' => {
                     let hex: String = chars.by_ref().take(4).collect();
-                    out.push(u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)?);
+                    out.push(
+                        u32::from_str_radix(&hex, 16)
+                            .ok()
+                            .and_then(char::from_u32)?,
+                    );
                 }
                 other => out.push(other),
             },
@@ -474,7 +478,10 @@ impl Core {
                         .unwrap_or_default();
                     if crate::coding::closes_obligation(&outcome.text) {
                         owed.remove(&agent_id);
-                    } else if !o.reminded && auto_turns < group.max_auto_turns && !token.is_cancelled() {
+                    } else if !o.reminded
+                        && auto_turns < group.max_auto_turns
+                        && !token.is_cancelled()
+                    {
                         o.reminded = true;
                         auto_turns += 1;
                         let text = format!(
@@ -519,7 +526,12 @@ impl Core {
                     owed.entry(id.clone()).or_insert(Owed {
                         from: agent_id.clone(),
                         from_name,
-                        task: outcome.text.chars().take(160).collect::<String>().replace('\n', " "),
+                        task: outcome
+                            .text
+                            .chars()
+                            .take(160)
+                            .collect::<String>()
+                            .replace('\n', " "),
                         reminded: false,
                     });
                 }
@@ -1236,13 +1248,21 @@ impl Core {
                 g.name
             ));
             if g.kind == "coding" {
-                let lead_id = g.members.iter().find(|m| m.is_owner).map(|m| m.agent_id.clone());
+                let lead_id = g
+                    .members
+                    .iter()
+                    .find(|m| m.is_owner)
+                    .map(|m| m.agent_id.clone());
                 let lead = lead_id
                     .as_ref()
                     .and_then(|id| all.iter().find(|a| &a.id == id))
                     .map(|a| a.name.clone())
                     .unwrap_or_else(|| agent.name.clone());
-                let repo = g.config.get("repo_dir").and_then(|v| v.as_str()).filter(|d| !d.is_empty());
+                let repo = g
+                    .config
+                    .get("repo_dir")
+                    .and_then(|v| v.as_str())
+                    .filter(|d| !d.is_empty());
                 let work = agent
                     .settings
                     .working_dir
@@ -2169,8 +2189,14 @@ mod tests {
 
     #[test]
     fn reads_a_title_from_half_written_arguments() {
-        assert_eq!(partial_title("{\"title\": \"Q3 plan\", \"type\":"), Some("Q3 plan".into()));
-        assert_eq!(partial_title("{\"type\":\"html\",\"title\":\"Caf\\u00e9 \\\"menu\\\"\""), Some("Café \"menu\"".into()));
+        assert_eq!(
+            partial_title("{\"title\": \"Q3 plan\", \"type\":"),
+            Some("Q3 plan".into())
+        );
+        assert_eq!(
+            partial_title("{\"type\":\"html\",\"title\":\"Caf\\u00e9 \\\"menu\\\"\""),
+            Some("Café \"menu\"".into())
+        );
         assert_eq!(partial_title("{\"title\": \"Unfinis"), None);
         assert_eq!(partial_title("{\"content\": \"<h1>"), None);
     }

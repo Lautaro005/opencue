@@ -218,6 +218,11 @@ pub async fn update_group(
 }
 
 #[tauri::command]
+pub async fn set_group_kind(state: State<'_, AppState>, id: String, kind: String) -> R<()> {
+    state.core.set_group_kind(&id, &kind).await.map_err(e)
+}
+
+#[tauri::command]
 pub async fn delete_group(state: State<'_, AppState>, id: String) -> R<()> {
     state.core.delete_group(&id).await.map_err(e)
 }
@@ -1098,12 +1103,7 @@ pub async fn test_vmpal(state: State<'_, AppState>, name: String) -> R<McpServer
 /// Open a panel (an artifact, a canvas or an agent's computer) in a window of its own that can
 /// be dragged anywhere on the desktop. Opening the same one again brings it to the front.
 #[tauri::command]
-pub async fn open_float(
-    app: tauri::AppHandle,
-    kind: String,
-    id: String,
-    title: String,
-) -> R<()> {
+pub async fn open_float(app: tauri::AppHandle, kind: String, id: String, title: String) -> R<()> {
     use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
     if !["artifact", "canvas", "computer"].contains(&kind.as_str()) {
         return Err("unknown panel".into());

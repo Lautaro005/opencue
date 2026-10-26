@@ -2,6 +2,69 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.5.0 — 2026-10-26
+
+### New
+
+- **Local speech models** (Settings → Models → **Local**). Download speech-to-text (**Parakeet TDT 0.6B v3**,
+  **Canary 180M Flash**, **Whisper** tiny / base / small / large-v3 turbo, **SenseVoice**) and text-to-speech (**Kokoro
+  82M**, with Spanish, English, French, Italian, Portuguese, Hindi, Japanese and Chinese voices) and use them for the mic
+  button, voice calls and spoken replies, with nothing leaving the computer. They run through the small `sherpa-onnx`
+  runtime, downloaded once with the first model; sizes, licenses and RAM are shown before anything downloads. Settings →
+  Voice picks the engine for each direction (automatic, ElevenLabs or local).
+- **NVIDIA PersonaPlex** (same page). The 7B full-duplex speech-to-speech model: OpenCue installs its server in a private
+  Python environment, starts and stops it, and the phone button gets a **PersonaPlex (real time)** option. Turn on
+  **Allow calls from my phone** and a QR code opens the call from a phone on the same network. Needs an NVIDIA GPU (or
+  CPU offload, slow), Python 3.10+ and a Hugging Face token whose owner accepted the model license.
+- **`/plan`.** An agent plans (`update_plan`), then carries the plan out step by step with up to 80 tool steps instead
+  of 16. The reply is a **status card** like the one in Claude's apps: what it is doing now, a segment per step, each
+  action with how long it took, **Approve / Deny** when it needs you, a Stop button and "Open run" for the full list.
+- **Skills in the chat's +.** Agents → Skills now lists the **system** commands (`/plan`, `/dashboard`,
+  `/create-skill`, `/create-automation`, `/artifact`, `/canvas` and, in groups, `/ai-council`) and, under a separate
+  label, **your skills**. `/artifact` makes a file on request; **`/canvas`** opens a document or program you and the agent
+  edit together: type in the side panel, every pause saves a version, and the agent reads your edits back
+  (`read_artifact`) before changing it.
+- **Artifact cards that work while they work.** When an agent starts making an artifact the chat shows a card with a moving
+  border and a bar, its title as soon as the model has written it and how much is done; when finished it becomes the
+  clickable card with the name, kind and version, and a click opens the preview in the side panel (Settings → General can
+  open them automatically).
+- **Resize and pop out.** The computer, artifact and canvas panels resize by dragging their edge (double-click resets),
+  and an **Open in its own window** button turns any of them into a window you can drag anywhere on the desktop and keep
+  on top. The browser follows it there.
+- **Terminals in the sidebar's +.** **Claude Code, Codex, Grok Build, Gemini CLI, Antigravity, Mistral Vibe, Muse Code**
+  or a plain shell run in a real terminal inside the app, on a project folder you pick, with a darker background so it
+  reads as a terminal. Sessions stay in the sidebar, remember their screen and restart in one click.
+- **AI council** (Templates → Groups → **AI Council**, or *Create group → Council*, or turn it on for any group). Every
+  question goes to all members at once; each reviews the others' answers without knowing who wrote them and ranks them;
+  the chair (the group's owner) writes a verdict: agreed, disagreed, next step and confidence. **`/ai-council`** does it
+  once in any group (`--quick` skips the review). Members keep their own models, so a council can mix providers.
+- **Coding groups** (Templates → **Coding team**, or *Create group → Coding*). A team on one repository, with a side panel
+  like Claude Code's desktop app: **Sessions** grouped as Working / Pending / Blocked / Done / Idle, **Changes** with the
+  diff, **Pull requests** with their checks, review state and conflicts (fix CI, merge when ready, merge now, create a PR)
+  through the GitHub CLI, and the **Repository** (branch, sync, a worktree for each agent so parallel work never collides).
+  You can add agents from there, including **Claude Code, Codex, Grok…** as command-line agents.
+- **A better way for agents to talk** (borrowed from Agent Relay): coding teams use short `ACK` / `STATUS` / `BLOCKED` /
+  `DONE` lines, handoffs that say what "done" means, one writer per branch, and a handoff stays open until the teammate
+  answers `DONE` or `BLOCKED` (they are reminded once). The Sessions list reads those lines.
+- **SPACE installs itself** (Settings → Computers → Perplexity SPACE, Linux x86_64). OpenCue checks the host (KVM, Docker,
+  tools, disk), downloads SPACE, installs its tools and Firecracker, brings the stack up, signs in and fills in the
+  address, template and token, and renews the token by itself. Start and stop buttons included.
+
+### Changed
+
+- The **Dashboard** button is gone from the sidebar: the OpenCue logo takes you home.
+- **Providers** are ordered: connected ones first, then cloud APIs, models on this computer and command-line tools, each A–Z.
+- Artifacts no longer open on their own when an agent makes them (the card does it with a click); Settings → General
+  brings the old behaviour back.
+- CLI agents (Claude Code, Codex) run inside the agent's working folder when it has one, which is how coding teams give
+  them their worktrees.
+
+### Fixed
+
+- **Built-in browser over its own toolbar.** The page could still be drawn about a title bar too high on macOS and cover
+  the address row. The app now measures where the page really is next to its own and corrects the difference, instead of
+  trusting the system's title-bar guess.
+
 ## 0.4.2 — 2026-10-25
 
 ### New

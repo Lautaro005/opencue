@@ -35,7 +35,10 @@ pub struct CouncilRequest {
 pub fn parse_request(group: &Group, text: &str, mentions_someone: bool) -> Option<CouncilRequest> {
     let t = text.trim();
     let lower = t.to_ascii_lowercase();
-    if lower == "/ai-council" || lower.starts_with("/ai-council ") || lower.starts_with("/ai-council\n") {
+    if lower == "/ai-council"
+        || lower.starts_with("/ai-council ")
+        || lower.starts_with("/ai-council\n")
+    {
         let mut rest = t["/ai-council".len()..].trim();
         let mut quick = false;
         if let Some(r) = rest.strip_prefix("--quick") {
@@ -197,7 +200,12 @@ impl Core {
             }
             Err(e) => {
                 msg.content = format!("{e:#}");
-                msg.status = if token.is_cancelled() { "stopped" } else { "error" }.into();
+                msg.status = if token.is_cancelled() {
+                    "stopped"
+                } else {
+                    "error"
+                }
+                .into();
                 None
             }
         };
@@ -228,7 +236,10 @@ impl Core {
             })
             .collect::<Vec<_>>();
         // The newest user message is the question itself.
-        let skip = recent.iter().rposition(|m| m.role == Role::User).unwrap_or(0);
+        let skip = recent
+            .iter()
+            .rposition(|m| m.role == Role::User)
+            .unwrap_or(0);
         let lines: Vec<String> = recent[..skip]
             .iter()
             .rev()
@@ -310,8 +321,11 @@ impl Core {
             return Ok(());
         }
         if answered.is_empty() {
-            self.council_event(&group.id, "⚖️ Council: no member could answer. Check their models in their profiles.".into())
-                .await;
+            self.council_event(
+                &group.id,
+                "⚖️ Council: no member could answer. Check their models in their profiles.".into(),
+            )
+            .await;
             return Ok(());
         }
 
@@ -319,8 +333,11 @@ impl Core {
         let mut ranking_note = String::new();
         let mut reviews: Vec<(&Agent, String)> = vec![];
         if !req.quick && answered.len() > 1 {
-            self.council_event(&group.id, "Round 2: each member reviews the answers without knowing who wrote them.".into())
-                .await;
+            self.council_event(
+                &group.id,
+                "Round 2: each member reviews the answers without knowing who wrote them.".into(),
+            )
+            .await;
             let labeled = answered
                 .iter()
                 .enumerate()
@@ -347,7 +364,8 @@ impl Core {
                     reviews.push((a, r));
                 }
             }
-            let rankings: Vec<Vec<usize>> = reviews.iter().map(|(_, r)| parse_ranking(r, n)).collect();
+            let rankings: Vec<Vec<usize>> =
+                reviews.iter().map(|(_, r)| parse_ranking(r, n)).collect();
             if rankings.iter().any(|r| !r.is_empty()) {
                 let order = combined_ranking(&rankings, n);
                 ranking_note = order
@@ -355,7 +373,8 @@ impl Core {
                     .map(|(i, pts)| format!("{} ({}, {pts} pts)", answered[*i].0.name, letter(*i)))
                     .collect::<Vec<_>>()
                     .join(" > ");
-                self.council_event(&group.id, format!("Combined ranking: {ranking_note}")).await;
+                self.council_event(&group.id, format!("Combined ranking: {ranking_note}"))
+                    .await;
             }
         }
         if token.is_cancelled() {
@@ -363,7 +382,11 @@ impl Core {
         }
 
         // Round 3: the chair's verdict.
-        self.council_event(&group.id, format!("Verdict: {} writes the council's answer.", chair.name)).await;
+        self.council_event(
+            &group.id,
+            format!("Verdict: {} writes the council's answer.", chair.name),
+        )
+        .await;
         let opinions_text = answered
             .iter()
             .enumerate()
@@ -397,7 +420,8 @@ impl Core {
                 format!("\n\nCombined ranking by the members: {ranking_note}")
             }
         );
-        self.council_turn(&group.id, &chair, system, user, token).await;
+        self.council_turn(&group.id, &chair, system, user, token)
+            .await;
         Ok(())
     }
 }
@@ -424,16 +448,25 @@ mod tests {
         let r = parse_request(&g, "/ai-council --quick which db?", false).unwrap();
         assert!(r.quick && r.question == "which db?");
         assert!(parse_request(&g, "hello", false).is_none());
-        assert!(parse_request(&g, "/ai-council", false).unwrap().question.is_empty());
+        assert!(parse_request(&g, "/ai-council", false)
+            .unwrap()
+            .question
+            .is_empty());
         let c = group("council");
-        assert_eq!(parse_request(&c, "which db?", false).unwrap().question, "which db?");
+        assert_eq!(
+            parse_request(&c, "which db?", false).unwrap().question,
+            "which db?"
+        );
         assert!(parse_request(&c, "@Alice which db?", true).is_none());
         assert!(parse_request(&c, "/plan do x", false).is_none());
     }
 
     #[test]
     fn reads_rankings() {
-        assert_eq!(parse_ranking("Reasons...\nRanking: B > A > C", 3), vec![1, 0, 2]);
+        assert_eq!(
+            parse_ranking("Reasons...\nRanking: B > A > C", 3),
+            vec![1, 0, 2]
+        );
         assert_eq!(parse_ranking("ranking: c, a", 3), vec![2, 0]);
         assert_eq!(parse_ranking("Ranking: A > Z > A", 3), vec![0]);
         assert!(parse_ranking("no ranking line", 3).is_empty());

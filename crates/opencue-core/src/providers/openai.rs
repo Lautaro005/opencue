@@ -265,7 +265,9 @@ impl LlmProvider for OpenAiProvider {
                         &req_on_tool,
                         index,
                         new_name.unwrap_or(""),
-                        tc.pointer("/function/arguments").and_then(Value::as_str).unwrap_or(""),
+                        tc.pointer("/function/arguments")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
                     );
                     if let Some(args) = tc.pointer("/function/arguments") {
                         match args {

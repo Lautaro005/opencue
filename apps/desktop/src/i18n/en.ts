@@ -263,6 +263,9 @@ export const en = {
     autonomousShort: "Autonomous",
   },
   group: {
+    council: "AI council",
+    councilToggle: "Every message goes to the council",
+    councilHint: "Members answer on their own, review each other without names, and {{chair}} (the owner) writes the verdict. Use /ai-council to do it once, or @mention someone to skip it.",
     details: "Group details",
     name: "Name",
     members: "Members",
@@ -535,6 +538,7 @@ export const en = {
     failedHint: "See the message below.",
   },
   slash: {
+    dashboardSet: "Redesign the dashboard (first pick this agent in Settings → General)",
     plan: "Have an agent plan the work, then carry it out step by step",
     artifact: "Have the agent make a page, document, diagram or file",
     canvas: "Open a canvas the agent and you edit together",

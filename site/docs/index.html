@@ -41,6 +41,10 @@
         <a href="#files">Files</a>
         <a href="#artifacts">Artifacts</a>
         <a href="#dashboard">Dashboard</a>
+        <a href="#plan">/plan &amp; canvas</a>
+        <a href="#council">AI council</a>
+        <a href="#coding">Coding groups</a>
+        <a href="#terminals">Terminals</a>
         <a href="#approvals">Approvals</a>
         <div class="group">Capabilities</div>
         <a href="#apps">Apps, MCP &amp; Catalog</a>
@@ -50,7 +54,7 @@
         <a href="#computers">Computers</a>
         <a href="#browser">Browser</a>
         <a href="#messenger">Messenger</a>
-        <a href="#voice">Voice</a>
+        <a href="#voice">Voice &amp; local models</a>
         <a href="#internet">Internet</a>
         <div class="group">More</div>
         <a href="#updates">Updates</a>
@@ -166,6 +170,41 @@
         <p>The home screen shows what is going on: the agents working right now, plans in progress, automations with their next run, recent chats and usage. Click the <strong>Dashboard</strong> entry at the top of the sidebar, or press <kbd>Esc</kbd> inside a chat, to come back to it (a half-written message keeps its first <kbd>Esc</kbd> for itself).</p>
         <p>The page is plain HTML. To make it yours, go to <strong>Settings → General → Dashboard</strong> and pick the agent in charge; then run <code>/dashboard</code> in that agent's chat and say what you want (“big numbers on top, my automations as a list, dark colors”). The agent reads the current page with <code>read_dashboard</code> and rewrites it with <code>update_dashboard</code>; OpenCue sends the page live data as a window message. <em>Reset</em> goes back to the built-in page. The page runs in a sandbox with no network access.</p>
 
+        <h2 id="plan">/plan, /canvas and the chat's + menu</h2>
+        <p>The <strong>+</strong> in the message box lists <strong>Skills</strong> in two groups: the <em>system</em> commands and, under their own label, <em>your skills</em>.</p>
+        <table>
+          <tr><th>Command</th><th>What it does</th></tr>
+          <tr><td><code>/plan</code></td><td>The agent plans (<code>update_plan</code>), then carries the plan out step by step without stopping to ask, with up to 80 tool steps. The reply is a card: what it is doing now, one segment per step, each action with its time, <strong>Approve / Deny</strong> when it needs you, Stop, and <em>Open run</em> for the whole list.</td></tr>
+          <tr><td><code>/dashboard</code></td><td>Redesign the home screen (the agent chosen in Settings → General).</td></tr>
+          <tr><td><code>/create-skill</code>, <code>/create-automation</code></td><td>The agent writes a skill or an automation for itself.</td></tr>
+          <tr><td><code>/artifact</code></td><td>The agent makes a page, document, diagram or file as an artifact. While it writes, the chat shows a card with progress; when finished, click it to open the preview in the side panel.</td></tr>
+          <tr><td><code>/canvas</code></td><td>Opens a canvas: a document or program you and the agent build together. Type in the side panel (Edit); every pause saves a version, and the agent reads your edits back before changing it.</td></tr>
+          <tr><td><code>/ai-council</code></td><td>In a group: see <a href="#council">AI council</a>.</td></tr>
+        </table>
+        <p>The computer, artifact and canvas panels resize by dragging their edge (double-click resets) and can be popped out with <strong>Open in its own window</strong>: a window you drag anywhere on the desktop and keep on top. The built-in browser follows it.</p>
+
+        <h2 id="council">AI council</h2>
+        <p>Create it from <strong>Templates → Groups → AI Council</strong> or <strong>Create group → Council</strong>, or turn on <em>Every message goes to the council</em> in any group's details. In a council every question runs in three rounds:</p>
+        <ol>
+          <li><strong>Opinions</strong> — each member answers alone and at the same time, with their own model and personality.</li>
+          <li><strong>Review</strong> — each member reads all the answers without names (A, B, C…), ranks them and points out mistakes and gaps.</li>
+          <li><strong>Verdict</strong> — the chair (the group's owner) writes the answer: where the council agreed, where it split and who held each view, the next step and a confidence level.</li>
+        </ol>
+        <p><code>/ai-council &lt;question&gt;</code> does it once in any group; <code>/ai-council --quick</code> skips the review. An @mention skips the council and asks that member directly. A council makes about two model calls per member plus the verdict, so it costs more than a normal reply.</p>
+
+        <h2 id="coding">Coding groups</h2>
+        <p>Create one from <strong>Templates → Coding team</strong> or <strong>Create group → Coding</strong> and pick the repository folder. The side panel has four tabs:</p>
+        <ul>
+          <li><strong>Sessions</strong> — the team grouped as Working, Pending (waiting for you), Blocked, Done and Idle, with each agent's last <code>ACK / STATUS / BLOCKED / DONE</code> line and branch. <strong>Add an agent</strong> offers Claude Code, Codex, Grok Build, Gemini (Antigravity), Mistral Vibe and Muse Code as command-line teammates, or any agent you have.</li>
+          <li><strong>Changes</strong> — files changed against the last commit with a per-file diff, and <em>Create pull request</em> (the branch is pushed first).</li>
+          <li><strong>PRs</strong> — open, merged and closed pull requests with checks, review state and conflicts; <em>Fix CI</em> sends the failing checks and the end of the log to the lead, <em>Merge when ready</em> turns on GitHub auto-merge and <em>Merge now</em> squashes. This uses the <a href="https://cli.github.com">GitHub CLI</a> (<code>gh auth login</code>) on your computer.</li>
+          <li><strong>Repository</strong> — folder, branch, sync, GitHub account and the <em>A worktree for each agent</em> switch: teammates work in <code>.opencue/worktrees/&lt;name&gt;</code> on <code>agent/&lt;name&gt;/work</code> so parallel work never collides.</li>
+        </ul>
+        <p>The team's system prompt (borrowed from <a href="https://github.com/AgentWorkforce/relay">Agent Relay</a>) asks for short protocol lines — <code>ACK</code> when a task arrives, <code>STATUS</code> at milestones, <code>BLOCKED</code> instead of guessing, <code>DONE</code> with evidence — handoffs that say what "done" means, one writer per branch and never pushing to the default branch. A handoff stays open until the teammate answers <code>DONE</code> or <code>BLOCKED</code>; they are reminded once.</p>
+
+        <h2 id="terminals">Terminals</h2>
+        <p>The sidebar's <strong>+</strong> lists the command-line tools found on your computer: <strong>Claude Code, Codex, Grok Build, Gemini CLI, Antigravity, Mistral Vibe, Muse Code</strong> and a plain <strong>Terminal</strong>. Pick one, choose a project folder and it opens in a real terminal in the app (a darker background tells it apart from chats). Sessions stay in the sidebar under <em>Terminals</em>, remember their screen while the app is open and can be restarted or closed. They are your own installed, signed-in tools; nothing is sent anywhere by OpenCue.</p>
+
         <h2 id="approvals">Approvals</h2>
         <p>In <strong>Ask first</strong> mode (the default) these wait for you to click Allow in the chat:</p>
         <ul>
@@ -251,6 +290,7 @@ command = "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/Ma
 args = ["--mcp", "E7D-your-machine-id"]</code></pre>
         <p>In VMPal, turn on agent control for the machine (its <strong>Settings › AI Agents</strong>) and keep it running; if it is off, the agent starts it with its <code>vmpal_start</code> tool. Then open an agent's profile → <strong>Computer</strong> → <strong>VMPal</strong> and switch on the machines it may use — or press <strong>Add machine</strong> to paste a new table there, which adds it to the shared list and selects it. A machine starts the first time that agent replies; <strong>Test connection</strong> in Settings starts it now. VMPal machines are never part of “all MCP servers”, and in Ask-first mode their tools ask for approval unless they declare themselves read-only.</p>
         <h3>Setting up SPACE</h3>
+        <p><strong>Automatic (Linux x86_64 with KVM and Docker):</strong> in <strong>Settings → Computers → Perplexity SPACE</strong>, press <em>Install SPACE</em>. OpenCue checks the host (KVM, <code>/dev/net/tun</code>, Docker, tools, 30 GiB of disk, root or passwordless sudo), clones SPACE, runs its prerequisite and Firecracker installers and its bring-up, waits for the API, signs in as <code>root@local</code> with a password it makes up and keeps, and fills in the address (<code>http://127.0.0.1:8080</code>), the template (<code>seed:latest</code>) and the token, which it renews by itself. The first run takes a long while; <em>Start</em> and <em>Stop</em> bring the stack up and down. On macOS and Windows SPACE can't run: point OpenCue at a SPACE server on another Linux computer. The manual steps:</p>
         <ol>
           <li>On a Linux machine with <code>/dev/kvm</code>, run <code>scripts/check-space-host.sh</code> from the repository to check the basics.</li>
           <li>Install SPACE following <a href="https://space.docs.perplexity.ai/">its documentation</a>.</li>
@@ -290,12 +330,25 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
         <p>The sidebar's <strong>+</strong> menu has <strong>Templates</strong>: ready-made agents and teams (Dr. Eggbot, PR Reviewer, Research Bot, Dewey…). The same window imports a Grok Bot from x.ai: paste a marketplace link (<code>x.ai/bot/marketplace/bots/…</code>) to get its instructions, memories, skills and routines, or a shared link (<code>x.ai/bot/…</code>), which only exposes the name and description.</p>
         <p>The magnifier next to <strong>+</strong> (or <kbd>⌘K</kbd> / <kbd>Ctrl K</kbd>) searches every chat for a message and jumps to it. <strong>Settings → Usage</strong> also shows the 5-hour and weekly limits of the Codex and Claude Code CLIs you connected, with a bar and the reset time.</p>
 
-        <h2 id="voice">Voice</h2>
+        <h2 id="voice">Voice &amp; local models</h2>
         <ol>
-          <li>Create an <a href="https://elevenlabs.io">ElevenLabs</a> API key and paste it in <strong>Settings → Voice</strong>.</li>
-          <li>Press the microphone in the message box, speak, press it again. Your speech is transcribed (Scribe) and sent.</li>
+          <li>Either create an <a href="https://elevenlabs.io">ElevenLabs</a> API key and paste it in <strong>Settings → Voice</strong>, or download models that run on your computer (below).</li>
+          <li>Press the microphone in the message box, speak, press it again. Your speech is transcribed and sent. The phone button makes a voice call.</li>
           <li>With <strong>Read replies aloud</strong> on, the agent's answer is spoken. Pick a default voice there, or a voice per agent in its Voice page.</li>
+          <li><strong>Settings → Voice → Engines</strong> chooses, for speech to text and for text to speech, ElevenLabs, local models, or automatic (local when there is no ElevenLabs key).</li>
         </ol>
+        <h3>Local models</h3>
+        <p><strong>Settings → Models → Local</strong> downloads speech models that run on your computer, so nothing you say leaves it. Sizes, licenses and memory are shown before downloading; the first download also fetches the small <a href="https://github.com/k2-fsa/sherpa-onnx">sherpa-onnx</a> runtime.</p>
+        <table>
+          <tr><th>Model</th><th>For</th><th>Size</th></tr>
+          <tr><td>Parakeet TDT 0.6B v3</td><td>Speech to text, 25 European languages (Spanish and English included), detects the language</td><td>~465 MB</td></tr>
+          <tr><td>Canary 180M Flash</td><td>Speech to text in English, Spanish, German and French</td><td>~147 MB</td></tr>
+          <tr><td>Whisper tiny / base / small / large-v3 turbo</td><td>Speech to text in 99 languages</td><td>111 MB – 610 MB</td></tr>
+          <tr><td>SenseVoice</td><td>Speech to text in Chinese, English, Japanese, Korean and Cantonese</td><td>~158 MB</td></tr>
+          <tr><td>Kokoro 82M</td><td>Text to speech: 54 voices in Spanish, English, French, Italian, Portuguese, Hindi, Japanese and Chinese (or an English-only 8-bit build)</td><td>~330 MB / ~99 MB</td></tr>
+        </table>
+        <h3>NVIDIA PersonaPlex (real-time calls)</h3>
+        <p><a href="https://github.com/NVIDIA/personaplex">PersonaPlex</a> is a 7B full-duplex speech-to-speech model: it listens and talks at the same time, like a phone call. In <strong>Settings → Models → Local → NVIDIA PersonaPlex</strong>: accept the model license on <a href="https://huggingface.co/nvidia/personaplex-7b-v1">Hugging Face</a>, paste a token, press <em>Install</em> (a private Python environment, needs Python 3.10+ and the Opus library) and <em>Start</em> (the first start downloads about 17 GB). It needs an NVIDIA GPU, or <em>Use CPU memory too</em>, which is much slower. When it runs, the phone button in a chat offers <strong>PersonaPlex (real time)</strong>. Turn on <em>Allow calls from my phone</em> to get a QR code for a phone on the same network (accept the browser's certificate warning: the certificate is made on your computer).</p>
 
         <h2 id="internet">Internet</h2>
         <p>Agents with web access get <code>web_search</code> (DuckDuckGo and Wikipedia, no API keys) and <code>web_fetch</code> (any page, converted to Markdown). Results are cached in the local database. If you host <a href="https://docs.searxng.org">SearXNG</a>, add its URL in <strong>Settings → Internet</strong> and it is queried first.</p>

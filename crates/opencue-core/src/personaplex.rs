@@ -21,7 +21,8 @@ use crate::Core;
 
 pub const PORT: u16 = 8998;
 pub const HF_TOKEN_KEY: &str = "huggingface";
-const ARCHIVE: &str = "https://github.com/NVIDIA/personaplex/archive/refs/heads/main.zip#subdirectory=moshi";
+const ARCHIVE: &str =
+    "https://github.com/NVIDIA/personaplex/archive/refs/heads/main.zip#subdirectory=moshi";
 const LOG_LINES: usize = 400;
 
 #[derive(Default)]
@@ -107,7 +108,9 @@ pub fn server_args(ssl_dir: &std::path::Path, lan: bool, offload: bool) -> Vec<S
 }
 
 async fn capture(cmd: &mut Command, secs: u64) -> Option<String> {
-    cmd.stdin(Stdio::null()).stderr(Stdio::null()).kill_on_drop(true);
+    cmd.stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
     #[cfg(windows)]
     cmd.creation_flags(0x08000000);
     let out = tokio::time::timeout(Duration::from_secs(secs), cmd.output())
@@ -216,7 +219,10 @@ impl Core {
         offload: bool,
         token: Option<String>,
     ) -> anyhow::Result<()> {
-        if let Some(t) = token.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()) {
+        if let Some(t) = token
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+        {
             anyhow::ensure!(
                 t.starts_with("hf_"),
                 "a Hugging Face token starts with hf_ (huggingface.co/settings/tokens)"
@@ -227,7 +233,10 @@ impl Core {
             .set_setting("personaplex_lan", if lan { "true" } else { "false" })
             .await?;
         self.store
-            .set_setting("personaplex_offload", if offload { "true" } else { "false" })
+            .set_setting(
+                "personaplex_offload",
+                if offload { "true" } else { "false" },
+            )
             .await?;
         Ok(())
     }
@@ -254,11 +263,7 @@ impl Core {
         }
     }
 
-    async fn persona_run(
-        self: &Arc<Self>,
-        program: &str,
-        args: &[&str],
-    ) -> anyhow::Result<()> {
+    async fn persona_run(self: &Arc<Self>, program: &str, args: &[&str]) -> anyhow::Result<()> {
         self.persona.push(format!("$ {program} {}", args.join(" ")));
         let mut cmd = Command::new(program);
         cmd.args(args)
@@ -271,7 +276,10 @@ impl Core {
         let mut child = cmd.spawn()?;
         self.persona_pipe(&mut child);
         let status = child.wait().await?;
-        anyhow::ensure!(status.success(), "`{program}` failed ({status}); see the log");
+        anyhow::ensure!(
+            status.success(),
+            "`{program}` failed ({status}); see the log"
+        );
         Ok(())
     }
 
@@ -286,7 +294,9 @@ impl Core {
             Some(p) => p,
             None => {
                 self.persona.installing.store(false, Ordering::SeqCst);
-                anyhow::bail!("PersonaPlex needs Python 3.10 or newer: install it from python.org first.")
+                anyhow::bail!(
+                    "PersonaPlex needs Python 3.10 or newer: install it from python.org first."
+                )
             }
         };
         let core = self.clone();
@@ -370,7 +380,8 @@ impl Core {
             .kill_on_drop(true);
         #[cfg(windows)]
         cmd.creation_flags(0x08000000);
-        self.persona.push("— starting PersonaPlex (the first start downloads the model) —");
+        self.persona
+            .push("— starting PersonaPlex (the first start downloads the model) —");
         let mut child = cmd.spawn()?;
         self.persona_pipe(&mut child);
         *self.persona.child.lock().unwrap() = Some(child);

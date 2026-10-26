@@ -26,8 +26,8 @@ pub mod paths;
 pub mod personaplex;
 pub mod providers;
 pub mod secrets;
-pub mod space_setup;
 pub mod skills;
+pub mod space_setup;
 pub mod store;
 pub mod templates;
 pub mod terminal;
@@ -267,7 +267,17 @@ impl Core {
         Ok(g)
     }
 
-    pub async fn set_group_config(&self, id: &str, config: serde_json::Value) -> anyhow::Result<()> {
+    pub async fn set_group_kind(&self, id: &str, kind: &str) -> anyhow::Result<()> {
+        self.store.set_group_kind(id, kind).await?;
+        self.emit(CoreEvent::ThreadsChanged);
+        Ok(())
+    }
+
+    pub async fn set_group_config(
+        &self,
+        id: &str,
+        config: serde_json::Value,
+    ) -> anyhow::Result<()> {
         self.store.set_group_config(id, &config).await?;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(())

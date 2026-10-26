@@ -287,7 +287,10 @@ impl Core {
         let supported = cfg!(all(target_os = "linux", target_arch = "x86_64"));
         let (state, step) = self.space.state.lock().unwrap().clone();
         let running = self.space.running.load(Ordering::SeqCst);
-        let managed = self.secrets.get(PASSWORD_KEY).is_some_and(|p| !p.is_empty());
+        let managed = self
+            .secrets
+            .get(PASSWORD_KEY)
+            .is_some_and(|p| !p.is_empty());
         let checks = if supported && !running {
             evaluate(&gather_facts().await)
         } else {
@@ -298,7 +301,11 @@ impl Core {
         SpaceStatus {
             supported,
             state: if state.is_empty() {
-                if managed { "ready".into() } else { "idle".into() }
+                if managed {
+                    "ready".into()
+                } else {
+                    "idle".into()
+                }
             } else {
                 state
             },
@@ -340,8 +347,14 @@ impl Core {
             .env_remove("AWS_SESSION_TOKEN");
         let mut child = cmd.spawn()?;
         for pipe in [
-            child.stdout.take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Unpin + Send>),
-            child.stderr.take().map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Unpin + Send>),
+            child
+                .stdout
+                .take()
+                .map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Unpin + Send>),
+            child
+                .stderr
+                .take()
+                .map(|s| Box::new(s) as Box<dyn tokio::io::AsyncRead + Unpin + Send>),
         ]
         .into_iter()
         .flatten()
@@ -395,7 +408,8 @@ impl Core {
                 .map(|c| format!("• {}", c.detail))
                 .collect::<Vec<_>>()
                 .join("\n");
-            self.space.push(format!("The computer is not ready:\n{msg}"));
+            self.space
+                .push(format!("The computer is not ready:\n{msg}"));
             anyhow::bail!("This computer is not ready for SPACE:\n{msg}");
         }
         let core = self.clone();
@@ -477,17 +491,23 @@ impl Core {
         self.space.set("installing", "Connecting OpenCue");
         let token = login(API, &password).await?;
         self.space_connect(&token).await?;
-        self.space.push("SPACE is ready: agents can now use it as their computer.");
+        self.space
+            .push("SPACE is ready: agents can now use it as their computer.");
         Ok(())
     }
 
     /// Fill in Settings → Computers for the local SPACE.
     async fn space_connect(&self, token: &str) -> anyhow::Result<()> {
         self.store.set_setting("space_url", API).await?;
-        self.store.set_setting("space_template", "seed:latest").await?;
+        self.store
+            .set_setting("space_template", "seed:latest")
+            .await?;
         self.secrets.set(crate::services::SPACE_KEY, token)?;
         self.store
-            .set_setting("space_token_at", &chrono::Utc::now().timestamp().to_string())
+            .set_setting(
+                "space_token_at",
+                &chrono::Utc::now().timestamp().to_string(),
+            )
             .await?;
         Ok(())
     }
@@ -498,7 +518,9 @@ impl Core {
             .secrets
             .get(PASSWORD_KEY)
             .filter(|p| !p.is_empty())
-            .ok_or_else(|| anyhow::anyhow!("SPACE was not installed by OpenCue: use Install first."))?;
+            .ok_or_else(|| {
+                anyhow::anyhow!("SPACE was not installed by OpenCue: use Install first.")
+            })?;
         anyhow::ensure!(
             !self.space.running.swap(true, Ordering::SeqCst),
             "something is already running"
@@ -558,7 +580,13 @@ impl Core {
         let Some(password) = self.secrets.get(PASSWORD_KEY).filter(|p| !p.is_empty()) else {
             return;
         };
-        let url = self.store.setting("space_url").await.ok().flatten().unwrap_or_default();
+        let url = self
+            .store
+            .setting("space_url")
+            .await
+            .ok()
+            .flatten()
+            .unwrap_or_default();
         if url.trim_end_matches('/') != API {
             return;
         }
@@ -570,7 +598,10 @@ impl Core {
             .flatten()
             .and_then(|s| s.parse().ok())
             .unwrap_or(0);
-        let fresh = self.secrets.get(crate::services::SPACE_KEY).is_some_and(|t| !t.is_empty())
+        let fresh = self
+            .secrets
+            .get(crate::services::SPACE_KEY)
+            .is_some_and(|t| !t.is_empty())
             && chrono::Utc::now().timestamp() - at < TOKEN_MAX_AGE_SECS;
         if fresh {
             return;
@@ -616,8 +647,17 @@ mod tests {
         let c = evaluate(&f);
         let bad: Vec<&str> = blockers(&c).iter().map(|c| c.id).collect();
         assert_eq!(bad, vec!["kvm", "docker", "tools", "disk"]);
-        assert!(c.iter().find(|x| x.id == "tools").unwrap().detail.contains("git, openssl"));
-        let mac = Facts { os: "macos".into(), arch: "aarch64".into(), ..ready() };
+        assert!(c
+            .iter()
+            .find(|x| x.id == "tools")
+            .unwrap()
+            .detail
+            .contains("git, openssl"));
+        let mac = Facts {
+            os: "macos".into(),
+            arch: "aarch64".into(),
+            ..ready()
+        };
         assert!(blockers(&evaluate(&mac)).iter().any(|c| c.id == "platform"));
     }
 

@@ -163,11 +163,19 @@ pub async fn status(dir: &Path) -> RepoStatus {
         .await
         .ok()
         .and_then(|u| slug_from_remote(&u));
-    s.default_branch = git(dir, &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"])
-        .await
-        .ok()
-        .map(|b| b.trim().trim_start_matches("origin/").to_string());
-    if let Ok(counts) = git(dir, &["rev-list", "--left-right", "--count", "@{upstream}...HEAD"]).await {
+    s.default_branch = git(
+        dir,
+        &["symbolic-ref", "--short", "refs/remotes/origin/HEAD"],
+    )
+    .await
+    .ok()
+    .map(|b| b.trim().trim_start_matches("origin/").to_string());
+    if let Ok(counts) = git(
+        dir,
+        &["rev-list", "--left-right", "--count", "@{upstream}...HEAD"],
+    )
+    .await
+    {
         let mut p = counts.split_whitespace();
         s.behind = p.next().and_then(|n| n.parse().ok()).unwrap_or(0);
         s.ahead = p.next().and_then(|n| n.parse().ok()).unwrap_or(0);
@@ -224,9 +232,14 @@ pub fn summarize_checks(rollup: &Value) -> Checks {
             .and_then(Value::as_str)
             .unwrap_or("");
         c.total += 1;
-        let running = matches!(status, "IN_PROGRESS" | "QUEUED" | "PENDING" | "WAITING" | "REQUESTED")
-            || matches!(conclusion, "PENDING" | "EXPECTED");
-        let bad = matches!(conclusion, "FAILURE" | "ERROR" | "TIMED_OUT" | "CANCELLED" | "ACTION_REQUIRED" | "STARTUP_FAILURE");
+        let running = matches!(
+            status,
+            "IN_PROGRESS" | "QUEUED" | "PENDING" | "WAITING" | "REQUESTED"
+        ) || matches!(conclusion, "PENDING" | "EXPECTED");
+        let bad = matches!(
+            conclusion,
+            "FAILURE" | "ERROR" | "TIMED_OUT" | "CANCELLED" | "ACTION_REQUIRED" | "STARTUP_FAILURE"
+        );
         if bad {
             c.failed += 1;
             c.failing.push(name);
@@ -264,7 +277,12 @@ const PR_FIELDS: &str = "number,title,headRefName,baseRefName,author,isDraft,rev
 
 pub fn parse_pulls(json: &str) -> anyhow::Result<Vec<Pull>> {
     let v: Value = serde_json::from_str(json)?;
-    let s = |x: &Value, k: &str| x.get(k).and_then(Value::as_str).unwrap_or_default().to_string();
+    let s = |x: &Value, k: &str| {
+        x.get(k)
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string()
+    };
     Ok(v.as_array()
         .into_iter()
         .flatten()
@@ -293,10 +311,15 @@ pub fn parse_pulls(json: &str) -> anyhow::Result<Vec<Pull>> {
 }
 
 pub async fn pulls(dir: &Path, state: &str) -> anyhow::Result<Vec<Pull>> {
-    anyhow::ensure!(["open", "closed", "merged", "all"].contains(&state), "unknown state");
+    anyhow::ensure!(
+        ["open", "closed", "merged", "all"].contains(&state),
+        "unknown state"
+    );
     let out = gh(
         dir,
-        &["pr", "list", "--state", state, "--limit", "30", "--json", PR_FIELDS],
+        &[
+            "pr", "list", "--state", state, "--limit", "30", "--json", PR_FIELDS,
+        ],
     )
     .await?;
     parse_pulls(&out)
@@ -324,7 +347,11 @@ fn porcelain_entry(line: &str) -> Option<(String, String)> {
         return None;
     }
     let (x, y) = (line.as_bytes()[0] as char, line.as_bytes()[1] as char);
-    let path = line[3..].rsplit(" -> ").next().unwrap_or(&line[3..]).trim_matches('"');
+    let path = line[3..]
+        .rsplit(" -> ")
+        .next()
+        .unwrap_or(&line[3..])
+        .trim_matches('"');
     let letter = if x == '?' {
         '?'
     } else if x == 'A' || y == 'A' {
@@ -341,7 +368,9 @@ fn porcelain_entry(line: &str) -> Option<(String, String)> {
 
 /// The working tree's changes against HEAD: the files with their line counts, and the patch.
 pub async fn changes(dir: &Path) -> anyhow::Result<Changes> {
-    let numstat = git(dir, &["diff", "HEAD", "--numstat"]).await.unwrap_or_default();
+    let numstat = git(dir, &["diff", "HEAD", "--numstat"])
+        .await
+        .unwrap_or_default();
     let porcelain = git(dir, &["status", "--porcelain"]).await?;
     let mut counts = std::collections::HashMap::new();
     for l in numstat.lines() {
@@ -386,7 +415,13 @@ pub async fn changes(dir: &Path) -> anyhow::Result<Changes> {
 }
 
 /// A new pull request from the current branch (it is pushed first). Returns its address.
-pub async fn create_pull(dir: &Path, title: &str, body: &str, base: Option<&str>, draft: bool) -> anyhow::Result<String> {
+pub async fn create_pull(
+    dir: &Path,
+    title: &str,
+    body: &str,
+    base: Option<&str>,
+    draft: bool,
+) -> anyhow::Result<String> {
     anyhow::ensure!(!title.trim().is_empty(), "the pull request needs a title");
     let branch = git(dir, &["rev-parse", "--abbrev-ref", "HEAD"]).await?;
     let branch = branch.trim();
@@ -407,7 +442,12 @@ pub async fn create_pull(dir: &Path, title: &str, body: &str, base: Option<&str>
 }
 
 /// Merge a pull request now, or turn on auto-merge so GitHub does it when the checks pass.
-pub async fn merge_pull(dir: &Path, number: u64, method: &str, auto: bool) -> anyhow::Result<String> {
+pub async fn merge_pull(
+    dir: &Path,
+    number: u64,
+    method: &str,
+    auto: bool,
+) -> anyhow::Result<String> {
     let flag = match method {
         "merge" => "--merge",
         "rebase" => "--rebase",
@@ -440,7 +480,17 @@ pub async fn comment_pull(dir: &Path, number: u64, body: &str) -> anyhow::Result
 /// The failing checks of a pull request with a tail of the failing log, for an agent to fix.
 pub async fn failure_report(dir: &Path, number: u64) -> anyhow::Result<String> {
     let n = number.to_string();
-    let json = gh(dir, &["pr", "view", &n, "--json", &format!("{PR_FIELDS},headRefName")]).await?;
+    let json = gh(
+        dir,
+        &[
+            "pr",
+            "view",
+            &n,
+            "--json",
+            &format!("{PR_FIELDS},headRefName"),
+        ],
+    )
+    .await?;
     let pull = parse_pulls(&format!("[{json}]"))?.into_iter().next();
     let Some(p) = pull else {
         anyhow::bail!("no pull request #{number}");
@@ -455,7 +505,16 @@ pub async fn failure_report(dir: &Path, number: u64) -> anyhow::Result<String> {
     // The failing log of the latest run on the branch, if gh can get it.
     if let Ok(runs) = gh(
         dir,
-        &["run", "list", "--branch", &p.branch, "--limit", "5", "--json", "databaseId,conclusion"],
+        &[
+            "run",
+            "list",
+            "--branch",
+            &p.branch,
+            "--limit",
+            "5",
+            "--json",
+            "databaseId,conclusion",
+        ],
     )
     .await
     {
@@ -516,12 +575,25 @@ pub async fn add_worktree(repo: &Path, agent_name: &str) -> anyhow::Result<PathB
         let exclude = info.join("exclude");
         let cur = std::fs::read_to_string(&exclude).unwrap_or_default();
         if !cur.lines().any(|l| l.trim() == "/.opencue/") {
-            let _ = std::fs::write(&exclude, format!("{cur}{}/.opencue/\n", if cur.is_empty() || cur.ends_with('\n') { "" } else { "\n" }));
+            let _ = std::fs::write(
+                &exclude,
+                format!(
+                    "{cur}{}/.opencue/\n",
+                    if cur.is_empty() || cur.ends_with('\n') {
+                        ""
+                    } else {
+                        "\n"
+                    }
+                ),
+            );
         }
     }
     let p = path.display().to_string();
     // A new branch, or the one a previous run left behind.
-    if git(repo, &["worktree", "add", "-b", &branch, &p]).await.is_err() {
+    if git(repo, &["worktree", "add", "-b", &branch, &p])
+        .await
+        .is_err()
+    {
         git(repo, &["worktree", "add", &p, &branch]).await?;
     }
     Ok(path)
@@ -533,9 +605,18 @@ mod tests {
 
     #[test]
     fn reads_github_remotes() {
-        assert_eq!(slug_from_remote("git@github.com:Lautaro005/opencue.git"), Some("Lautaro005/opencue".into()));
-        assert_eq!(slug_from_remote("https://github.com/a/b.git\n"), Some("a/b".into()));
-        assert_eq!(slug_from_remote("https://github.com/a/b/"), Some("a/b".into()));
+        assert_eq!(
+            slug_from_remote("git@github.com:Lautaro005/opencue.git"),
+            Some("Lautaro005/opencue".into())
+        );
+        assert_eq!(
+            slug_from_remote("https://github.com/a/b.git\n"),
+            Some("a/b".into())
+        );
+        assert_eq!(
+            slug_from_remote("https://github.com/a/b/"),
+            Some("a/b".into())
+        );
         assert_eq!(slug_from_remote("https://gitlab.com/a/b"), None);
     }
 
@@ -573,10 +654,22 @@ mod tests {
 
     #[test]
     fn reads_git_status_lines() {
-        assert_eq!(porcelain_entry(" M src/a.rs"), Some(("M".into(), "src/a.rs".into())));
-        assert_eq!(porcelain_entry("?? new.txt"), Some(("?".into(), "new.txt".into())));
-        assert_eq!(porcelain_entry("R  old.rs -> new.rs"), Some(("R".into(), "new.rs".into())));
-        assert_eq!(porcelain_entry("D  gone.rs"), Some(("D".into(), "gone.rs".into())));
+        assert_eq!(
+            porcelain_entry(" M src/a.rs"),
+            Some(("M".into(), "src/a.rs".into()))
+        );
+        assert_eq!(
+            porcelain_entry("?? new.txt"),
+            Some(("?".into(), "new.txt".into()))
+        );
+        assert_eq!(
+            porcelain_entry("R  old.rs -> new.rs"),
+            Some(("R".into(), "new.rs".into()))
+        );
+        assert_eq!(
+            porcelain_entry("D  gone.rs"),
+            Some(("D".into(), "gone.rs".into()))
+        );
     }
 
     #[test]
@@ -587,7 +680,10 @@ mod tests {
 
     #[tokio::test]
     async fn status_and_worktree_in_a_real_repo() {
-        if run("git", &["--version"], Path::new("."), TIMEOUT).await.is_err() {
+        if run("git", &["--version"], Path::new("."), TIMEOUT)
+            .await
+            .is_err()
+        {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
@@ -610,14 +706,20 @@ mod tests {
         assert_eq!(s.changed_files, 2);
         assert_eq!(s.additions, 1);
         let c = changes(p).await.unwrap();
-        assert!(c.files.iter().any(|f| f.path == "a.txt" && f.status == "M" && f.additions == 1));
+        assert!(c
+            .files
+            .iter()
+            .any(|f| f.path == "a.txt" && f.status == "M" && f.additions == 1));
         assert!(c.files.iter().any(|f| f.path == "b.txt" && f.status == "?"));
         assert!(c.patch.contains("+two"));
         let wt = add_worktree(p, "Claude Code").await.unwrap();
         assert!(wt.join(".git").exists());
         assert!(add_worktree(p, "Claude Code").await.is_ok());
         let s2 = status(p).await;
-        assert!(s2.worktrees.iter().any(|w| w.branch == "agent/claude-code/work"));
+        assert!(s2
+            .worktrees
+            .iter()
+            .any(|w| w.branch == "agent/claude-code/work"));
         // The worktree folder is hidden from git status.
         assert_eq!(s2.changed_files, 2);
     }

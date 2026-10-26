@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderOpen, Repeat, Trash2, UserPlus, Users, X } from "lucide-react";
+import { FolderOpen, Repeat, Scale, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
 import type { Group } from "../../lib/types";
 import { AvatarView, GroupAvatar } from "../AvatarView";
-import { Badge, Button, IconButton, Input, useClickOutside } from "../ui";
+import { Badge, Button, IconButton, Input, Toggle, useClickOutside } from "../ui";
 import { Section } from "./Section";
 import { SharedFiles } from "./SharedFiles";
 import { useResizable } from "../ui/Resizer";
@@ -100,6 +100,16 @@ export function GroupDetails({ group }: { group: Group }) {
               </div>
             )}
           </div>
+        </Section>
+
+        <Section title={t("group.council")} icon={<Scale size={15} />}>
+          <label className="flex items-start justify-between gap-4 text-[13px]">
+            <span>
+              {t("group.councilToggle")}
+              <span className="block text-[11.5px] text-muted">{t("group.councilHint", { chair: members.find((m) => m.is_owner)?.agent.name ?? "" })}</span>
+            </span>
+            <Toggle checked={group.kind === "council"} onChange={(v) => void api.setGroupKind(group.id, v ? "council" : "chat").then(refresh)} label={t("group.councilToggle")} />
+          </label>
         </Section>
 
         <Section title={t("group.autoTurns")} icon={<Repeat size={15} />}>

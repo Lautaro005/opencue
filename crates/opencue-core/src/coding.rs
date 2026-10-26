@@ -23,10 +23,19 @@ pub fn protocol_lines(text: &str) -> Vec<(String, String)> {
         .filter_map(|l| {
             let l = l.trim().trim_start_matches(['*', '_', '`', '>', '-', ' ']);
             let (word, rest) = l.split_once(':')?;
-            let word = word.trim().trim_end_matches(['*', '_', '`']).to_ascii_uppercase();
-            PROTOCOL
-                .contains(&word.as_str())
-                .then(|| (word, rest.trim().trim_start_matches(['*', '_', '`']).trim().to_string()))
+            let word = word
+                .trim()
+                .trim_end_matches(['*', '_', '`'])
+                .to_ascii_uppercase();
+            PROTOCOL.contains(&word.as_str()).then(|| {
+                (
+                    word,
+                    rest.trim()
+                        .trim_start_matches(['*', '_', '`'])
+                        .trim()
+                        .to_string(),
+                )
+            })
         })
         .collect()
 }
@@ -39,14 +48,22 @@ pub fn closes_obligation(text: &str) -> bool {
 }
 
 /// What a coding group's agents are told about the team, on top of everything else.
-pub fn team_prompt(me: &str, lead: &str, is_lead: bool, repo: Option<&str>, worktree: Option<&str>) -> String {
+pub fn team_prompt(
+    me: &str,
+    lead: &str,
+    is_lead: bool,
+    repo: Option<&str>,
+    worktree: Option<&str>,
+) -> String {
     let mut s = String::from("\n\n## Coding team\n");
     match repo {
         Some(r) => s.push_str(&format!("You are on a team of coding agents working on the repository at `{r}`.")),
         None => s.push_str("You are on a team of coding agents. No repository is linked yet: ask the user to pick the folder in the group's panel."),
     }
     if let Some(w) = worktree {
-        s.push_str(&format!(" Your own working copy is `{w}`: work and commit only there."));
+        s.push_str(&format!(
+            " Your own working copy is `{w}`: work and commit only there."
+        ));
     }
     s.push_str(&format!(
         " The lead is @{lead}{}.\n\n\
@@ -141,14 +158,23 @@ impl Core {
         github::merge_pull(&dir, number, method, auto).await
     }
 
-    pub async fn github_comment(&self, group_id: &str, number: u64, body: &str) -> anyhow::Result<()> {
+    pub async fn github_comment(
+        &self,
+        group_id: &str,
+        number: u64,
+        body: &str,
+    ) -> anyhow::Result<()> {
         let (_, dir) = self.coding_dir(group_id).await?;
         github::comment_pull(&dir, number, body).await
     }
 
     /// Ask the group to fix a pull request whose checks fail: the failing checks and the end of the
     /// failing log go to the lead as a message from the user.
-    pub async fn coding_fix_ci(self: &std::sync::Arc<Self>, group_id: &str, number: u64) -> anyhow::Result<()> {
+    pub async fn coding_fix_ci(
+        self: &std::sync::Arc<Self>,
+        group_id: &str,
+        number: u64,
+    ) -> anyhow::Result<()> {
         let (group, dir) = self.coding_dir(group_id).await?;
         let report = github::failure_report(&dir, number).await?;
         let lead = group
@@ -180,7 +206,10 @@ impl Core {
             .ok_or_else(|| anyhow::anyhow!("no such group"))?;
         anyhow::ensure!(group.kind == "coding", "this is not a coding group");
         let path = PathBuf::from(dir.trim());
-        anyhow::ensure!(path.is_absolute(), "the repository folder must be a full path");
+        anyhow::ensure!(
+            path.is_absolute(),
+            "the repository folder must be a full path"
+        );
         anyhow::ensure!(path.is_dir(), "{} is not a folder", path.display());
         let status = github::status(&path).await;
         anyhow::ensure!(status.is_repo, "{} is not a git repository", path.display());
@@ -201,7 +230,11 @@ impl Core {
 
     /// Point an agent at the group's repository: a worktree of its own (if the group uses them),
     /// otherwise the repository folder, and a computer so it can run commands.
-    pub async fn coding_prepare_member(&self, group_id: &str, agent_id: &str) -> anyhow::Result<()> {
+    pub async fn coding_prepare_member(
+        &self,
+        group_id: &str,
+        agent_id: &str,
+    ) -> anyhow::Result<()> {
         let group = self
             .store
             .get_group(group_id)
@@ -217,10 +250,18 @@ impl Core {
             return Ok(());
         };
         let agent = self.store.get_agent(agent_id).await?;
-        let isolate = group.config.get("worktrees").and_then(Value::as_bool).unwrap_or(true);
+        let isolate = group
+            .config
+            .get("worktrees")
+            .and_then(Value::as_bool)
+            .unwrap_or(true);
         let folder = if isolate {
             // The lead works in the repository itself; teammates each get a worktree.
-            let lead = group.members.iter().find(|m| m.is_owner).is_some_and(|m| m.agent_id == agent.id);
+            let lead = group
+                .members
+                .iter()
+                .find(|m| m.is_owner)
+                .is_some_and(|m| m.agent_id == agent.id);
             if lead {
                 repo.clone()
             } else {
@@ -282,7 +323,13 @@ mod tests {
 
     #[test]
     fn the_team_prompt_names_the_lead_and_the_rules() {
-        let p = team_prompt("Ada", "Ada", true, Some("/r"), Some("/r/.opencue/worktrees/bo"));
+        let p = team_prompt(
+            "Ada",
+            "Ada",
+            true,
+            Some("/r"),
+            Some("/r/.opencue/worktrees/bo"),
+        );
         assert!(p.contains("/r") && p.contains("DONE") && p.contains("As the lead"));
         assert!(p.contains("(you)"));
         let w = team_prompt("Bo", "Ada", false, None, None);

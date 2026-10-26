@@ -342,7 +342,11 @@ impl Core {
         );
         let mut artifact = self.get_artifact(id)?;
         anyhow::ensure!(artifact.canvas, "only a canvas can be edited by hand");
-        if artifact.versions.last().is_some_and(|v| v.source == content) {
+        if artifact
+            .versions
+            .last()
+            .is_some_and(|v| v.source == content)
+        {
             return Ok(artifact);
         }
         let bytes = render(&artifact.kind, &artifact.title, content)?;

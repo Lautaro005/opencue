@@ -419,7 +419,22 @@ impl Store {
         Ok(())
     }
 
-    pub async fn set_group_config(&self, id: &str, config: &serde_json::Value) -> anyhow::Result<()> {
+    pub async fn set_group_kind(&self, id: &str, kind: &str) -> anyhow::Result<()> {
+        anyhow::ensure!(GROUP_KINDS.contains(&kind), "unknown group kind `{kind}`");
+        sqlx::query("UPDATE groups SET kind = ?, updated_at = ? WHERE id = ?")
+            .bind(kind)
+            .bind(now())
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn set_group_config(
+        &self,
+        id: &str,
+        config: &serde_json::Value,
+    ) -> anyhow::Result<()> {
         sqlx::query("UPDATE groups SET config = ?, updated_at = ? WHERE id = ?")
             .bind(config.to_string())
             .bind(now())
@@ -1054,6 +1069,10 @@ impl Store {
     }
 }
 
+fn parse_config(raw: String) -> serde_json::Value {
+    serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
+}
+
 #[cfg(test)]
 mod search_tests {
     use crate::models::Role;
@@ -1102,8 +1121,4 @@ mod search_tests {
             .unwrap()
             .is_empty());
     }
-}
-
-fn parse_config(raw: String) -> serde_json::Value {
-    serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
 }
