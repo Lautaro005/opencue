@@ -3735,6 +3735,8 @@ dependencies = [
  "async-trait",
  "base64 0.23.1",
  "chrono",
+ "objc2",
+ "objc2-foundation",
  "opencue-core",
  "serde",
  "serde_json",

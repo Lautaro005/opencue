@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Maximize2, Minimize2, MonitorPlay, RefreshCw, RotateCcw, Settings2, Square, TerminalSquare, X } from "lucide-react";
+import { ExternalLink, MonitorPlay, RefreshCw, RotateCcw, Settings2, Square, TerminalSquare } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, openUrl } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
@@ -8,6 +8,7 @@ import type { Agent, ComputerBackend } from "../../lib/types";
 import { BrowserPane } from "./BrowserPane";
 import { cx } from "../../lib/format";
 import { IconButton, Spinner } from "../ui";
+import { PanelShell, isFloating } from "./PanelShell";
 
 export const BACKENDS: ComputerBackend[] = ["none", "docker", "space", "vmpal", "host", "wsl"];
 
@@ -21,7 +22,6 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
   const hasBrowser = agent.settings.browser;
   // The top half is the VM and/or the browser (tabs only when there are both); the terminal is always below.
   const [top, setTop] = useState<"vm" | "browser">(hasVm ? "vm" : "browser");
-  const [wide, setWide] = useState(false);
   const tops = [...(hasVm ? (["vm"] as const) : []), ...(hasBrowser ? (["browser"] as const) : [])];
   const current = tops.includes(top) ? top : tops[0];
   // An agent opened its browser: show it.
@@ -53,30 +53,23 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
   };
   const none = backend === "none" || backend === "vmpal";
 
+  const actions = (
+    <>
+      {backend === "docker" && (
+        <IconButton label={t("computer.stop")} onClick={() => void stop()} disabled={!running} className={running ? "text-danger" : undefined}>
+          <Square size={14} fill="currentColor" />
+        </IconButton>
+      )}
+      {!isFloating && (
+        <IconButton label={t("computer.configure")} onClick={() => setPanel("profile")}>
+          <Settings2 size={16} />
+        </IconButton>
+      )}
+    </>
+  );
+
   return (
-    <aside className={cx("animate-slide flex h-full shrink-0 flex-col border-l border-line bg-panel transition-[width]", wide ? "w-[min(960px,70vw)]" : "w-[460px]")}>
-      <div className="flex h-13 shrink-0 items-center gap-2 px-4">
-        <h2 className="text-[14px] font-semibold">{t("computer.title")}</h2>
-        <span className="rounded-md bg-hover px-1.5 py-0.5 text-[11px] text-muted">{t(`computer.backend.${backend}`)}</span>
-        <div className="ml-auto flex items-center gap-0.5">
-          {tops.length > 0 && (
-            <IconButton label={wide ? t("computer.narrow") : t("computer.widen")} onClick={() => setWide((v) => !v)}>
-              {wide ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-            </IconButton>
-          )}
-          {backend === "docker" && (
-            <IconButton label={t("computer.stop")} onClick={() => void stop()} disabled={!running} className={running ? "text-danger" : undefined}>
-              <Square size={14} fill="currentColor" />
-            </IconButton>
-          )}
-          <IconButton label={t("computer.configure")} onClick={() => setPanel("profile")}>
-            <Settings2 size={16} />
-          </IconButton>
-          <IconButton label={t("common.close")} onClick={() => setPanel(null)}>
-            <X size={17} />
-          </IconButton>
-        </div>
-      </div>
+    <PanelShell id={agent.id} kind="computer" title={t("computer.title")} subtitle={agent.name} badge={t(`computer.backend.${backend}`)} actions={actions} widthKey="opencue:panel-computer" initial={460}>
       {none && !hasBrowser ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 px-8 text-center">
           <TerminalSquare size={30} className="text-faint" />
@@ -109,7 +102,7 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
           )}
         </div>
       )}
-    </aside>
+    </PanelShell>
   );
 }
 

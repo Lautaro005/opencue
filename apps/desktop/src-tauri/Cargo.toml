@@ -39,3 +39,7 @@ chrono.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = "0.3"

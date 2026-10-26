@@ -228,7 +228,15 @@ const computer = { docker_desktop: true, desktop_image: "lscr.io/linuxserver/web
 const dockerState = { installed: true, running: true, image_ready: false, vm: "none" as const };
 let vmpalToml = "";
 const vmpalMachines = () => [...vmpalToml.matchAll(/^\[mcp_servers\.([^\]\s]+)\]/gm)].map((m) => ({ name: m[1], command: "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine", args: ["--mcp", "E7D-preview"], env: {} }));
-const voice = { configured: false, voice_id: "", auto_speak: true };
+const MB = 1_000_000;
+const localModels = [
+  { id: "parakeet-v3", kind: "stt", label: "Parakeet TDT 0.6B v3 (8-bit)", size: 465 * MB, license: "CC-BY-4.0", source: "nvidia/parakeet-tdt-0.6b-v3", languages: ["en", "es", "fr", "de", "it", "pt"], note: "Fast on any CPU. 25 European languages.", ram_gb: 1.5, installed: false, supported: true },
+  { id: "whisper-small", kind: "stt", label: "Whisper small", size: 610 * MB, license: "MIT", source: "openai/whisper-small", languages: ["en", "es", "ja"], note: "99 languages, a good balance.", ram_gb: 1, installed: false, supported: true },
+  { id: "kokoro-v1", kind: "tts", label: "Kokoro 82M v1.0 (multilingual)", size: 330 * MB, license: "Apache-2.0", source: "hexgrad/Kokoro-82M", languages: ["en", "es", "fr"], note: "Natural voices in 8 languages.", ram_gb: 1, installed: false, supported: true },
+  { id: "sherpa-runtime", kind: "runtime", label: "sherpa-onnx runtime (v2.0.0)", size: 27 * MB, license: "Apache-2.0", source: "github.com/k2-fsa/sherpa-onnx", languages: [], note: "Runs the models.", ram_gb: 0, installed: false, supported: true },
+];
+const persona = { installed: false, installing: false, running: false, ready: false, has_token: false, lan: false, offload: false, gpu: null as string | null, python: "3.12", url: null as string | null, lan_url: null as string | null, qr_svg: null as string | null, log: "" };
+const voice = { configured: false, has_key: false, voice_id: "", auto_speak: true, stt_engine: "auto", tts_engine: "auto", local_stt: "", local_tts: "", local_voice: "" };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
@@ -514,7 +522,30 @@ const handlers: Record<string, (a: Args) => unknown> = {
   save_voice_settings: ({ settings, apiKey }) => Object.assign(voice, settings, { configured: voice.configured || !!apiKey }),
   list_voices: () => [{ id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, { id: "pNInz6obpgDQGcFmaJgB", name: "Adam" }],
   transcribe: () => "Hola, ¿qué tengo en la agenda hoy?",
-  speak: () => "",
+  save_canvas: ({ id }) => { throw new Error("canvas editing works in the desktop app (" + id + ")"); },
+  speak: () => ({ mime: "audio/wav", data: "" }),
+  models_status: () => localModels,
+  model_install: ({ id }) => {
+    const m = localModels.find((x) => x.id === id);
+    if (!m) return;
+    let done = 0;
+    const timer = setInterval(() => {
+      done += m.size / 8;
+      if (done >= m.size) {
+        clearInterval(timer);
+        m.installed = true;
+        if (id !== "sherpa-runtime") localModels.find((x) => x.id === "sherpa-runtime")!.installed = true;
+        emit({ type: "model_progress", id: String(id), phase: "ready", done: 0, total: 0, error: null });
+      } else emit({ type: "model_progress", id: String(id), phase: "downloading", done, total: m.size, error: null });
+    }, 350);
+  },
+  model_cancel: () => undefined,
+  model_delete: ({ id }) => void (localModels.find((x) => x.id === id)!.installed = false),
+  personaplex_status: () => persona,
+  personaplex_configure: ({ lan, offload }) => void Object.assign(persona, { lan, offload }),
+  personaplex_install: () => void Object.assign(persona, { installed: true }),
+  personaplex_start: () => void Object.assign(persona, { running: true, ready: true, url: "https://localhost:8998" }),
+  personaplex_stop: () => void Object.assign(persona, { running: false, ready: false, url: null }),
   usage: () => agents.map((a, i) => ({ agent_id: a.id, agent_name: a.name, messages: 12 - i * 3, input_tokens: 48210 - i * 9000, output_tokens: 9120 - i * 2000 })),
 };
 

@@ -8,6 +8,7 @@
 
 import { splitThink } from "./format";
 import { api } from "./api";
+import { playSpeech, transcribeBlob } from "./audio";
 import { useStore } from "./store";
 import type { Message } from "./types";
 
@@ -244,13 +245,7 @@ export class Call {
     }
     this.set("thinking");
     try {
-      const b64 = await new Promise<string>((resolve, reject) => {
-        const r = new FileReader();
-        r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
-        r.onerror = () => reject(r.error);
-        r.readAsDataURL(blob);
-      });
-      const text = (await api.transcribe(b64, blob.type)).trim();
+      const text = (await transcribeBlob(blob)).trim();
       if (!text) {
         this.set("listening");
         return;
@@ -350,16 +345,9 @@ export class Call {
 
   private async speak(text: string) {
     if (this.useElevenLabs) {
-      const b64 = await api.speak(text, this.agentId);
-      if (!b64 || this.ended) return;
-      const audio = new Audio(`data:audio/mpeg;base64,${b64}`);
-      this.audio = audio;
-      await new Promise<void>((resolve) => {
-        audio.onended = () => resolve();
-        audio.onpause = () => resolve();
-        audio.onerror = () => resolve();
-        audio.play().catch(() => resolve());
-      });
+      const speech = await api.speak(text, this.agentId);
+      if (!speech.data || this.ended) return;
+      await playSpeech(speech, (a) => (this.audio = a));
       this.audio = null;
       return;
     }

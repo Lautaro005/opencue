@@ -4,7 +4,7 @@ import { onMessageForVoice } from "./voice";
 import i18n from "../i18n";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, ThreadSummary } from "./types";
 
-export type Panel = "profile" | "group" | "computer" | "artifact" | null;
+export type Panel = "profile" | "group" | "computer" | "artifact" | "canvas" | null;
 export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
 export type Dialog = "create-agent" | "create-group" | "templates" | "walkthrough" | null;
 
@@ -48,6 +48,10 @@ interface State {
   update: UpdateInfo | null;
   /** Bumped by the menu-bar "Check for Updates"; the About page runs a check when it changes. */
   updateCheckNonce: number;
+  /** Tool calls (artifacts) a model is still writing, by assistant message id. */
+  toolProgress: Record<string, { tool: string; title: string | null; chars: number }>;
+  /** Local model downloads, by model id. */
+  modelProgress: Record<string, { phase: string; done: number; total: number; error: string | null }>;
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -59,7 +63,7 @@ interface State {
   openMessage: (threadId: string, messageId: string) => Promise<void>;
   closeDm: () => void;
   setPanel: (p: Panel) => void;
-  openArtifact: (id: string, version?: number) => void;
+  openArtifact: (id: string, version?: number, canvas?: boolean) => void;
   /** Text to put in the composer when the next chat opens (e.g. "/dashboard "). */
   prefill: string | null;
   setPrefill: (text: string | null) => void;
@@ -117,6 +121,8 @@ export const useStore = create<State>((set, get) => ({
   models: {},
   update: null,
   updateCheckNonce: 0,
+  toolProgress: {},
+  modelProgress: {},
 
   init: async () => {
     if (!listening) {
@@ -147,7 +153,7 @@ export const useStore = create<State>((set, get) => ({
     const { panel, groups } = get();
     const isGroup = !!(id && groups[id]);
     // Keep the right panel open but switch it to the matching kind.
-    const nextPanel: Panel = panel && panel !== "artifact" ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
+    const nextPanel: Panel = panel && panel !== "artifact" && panel !== "canvas" ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
     set({ selected: id, panel: nextPanel, dm: null });
     try {
       if (id) localStorage.setItem("opencue.selected", id);
@@ -269,7 +275,9 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       // An agent just made something: show it next to the chat.
       const made = m.attachments?.find((a) => a.artifact);
       if (made?.artifact && get().selected === m.thread_id && !get().messages[m.thread_id]?.some((x) => x.id === m.id)) {
-        set(() => ({ panel: "artifact" as Panel, artifactView: { id: made.artifact!.id, version: made.artifact!.version } }));
+        // The card in the chat opens it with a click; "open automatically" in Settings skips the click.
+        if (get().settings.artifact_auto_open === "true") get().openArtifact(made.artifact.id, made.artifact.version, made.artifact.canvas);
+        window.dispatchEvent(new CustomEvent("opencue:artifact-changed", { detail: { id: made.artifact.id } }));
       }
       set((s) => (s.messages[m.thread_id] ? { messages: { ...s.messages, [m.thread_id]: upsertMessage(s.messages[m.thread_id], m) } } : {}));
       if (m.status !== "awaiting_approval") {
@@ -283,6 +291,13 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       onMessageForVoice(m, get().settings.voice_auto_speak !== "false");
       break;
     }
+    case "tool_progress":
+      set((s) => ({ toolProgress: { ...s.toolProgress, [ev.message_id]: { tool: ev.tool, title: ev.title, chars: ev.chars } } }));
+      break;
+    case "model_progress":
+      set((s) => ({ modelProgress: { ...s.modelProgress, [ev.id]: { phase: ev.phase, done: ev.done, total: ev.total, error: ev.error } } }));
+      window.dispatchEvent(new CustomEvent("opencue:models-changed"));
+      break;
     case "delta":
       set((s) => {
         const list = s.messages[ev.thread_id];

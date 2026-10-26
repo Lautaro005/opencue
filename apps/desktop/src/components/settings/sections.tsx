@@ -133,6 +133,9 @@ export function GeneralSection() {
         <CardRow label={t("settings.general.autoOpenComputer")} hint={t("settings.general.autoOpenComputerHint")}>
           <Toggle checked={settings.auto_open_computer !== "false"} onChange={(v) => void setSetting("auto_open_computer", String(v))} />
         </CardRow>
+        <CardRow label={t("settings.general.autoOpenArtifact")} hint={t("settings.general.autoOpenArtifactHint")}>
+          <Toggle checked={settings.artifact_auto_open === "true"} onChange={(v) => void setSetting("artifact_auto_open", String(v))} />
+        </CardRow>
       </Card>
       <DashboardCard />
       <Card title={t("settings.general.sharedMemory")}>

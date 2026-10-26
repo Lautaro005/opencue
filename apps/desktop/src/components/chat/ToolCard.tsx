@@ -8,8 +8,9 @@ import { dmThreadId, useStore } from "../../lib/store";
 import { AvatarView } from "../AvatarView";
 import { Spinner, Typing } from "../ui";
 import { AskCard } from "./AskCard";
+import { ArtifactProgress } from "./ArtifactProgress";
 
-function describe(name: string, args: Record<string, unknown> | undefined, t: (k: string, o?: Record<string, unknown>) => string) {
+export function describe(name: string, args: Record<string, unknown> | undefined, t: (k: string, o?: Record<string, unknown>) => string) {
   const a = args ?? {};
   switch (name) {
     case "web_search":
@@ -44,6 +45,12 @@ function describe(name: string, args: Record<string, unknown> | undefined, t: (k
       return { icon: <Inbox size={14} />, title: t("chat.tools.read_emails"), detail: "" };
     case "search_inbox":
       return { icon: <Search size={14} />, title: t("chat.tools.search_inbox"), detail: String(a.query ?? "") };
+    case "create_artifact":
+      return { icon: <FileText size={14} />, title: t("chat.tools.create_artifact"), detail: String(a.title ?? "") };
+    case "read_artifact":
+      return { icon: <FileText size={14} />, title: t("chat.tools.read_artifact"), detail: "" };
+    case "update_plan":
+      return { icon: <Sparkles size={14} />, title: t("chat.tools.update_plan"), detail: "" };
     case "send_email":
       return { icon: <Mail size={14} />, title: t("chat.tools.send_email", { to: a.to ?? "" }), detail: String(a.subject ?? "") };
     default: {
@@ -80,6 +87,13 @@ export function ToolCard({
   const d = describe(name, call?.arguments, t);
   const status = message.status;
   const waiting = status === "awaiting_approval";
+
+  // An artifact being made is a card with a progress bar; the finished one is the card that follows.
+  if (name === "create_artifact" && (status === "running" || status === "done")) {
+    if (status === "done") return null;
+    const a = call?.arguments ?? {};
+    return <ArtifactProgress title={typeof a.title === "string" ? a.title : null} chars={typeof a.content === "string" ? a.content.length : undefined} canvas={a.canvas === true} kind={typeof a.type === "string" ? (a.type as never) : undefined} />;
+  }
 
   // Talking to another agent from a 1:1 chat: a pill that opens their conversation.
   if (name === "send_to_agent" && !isGroup && agentId) {

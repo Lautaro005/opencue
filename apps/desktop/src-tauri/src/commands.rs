@@ -311,6 +311,16 @@ pub fn get_artifact(
     state.core.get_artifact(&id).map_err(e)
 }
 
+/// The user edited a canvas by hand: keep it as a new version.
+#[tauri::command]
+pub fn save_canvas(
+    state: State<'_, AppState>,
+    id: String,
+    content: String,
+) -> R<opencue_core::artifacts::Artifact> {
+    state.core.save_canvas(&id, &content).map_err(e)
+}
+
 #[tauri::command]
 pub fn list_artifacts(
     state: State<'_, AppState>,
@@ -416,13 +426,21 @@ pub async fn whatsapp_disconnect(state: State<'_, AppState>) -> R<()> {
 // ---------- built-in browser ----------
 
 #[tauri::command]
-pub fn browser_place(state: State<'_, AppState>, agent_id: String, x: f64, y: f64, w: f64, h: f64) {
-    state.browser.place(&agent_id, x, y, w, h);
+pub fn browser_place(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    agent_id: String,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+) {
+    state.browser.place(window.label(), &agent_id, x, y, w, h);
 }
 
 #[tauri::command]
-pub fn browser_hide(state: State<'_, AppState>) {
-    state.browser.hide();
+pub fn browser_hide(window: tauri::Window, state: State<'_, AppState>) {
+    state.browser.hide(window.label());
 }
 
 #[tauri::command]
@@ -1063,4 +1081,59 @@ pub async fn add_vmpal(state: State<'_, AppState>, toml: String) -> R<VmPalInfo>
 #[tauri::command]
 pub async fn test_vmpal(state: State<'_, AppState>, name: String) -> R<McpServerStatus> {
     state.core.test_vmpal(&name).await.map_err(e)
+}
+
+// ---------- floating windows ----------
+
+/// Open a panel (an artifact, a canvas or an agent's computer) in a window of its own that can
+/// be dragged anywhere on the desktop. Opening the same one again brings it to the front.
+#[tauri::command]
+pub async fn open_float(
+    app: tauri::AppHandle,
+    kind: String,
+    id: String,
+    title: String,
+) -> R<()> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if !["artifact", "canvas", "computer"].contains(&kind.as_str()) {
+        return Err("unknown panel".into());
+    }
+    let clean: String = id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(64)
+        .collect();
+    let label = format!("float-{kind}-{clean}");
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let wide = kind == "computer";
+    // The page reads this to know what to show; nothing else about the window is shared.
+    let init = format!(
+        "window.__FLOAT__ = {};",
+        serde_json::json!({ "kind": kind, "id": clean })
+    );
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html".into()))
+        .title(title)
+        .inner_size(if wide { 760.0 } else { 600.0 }, 720.0)
+        .min_inner_size(320.0, 240.0)
+        .resizable(true)
+        .initialization_script(init)
+        .build()
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+/// Keep a floating window above the others (or let it go back).
+#[tauri::command]
+pub fn float_pin(window: tauri::WebviewWindow, on: bool) -> R<()> {
+    window.set_always_on_top(on).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub fn close_float(window: tauri::WebviewWindow) -> R<()> {
+    window.close().map_err(|err| err.to_string())
 }

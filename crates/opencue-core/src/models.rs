@@ -204,6 +204,9 @@ pub struct ArtifactRef {
     pub version: u32,
     pub kind: String,
     pub title: String,
+    /// A canvas: opens in the editable canvas panel.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub canvas: bool,
 }
 
 impl Attachment {

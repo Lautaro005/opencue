@@ -104,7 +104,7 @@ export default function App() {
       {panel === "profile" && agent && <AgentProfile key={selected} agent={agent} />}
       {panel === "group" && group && <GroupDetails key={selected} group={group} />}
       {panel === "computer" && agent && <ComputerPanel key={selected} agent={agent} />}
-      {panel === "artifact" && selected && <ArtifactPanel />}
+      {(panel === "artifact" || panel === "canvas") && selected && <ArtifactPanel />}
       <CreateAgentDialog />
       <CreateGroupDialog />
       <SettingsModal />

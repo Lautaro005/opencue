@@ -125,6 +125,7 @@ export interface ArtifactRef {
   version: number;
   kind: ArtifactKind;
   title: string;
+  canvas?: boolean;
 }
 
 export interface ArtifactVersion {
@@ -133,6 +134,8 @@ export interface ArtifactVersion {
   created_at: string;
   /** The text the agent sent for this version. */
   source: string;
+  /** "user" when this version was edited by hand in the canvas. */
+  by?: string;
 }
 
 export interface Artifact {
@@ -142,6 +145,7 @@ export interface Artifact {
   title: string;
   kind: ArtifactKind;
   language: string | null;
+  canvas?: boolean;
   versions: ArtifactVersion[];
 }
 
@@ -315,6 +319,8 @@ export interface CatalogStatus {
 
 export type CoreEvent =
   | { type: "message"; message: Message }
+  | { type: "tool_progress"; thread_id: string; message_id: string; agent_id: string; tool: string; title: string | null; chars: number }
+  | { type: "model_progress"; id: string; phase: string; done: number; total: number; error: string | null }
   | { type: "delta"; thread_id: string; message_id: string; agent_id: string; text: string }
   | { type: "busy"; thread_id: string; agent_id: string; busy: boolean }
   | { type: "approval_requested"; approval: ApprovalRequest }
@@ -421,9 +427,52 @@ export interface CommandResult {
 }
 
 export interface VoiceSettings {
+  /** Speech in and speech out both work (an ElevenLabs key, or local models). */
   configured: boolean;
+  has_key: boolean;
   voice_id: string;
   auto_speak: boolean;
+  /** "auto" | "elevenlabs" | "local" */
+  stt_engine: string;
+  tts_engine: string;
+  local_stt: string;
+  local_tts: string;
+  local_voice: string;
+}
+
+export interface SpeechAudio {
+  mime: string;
+  data: string;
+}
+
+export interface LocalModel {
+  id: string;
+  kind: "stt" | "tts" | "runtime";
+  label: string;
+  size: number;
+  license: string;
+  source: string;
+  languages: string[];
+  note: string;
+  ram_gb: number;
+  installed: boolean;
+  supported: boolean;
+}
+
+export interface PersonaStatus {
+  installed: boolean;
+  installing: boolean;
+  running: boolean;
+  ready: boolean;
+  has_token: boolean;
+  lan: boolean;
+  offload: boolean;
+  gpu: string | null;
+  python: string | null;
+  url: string | null;
+  lan_url: string | null;
+  qr_svg: string | null;
+  log: string;
 }
 
 export interface Voice {

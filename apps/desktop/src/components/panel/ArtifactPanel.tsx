@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronLeft, ChevronRight, Code2, Copy, Download, Eye, Maximize2, Minimize2, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Code2, Copy, Download, Eye, Pencil } from "lucide-react";
 import { api, isTauri, saveAttachmentAs } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import { cx } from "../../lib/format";
@@ -9,6 +9,7 @@ import type { Artifact, ArtifactVersion } from "../../lib/types";
 import { IconButton, Select, Spinner } from "../ui";
 import { Markdown } from "../chat/Markdown";
 import { ArtifactIcon } from "../chat/Attachments";
+import { PanelShell } from "./PanelShell";
 
 /** Where sandboxed frames (HTML artifacts, the dashboard) load from; empty outside the desktop app. */
 let viewBase: Promise<string> | null = null;
@@ -17,44 +18,87 @@ export function frameBase(): Promise<string> {
   return viewBase;
 }
 
-/** The side panel that shows an artifact the way it will look, with its versions and its source. */
+/** The side panel that shows an artifact the way it will look, with its versions and its source.
+ * A canvas can also be edited by hand here: every pause saves a new version the agent reads back. */
 export function ArtifactPanel() {
   const { t } = useTranslation();
   const view = useStore((s) => s.artifactView);
-  const setPanel = useStore((s) => s.setPanel);
   const showToast = useStore((s) => s.showToast);
   const [artifact, setArtifact] = useState<Artifact | null>(null);
   const [error, setError] = useState("");
   const [version, setVersion] = useState(0);
-  const [mode, setMode] = useState<"preview" | "code">("preview");
-  const [wide, setWide] = useState(false);
+  const [mode, setMode] = useState<"preview" | "code" | "edit">("preview");
   const [copied, setCopied] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [saved, setSaved] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
+
+  const load = (id: string, wanted?: number, fresh = false) =>
+    api
+      .getArtifact(id)
+      .then((a) => {
+        setArtifact(a);
+        const latest = a.versions[a.versions.length - 1];
+        setVersion(wanted ?? latest?.version ?? 1);
+        if (!dirtyRef.current || fresh) {
+          setDraft(latest?.source ?? "");
+          setDirty(false);
+        }
+        if (fresh) setMode(a.canvas ? (a.kind === "code" || a.kind === "text" || a.kind === "markdown" ? "edit" : "preview") : "preview");
+      })
+      .catch((e) => setError(String(e)));
 
   useEffect(() => {
     if (!view) return;
-    let live = true;
     setError("");
-    void api
-      .getArtifact(view.id)
-      .then((a) => {
-        if (!live) return;
-        setArtifact(a);
-        setVersion(view.version ?? a.versions[a.versions.length - 1]?.version ?? 1);
-        setMode("preview");
-      })
-      .catch((e) => live && setError(String(e)));
-    return () => {
-      live = false;
-    };
-  }, [view?.id, view?.version]);
+    setSaved(null);
+    void load(view.id, view.version, true);
+  }, [view?.id, view?.version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const current: ArtifactVersion | undefined = artifact?.versions.find((v) => v.version === version) ?? artifact?.versions[artifact.versions.length - 1];
+  // The agent wrote a new version of what is open: show it.
+  useEffect(() => {
+    const onChanged = (e: Event) => {
+      const d = (e as CustomEvent<{ id: string }>).detail;
+      if (view && d.id === view.id) void load(view.id);
+    };
+    window.addEventListener("opencue:artifact-changed", onChanged);
+    return () => window.removeEventListener("opencue:artifact-changed", onChanged);
+  }, [view?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Typing in a canvas saves a new version after a short pause.
+  useEffect(() => {
+    if (!dirty || !artifact?.canvas) return;
+    const timer = window.setTimeout(() => {
+      setSaving(true);
+      api
+        .saveCanvas(artifact.id, draft)
+        .then((a) => {
+          setArtifact(a);
+          const latest = a.versions[a.versions.length - 1];
+          setVersion(latest.version);
+          setSaved(latest.version);
+          setDirty(false);
+        })
+        .catch((e) => showToast(String(e)))
+        .finally(() => setSaving(false));
+    }, 900);
+    return () => window.clearTimeout(timer);
+  }, [draft, dirty, artifact?.id, artifact?.canvas]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const latestVersion = artifact?.versions[artifact.versions.length - 1];
+  const current: ArtifactVersion | undefined = artifact?.versions.find((v) => v.version === version) ?? latestVersion;
+  const isLatest = current?.version === latestVersion?.version;
   const textOnly = artifact?.kind === "code" || artifact?.kind === "text";
+  const editing = !!artifact?.canvas && mode === "edit" && isLatest;
+  const tabs = (artifact?.canvas ? ["preview", "edit"] : ["preview", "code"]) as ("preview" | "code" | "edit")[];
 
   const copy = async () => {
     if (!current) return;
     try {
-      await navigator.clipboard.writeText(current.source);
+      await navigator.clipboard.writeText(editing ? draft : current.source);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1500);
     } catch (e) {
@@ -62,26 +106,36 @@ export function ArtifactPanel() {
     }
   };
 
+  const actions = (
+    <>
+      <IconButton label={copied ? t("chat.copied") : t("artifact.copy")} onClick={() => void copy()} className="size-8">
+        {copied ? <Check size={15} className="text-success" /> : <Copy size={15} />}
+      </IconButton>
+      {isTauri && current && (
+        <IconButton label={t("files.save")} onClick={() => void saveAttachmentAs(current.attachment.id, current.attachment.name).catch((e) => showToast(String(e)))} className="size-8">
+          <Download size={15} />
+        </IconButton>
+      )}
+    </>
+  );
+
   return (
-    <aside className={cx("animate-slide flex h-full shrink-0 flex-col border-l border-line bg-panel transition-[width]", wide ? "w-[min(960px,70vw)]" : "w-[520px]")}>
-      <div className="flex h-13 shrink-0 items-center gap-2 px-4">
-        {artifact && (
+    <PanelShell
+      id={view?.id ?? ""}
+      kind={artifact?.canvas ? "canvas" : "artifact"}
+      title={artifact?.title ?? t("artifact.title")}
+      subtitle={artifact ? `${artifact.canvas ? t("artifact.canvas") : KIND_LABEL[artifact.kind]}${artifact.language ? ` · ${artifact.language}` : ""}` : undefined}
+      icon={
+        artifact && (
           <span className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
             <ArtifactIcon kind={artifact.kind} size={15} />
           </span>
-        )}
-        <div className="min-w-0 flex-1">
-          <h2 className="truncate text-[14px] leading-tight font-semibold">{artifact?.title ?? t("artifact.title")}</h2>
-          {artifact && <p className="truncate text-[11.5px] leading-tight text-muted">{KIND_LABEL[artifact.kind]}{artifact.language ? ` · ${artifact.language}` : ""}</p>}
-        </div>
-        <IconButton label={wide ? t("computer.narrow") : t("computer.widen")} onClick={() => setWide((v) => !v)}>
-          {wide ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
-        </IconButton>
-        <IconButton label={t("common.close")} onClick={() => setPanel(null)}>
-          <X size={17} />
-        </IconButton>
-      </div>
-
+        )
+      }
+      actions={actions}
+      widthKey="opencue:panel-artifact"
+      initial={520}
+    >
       {error ? (
         <p className="px-6 py-8 text-center text-[13px] text-muted">{error}</p>
       ) : !artifact || !current ? (
@@ -91,11 +145,11 @@ export function ArtifactPanel() {
       ) : (
         <>
           <div className="flex shrink-0 items-center gap-1.5 border-b border-line px-4 pb-2">
-            {!textOnly && (
+            {(!textOnly || artifact.canvas) && (
               <div className="flex rounded-lg bg-hover p-0.5">
-                {(["preview", "code"] as const).map((m) => (
+                {tabs.map((m) => (
                   <button key={m} onClick={() => setMode(m)} className={cx("inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[12px] font-medium", mode === m ? "bg-panel text-ink shadow-sm" : "text-muted hover:text-ink")}>
-                    {m === "preview" ? <Eye size={12} /> : <Code2 size={12} />}
+                    {m === "preview" ? <Eye size={12} /> : m === "edit" ? <Pencil size={12} /> : <Code2 size={12} />}
                     {t(`artifact.${m}`)}
                   </button>
                 ))}
@@ -109,34 +163,36 @@ export function ArtifactPanel() {
                 options={artifact.versions
                   .slice()
                   .reverse()
-                  .map((v) => ({ value: String(v.version), label: t("artifact.version", { n: v.version }) }))}
+                  .map((v) => ({ value: String(v.version), label: t("artifact.version", { n: v.version }) + (v.by === "user" ? " ✎" : "") }))}
               />
             )}
-            <span className="ml-auto flex items-center">
-              <IconButton label={copied ? t("chat.copied") : t("artifact.copy")} onClick={() => void copy()} className="size-8">
-                {copied ? <Check size={15} className="text-success" /> : <Copy size={15} />}
-              </IconButton>
-              {isTauri && (
-                <IconButton
-                  label={t("files.save")}
-                  onClick={() => void saveAttachmentAs(current.attachment.id, current.attachment.name).catch((e) => showToast(String(e)))}
-                  className="size-8"
-                >
-                  <Download size={15} />
-                </IconButton>
-              )}
-            </span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
-            {mode === "code" || textOnly ? <Source text={current.source} /> : <Preview artifact={artifact} version={current} />}
+            {editing ? (
+              <textarea
+                value={draft}
+                onChange={(e) => {
+                  setDraft(e.target.value);
+                  setDirty(true);
+                }}
+                spellCheck={artifact.kind === "markdown" || artifact.kind === "text"}
+                aria-label={artifact.title}
+                className="block size-full min-h-[360px] resize-none bg-transparent p-4 font-mono text-[12.5px] leading-[1.6] outline-none"
+              />
+            ) : mode === "code" || (textOnly && !artifact.canvas) || (textOnly && mode !== "preview") ? (
+              <Source text={current.source} />
+            ) : (
+              <Preview artifact={artifact} version={current} />
+            )}
           </div>
           <p className="shrink-0 truncate border-t border-line px-4 py-1.5 text-[11.5px] text-muted">
-            {current.attachment.name}
-            {RENDERED_FROM_SOURCE.includes(artifact.kind) ? ` · ${t("artifact.previewNote")}` : ""}
+            {editing && (saving ? t("artifact.saving") : dirty ? "…" : saved ? t("artifact.saveCanvas", { n: saved }) : current.by === "user" ? t("artifact.youEdited") : current.attachment.name)}
+            {!editing && current.attachment.name}
+            {!editing && RENDERED_FROM_SOURCE.includes(artifact.kind) ? ` · ${t("artifact.previewNote")}` : ""}
           </p>
         </>
       )}
-    </aside>
+    </PanelShell>
   );
 }
 

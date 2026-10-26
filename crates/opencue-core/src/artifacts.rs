@@ -270,6 +270,7 @@ impl Core {
                 version,
                 kind: artifact.kind.clone(),
                 title: artifact.title.clone(),
+                canvas: artifact.canvas,
             }),
         };
         let path = self.paths().attachment_file(&att.id, &att.name);
@@ -358,6 +359,7 @@ impl Core {
                 version,
                 kind: artifact.kind.clone(),
                 title: artifact.title.clone(),
+                canvas: artifact.canvas,
             }),
         };
         let path = self.paths().attachment_file(&att.id, &att.name);

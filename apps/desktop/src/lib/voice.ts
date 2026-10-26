@@ -3,6 +3,7 @@
 
 import { splitThink } from "./format";
 import { api } from "./api";
+import { transcribeBlob } from "./audio";
 import type { Message } from "./types";
 
 let recorder: MediaRecorder | null = null;
@@ -38,8 +39,7 @@ export async function stopRecording(): Promise<string> {
   const blob = new Blob(chunks, { type: rec.mimeType || "audio/webm" });
   chunks = [];
   if (blob.size === 0) return "";
-  const b64 = await blobToBase64(blob);
-  return api.transcribe(b64, blob.type);
+  return transcribeBlob(blob);
 }
 
 export function cancelRecording() {
@@ -49,15 +49,6 @@ export function cancelRecording() {
   recorder.stream.getTracks().forEach((t) => t.stop());
   recorder = null;
   chunks = [];
-}
-
-function blobToBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(",")[1] ?? "");
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(blob);
-  });
 }
 
 export function markVoiceThread(threadId: string) {
@@ -70,10 +61,10 @@ export function stopSpeaking() {
 }
 
 export async function speak(text: string, agentId?: string) {
-  const b64 = await api.speak(text, agentId);
-  if (!b64) return;
+  const speech = await api.speak(text, agentId);
+  if (!speech.data) return;
   stopSpeaking();
-  player = new Audio(`data:audio/mpeg;base64,${b64}`);
+  player = new Audio(`data:${speech.mime};base64,${speech.data}`);
   await player.play();
 }
 
