@@ -624,6 +624,7 @@ export const es: Dict = {
       connected: "Conectado",
       setUp: "Configurar",
       connect: "Conectar",
+      group: { connected: "Conectados", cloud: "APIs en la nube", local: "En esta computadora", cli: "Herramientas de línea de comandos" },
       saveTest: "Guardar y probar",
     },
     vmpal: {

@@ -16,6 +16,8 @@ use crate::tools::{self, arg_str, arg_u64, Toolbox};
 use crate::Core;
 
 pub const MAX_TOOL_STEPS: usize = 16;
+/// `/plan` runs carry out a whole plan in one go, so they get far more tool steps.
+pub const PLAN_TOOL_STEPS: usize = 80;
 
 /// What every agent knows about OpenCue, before its own instructions. Kept short on purpose; the
 /// user never sees or edits it.
@@ -172,6 +174,31 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
         args
     };
     match cmd.to_lowercase().as_str() {
+        "plan" => format!(
+            "The user ran /plan. Work like a careful engineer, in two phases, without stopping in between.\n\
+             1. PLAN. Understand the request first (read files, search or look things up if that helps), then call `update_plan` with the COMPLETE list of steps: \
+             concrete, in order, at most 12, each one small enough to finish and check. Every step starts as `pending`.\n\
+             2. EXECUTE. Carry the steps out one at a time. Before you start a step call `update_plan` with it as `doing`; when it is finished and checked, call `update_plan` again with it as `done`. \
+             Always send the whole list. If a step fails, fix the cause, or change the plan with `update_plan` and say why in a line. \
+             Don't ask whether to continue; use `ask_user` only for a decision or permission you really need (anything destructive or irreversible).\n\
+             3. FINISH. Leave every step `done` (do NOT clear the plan), then answer with a short summary: what you did, what changed, and anything left for the user.\n\n\
+             Request: {request}"
+        ),
+        "artifact" => format!(
+            "The user ran /artifact. Make what they ask for as an artifact with `create_artifact`: choose the type that fits best \
+             (html page or app, svg, markdown, mermaid diagram, code, spreadsheet, document, deck, pdf…) and write the COMPLETE content in one call. \
+             If they asked for nothing specific, ask what they want to make. When it is created, say in one sentence what it is and offer one improvement.\n\nRequest: {request}"
+        ),
+        "canvas" => format!(
+            "The user ran /canvas. Open a canvas: an artifact with `canvas: true` (use `create_artifact`; markdown for writing, code with a `language` for programs, html for a page) that you and the user build together in the side panel. \
+             Write a solid first version, not a stub. The user can edit it by hand at any time, so before every change call `read_artifact` with its id, keep their edits, and send the COMPLETE new content. \
+             If you already made a canvas in this conversation, keep working on it (same `artifact_id`) instead of starting another. \
+             If they asked for nothing specific, ask what they want to write or build.\n\nRequest: {request}"
+        ),
+        "ai-council" => format!(
+            "The user ran /ai-council outside a group chat, so there is no council here. Tell them in one or two sentences that the council needs a group: \
+             they can create one from Templates → AI Council (or add several agents to a group), then run /ai-council there. Then, if you can, give your own best answer to the question.\n\nQuestion: {request}"
+        ),
         "create-automation" => format!(
             "The user ran /create-automation. Create an automation for yourself with the `create_automation` tool, based on their request. \
              If something essential is missing (when it should run, or what to do), ask one short question first. \
@@ -195,6 +222,31 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
             None => text.to_string(),
         },
     }
+}
+
+/// The `"title"` of a tool call whose JSON arguments are only partly written, once it is complete.
+pub(crate) fn partial_title(head: &str) -> Option<String> {
+    let key = head.find("\"title\"")?;
+    let rest = head[key + 7..].trim_start().strip_prefix(':')?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let mut out = String::new();
+    let mut chars = rest.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => return Some(out).filter(|t| !t.trim().is_empty()),
+            '\\' => match chars.next()? {
+                'n' => out.push(' '),
+                't' => out.push(' '),
+                'u' => {
+                    let hex: String = chars.by_ref().take(4).collect();
+                    out.push(u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32)?);
+                }
+                other => out.push(other),
+            },
+            c => out.push(c),
+        }
+    }
+    None
 }
 
 fn extract_json_array(text: &str) -> Option<Vec<String>> {
@@ -462,6 +514,7 @@ impl Core {
                 temperature: Some(0.0),
                 agent_id: None,
                 mcp_extra: vec![],
+                on_tool: None,
             };
             let resp = provider.chat(req, &|_| {}).await?;
             anyhow::Ok(extract_json_array(&resp.text).unwrap_or_default())
@@ -630,7 +683,13 @@ impl Core {
                 tracing::debug!("compaction skipped: {e:#}");
             }
         }
-        for step in 0..MAX_TOOL_STEPS {
+        // A /plan run carries out a whole plan, so it may take many more steps.
+        let max_steps = if self.is_plan_run(thread_id).await {
+            PLAN_TOOL_STEPS
+        } else {
+            MAX_TOOL_STEPS
+        };
+        for step in 0..max_steps {
             let mut system = self
                 .system_prompt(
                     &agent,
@@ -703,6 +762,7 @@ impl Core {
                 temperature: agent.settings.temperature,
                 agent_id: (!supports_tools && agent.settings.cli_tools).then(|| agent.id.clone()),
                 mcp_extra: mcp_extra.clone(),
+                on_tool: Some(self.tool_sink(thread_id, &msg.id, agent_id)),
             };
             let result = tokio::select! {
                 r = provider.chat(req, &on_delta) => r,
@@ -885,12 +945,12 @@ impl Core {
                 self.emit(CoreEvent::Message { message: tmsg });
             }
 
-            if step + 1 == MAX_TOOL_STEPS {
+            if step + 1 == max_steps {
                 let ev = message(
                     thread_id,
                     Role::Event,
                     None,
-                    format!("{} stopped after {MAX_TOOL_STEPS} tool steps.", agent.name),
+                    format!("{} stopped after {max_steps} tool steps.", agent.name),
                 );
                 self.store.insert_message(&ev).await?;
                 self.emit(CoreEvent::Message { message: ev });
@@ -1375,6 +1435,7 @@ impl Core {
                 ))
             }
             tools::CREATE_ARTIFACT => self.artifact_tool(thread_id, agent, args).await,
+            tools::READ_ARTIFACT => self.read_artifact_tool(agent, args),
             tools::READ_DASHBOARD | tools::UPDATE_DASHBOARD => {
                 self.dashboard_tool(agent, call.name.as_str(), args).await
             }
@@ -1544,6 +1605,7 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         for fact in extract_json_array(&resp.text)
@@ -1640,6 +1702,7 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let text = resp.text.trim();
@@ -1660,6 +1723,48 @@ impl Core {
 
     /// Long tool results go to a file in the agent's workspace; the model gets the start and the
     /// path. Without a local workspace they are cut instead.
+    /// Whether the message being answered is a `/plan` command.
+    async fn is_plan_run(&self, thread_id: &str) -> bool {
+        self.store
+            .messages(thread_id, 12)
+            .await
+            .ok()
+            .and_then(|list| list.into_iter().rev().find(|m| m.role == Role::User))
+            .is_some_and(|m| {
+                let t = m.content.trim_start().to_ascii_lowercase();
+                t == "/plan" || t.starts_with("/plan ") || t.starts_with("/plan\n")
+            })
+    }
+
+    /// Reports how far a tool call the model is still writing has got (artifacts, mostly), so the
+    /// chat can show progress instead of three dots.
+    fn tool_sink(
+        self: &Arc<Self>,
+        thread_id: &str,
+        message_id: &str,
+        agent_id: &str,
+    ) -> crate::providers::ToolSink {
+        let core = self.clone();
+        let (thread_id, message_id, agent_id) = (
+            thread_id.to_string(),
+            message_id.to_string(),
+            agent_id.to_string(),
+        );
+        crate::providers::ToolSink(Arc::new(move |p| {
+            if p.name != tools::CREATE_ARTIFACT {
+                return;
+            }
+            core.emit(CoreEvent::ToolProgress {
+                thread_id: thread_id.clone(),
+                message_id: message_id.clone(),
+                agent_id: agent_id.clone(),
+                title: partial_title(&p.head),
+                tool: p.name,
+                chars: p.chars,
+            });
+        }))
+    }
+
     fn spill_large_output(
         &self,
         agent: &Agent,
@@ -1752,6 +1857,7 @@ impl Core {
                         temperature: Some(0.2),
                         agent_id: None,
                         mcp_extra: vec![],
+                        on_tool: None,
                     },
                     &|_| {},
                 )
@@ -1824,6 +1930,7 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let (Some(a), Some(b)) = (resp.text.find('{'), resp.text.rfind('}')) else {
@@ -1898,6 +2005,7 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         if let Some(tidy) = extract_json_array(&resp.text) {
@@ -1952,6 +2060,24 @@ mod tests {
             mentions("@Travel Bot pls", &agents, Some("1")),
             Vec::<String>::new()
         );
+    }
+
+    #[test]
+    fn reads_a_title_from_half_written_arguments() {
+        assert_eq!(partial_title("{\"title\": \"Q3 plan\", \"type\":"), Some("Q3 plan".into()));
+        assert_eq!(partial_title("{\"type\":\"html\",\"title\":\"Caf\\u00e9 \\\"menu\\\"\""), Some("Café \"menu\"".into()));
+        assert_eq!(partial_title("{\"title\": \"Unfinis"), None);
+        assert_eq!(partial_title("{\"content\": \"<h1>"), None);
+    }
+
+    #[test]
+    fn new_commands_expand() {
+        let none = |_: &str| None;
+        assert!(expand_command("/plan add a login page", none).contains("update_plan"));
+        assert!(expand_command("/plan add a login page", none).contains("add a login page"));
+        assert!(expand_command("/artifact a landing page", none).contains("create_artifact"));
+        assert!(expand_command("/canvas", none).contains("read_artifact"));
+        assert!(expand_command("/ai-council which db?", none).contains("group"));
     }
 
     #[test]

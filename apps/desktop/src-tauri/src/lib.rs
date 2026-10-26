@@ -320,6 +320,15 @@ pub fn run() {
             commands::list_voices,
             commands::transcribe,
             commands::speak,
+            commands::personaplex_status,
+            commands::personaplex_configure,
+            commands::personaplex_install,
+            commands::personaplex_start,
+            commands::personaplex_stop,
+            commands::models_status,
+            commands::model_install,
+            commands::model_cancel,
+            commands::model_delete,
         ])
         .run(tauri::generate_context!())
         .expect("error while running OpenCue");

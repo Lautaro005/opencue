@@ -40,6 +40,8 @@ croner = "4.0.1"
 base64 = "0.23.1"
 toml = "1"
 zip = { version = "4", default-features = false }
+bzip2 = "0.5"
+tar = "0.4"
 
 [dev-dependencies]
 tempfile = "3"

@@ -31,6 +31,9 @@ pub struct ArtifactVersion {
     pub created_at: String,
     /// The text the agent sent for this version.
     pub source: String,
+    /// Who wrote this version: `"user"` when it was edited by hand in the canvas, otherwise the agent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -41,6 +44,9 @@ pub struct Artifact {
     pub title: String,
     pub kind: String,
     pub language: Option<String>,
+    /// A canvas: the user can edit it in the side panel, and the agent reads their edits back.
+    #[serde(default)]
+    pub canvas: bool,
     pub versions: Vec<ArtifactVersion>,
 }
 
@@ -223,6 +229,7 @@ impl Core {
                     title: String::new(),
                     kind,
                     language: None,
+                    canvas: false,
                     versions: vec![],
                 }
             }
@@ -236,6 +243,9 @@ impl Core {
         anyhow::ensure!(!artifact.title.is_empty(), "`title` is required");
         if language.is_some() {
             artifact.language = language;
+        }
+        if args.get("canvas").and_then(Value::as_bool) == Some(true) {
+            artifact.canvas = true;
         }
 
         let bytes = render(&artifact.kind, &artifact.title, &content)?;
@@ -273,6 +283,7 @@ impl Core {
             attachment: att.clone(),
             created_at: now(),
             source: content,
+            by: None,
         });
         self.save_artifact(&artifact)?;
 
@@ -282,9 +293,87 @@ impl Core {
         self.emit(crate::CoreEvent::Message { message: m });
 
         Ok(format!(
-            "Shown to the user as the {} artifact “{}” (version {version}) and saved in your Files. To change it later, call create_artifact again with artifact_id \"{}\" and the complete new content.",
-            artifact.kind, artifact.title, artifact.id
+            "Shown to the user as the {} {} “{}” (version {version}) and saved in your Files. To change it later, call create_artifact again with artifact_id \"{}\" and the complete new content{}.",
+            artifact.kind,
+            if artifact.canvas { "canvas" } else { "artifact" },
+            artifact.title,
+            artifact.id,
+            if artifact.canvas {
+                " (call read_artifact first: the user may have edited it)"
+            } else {
+                ""
+            }
         ))
+    }
+
+    /// `read_artifact`: the latest text of an artifact, including what the user edited by hand.
+    pub(crate) fn read_artifact_tool(&self, agent: &Agent, args: &Value) -> anyhow::Result<String> {
+        let id = arg_str(args, "artifact_id")
+            .ok_or_else(|| anyhow::anyhow!("`artifact_id` is required"))?;
+        let a = self.get_artifact(id.trim())?;
+        anyhow::ensure!(
+            a.agent_id == agent.id,
+            "that artifact belongs to another agent"
+        );
+        let v = a
+            .versions
+            .last()
+            .ok_or_else(|| anyhow::anyhow!("that artifact has no versions"))?;
+        Ok(format!(
+            "{} “{}” — version {}{}:\n\n{}",
+            a.kind,
+            a.title,
+            v.version,
+            if v.by.as_deref() == Some("user") {
+                " (edited by the user)"
+            } else {
+                ""
+            },
+            v.source
+        ))
+    }
+
+    /// The user edited a canvas by hand: keep it as a new version (no new card in the chat).
+    pub fn save_canvas(&self, id: &str, content: &str) -> anyhow::Result<Artifact> {
+        anyhow::ensure!(
+            content.len() <= MAX_SOURCE_BYTES,
+            "the content is too large (limit 2 MB)"
+        );
+        let mut artifact = self.get_artifact(id)?;
+        anyhow::ensure!(artifact.canvas, "only a canvas can be edited by hand");
+        if artifact.versions.last().is_some_and(|v| v.source == content) {
+            return Ok(artifact);
+        }
+        let bytes = render(&artifact.kind, &artifact.title, content)?;
+        let version = artifact.versions.len() as u32 + 1;
+        let ext = extension(&artifact.kind, artifact.language.as_deref());
+        let name = clean_name(&format!("{}-v{version}.{ext}", slug(&artifact.title)));
+        let att = Attachment {
+            id: new_id(),
+            mime: mime_for(&name).to_string(),
+            size: bytes.len() as u64,
+            name,
+            artifact: Some(ArtifactRef {
+                id: artifact.id.clone(),
+                version,
+                kind: artifact.kind.clone(),
+                title: artifact.title.clone(),
+            }),
+        };
+        let path = self.paths().attachment_file(&att.id, &att.name);
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(&path, &bytes)?;
+        artifact.versions.push(ArtifactVersion {
+            version,
+            attachment: att,
+            created_at: now(),
+            source: content.to_string(),
+            by: Some("user".into()),
+        });
+        self.save_artifact(&artifact)?;
+        Ok(artifact)
     }
 }
 

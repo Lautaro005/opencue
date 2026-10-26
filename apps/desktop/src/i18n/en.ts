@@ -622,6 +622,7 @@ export const en = {
       connected: "Connected",
       setUp: "Set up",
       connect: "Connect",
+      group: { connected: "Connected", cloud: "Cloud APIs", local: "On this computer", cli: "Command-line tools" },
       saveTest: "Save and test",
     },
     vmpal: {

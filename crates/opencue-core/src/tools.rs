@@ -30,6 +30,7 @@ pub const UPDATE_PLAN: &str = "update_plan";
 pub const RESEARCH: &str = "research";
 pub const ASK_USER: &str = "ask_user";
 pub const CREATE_ARTIFACT: &str = "create_artifact";
+pub const READ_ARTIFACT: &str = "read_artifact";
 pub const READ_DASHBOARD: &str = "read_dashboard";
 pub const UPDATE_DASHBOARD: &str = "update_dashboard";
 pub const BROWSER_OPEN: &str = "browser_open";
@@ -340,9 +341,19 @@ impl Toolbox {
                     "type": { "type": "string", "enum": crate::artifacts::KINDS, "description": "Required for a new artifact." },
                     "content": { "type": "string", "description": "The complete content, in the format of the type." },
                     "language": { "type": "string", "description": "For type code: python, javascript, rust…" },
-                    "artifact_id": { "type": "string", "description": "Update this artifact (new version) instead of creating one." }
+                    "artifact_id": { "type": "string", "description": "Update this artifact (new version) instead of creating one." },
+                    "canvas": { "type": "boolean", "description": "Make it a canvas the user can edit in the side panel (use it when they ran /canvas or want to write or build something together with you)." }
                 },
                 "required": ["content"]
+            }),
+        ));
+        specs.push(spec(
+            READ_ARTIFACT,
+            "Read the latest text of an artifact or canvas you made, including anything the user edited by hand. Call it before changing a canvas.",
+            json!({
+                "type": "object",
+                "properties": { "artifact_id": { "type": "string" } },
+                "required": ["artifact_id"]
             }),
         ));
         if caps.dashboard {

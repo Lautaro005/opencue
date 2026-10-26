@@ -18,6 +18,24 @@ pub enum CoreEvent {
         agent_id: String,
         text: String,
     },
+    /// A tool call (an artifact, say) is still being written by the model: how far it has got.
+    ToolProgress {
+        thread_id: String,
+        message_id: String,
+        agent_id: String,
+        tool: String,
+        /// The title, once the model has written it.
+        title: Option<String>,
+        chars: usize,
+    },
+    /// A local model is downloading, unpacking, ready, cancelled or failed.
+    ModelProgress {
+        id: String,
+        phase: String,
+        done: u64,
+        total: u64,
+        error: Option<String>,
+    },
     /// An agent started or stopped working in a thread.
     Busy {
         thread_id: String,

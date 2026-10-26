@@ -11,6 +11,16 @@ import { cx } from "../../lib/format";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Spinner, Toggle } from "../ui";
 import { PageTitle } from "./SettingsModal";
 
+type Group = "connected" | "cloud" | "local" | "cli";
+type Tile = { info: ProviderInfo; provider: ProviderConfig | null; key: string; ready: boolean; group: Group };
+const GROUP_ORDER: Group[] = ["connected", "cloud", "local", "cli"];
+const LOCAL_KINDS = ["ollama", "lmstudio"];
+
+function groupOf(info: ProviderInfo): Group {
+  if (info.api === "cli") return "cli";
+  return LOCAL_KINDS.includes(info.kind) ? "local" : "cloud";
+}
+
 /** One container per provider the app supports; click one to set it up. */
 export function ProvidersSection() {
   const { t } = useTranslation();
@@ -20,53 +30,65 @@ export function ProvidersSection() {
 
   useEffect(() => void api.providerCatalog().then(setCatalog), []);
 
-  const tiles: { info: ProviderInfo; provider: ProviderConfig | null; key: string }[] = [];
+  // Ordered so the page reads top to bottom: what is connected first, then the rest by kind
+  // (cloud APIs, models on this computer, command-line tools), each A–Z.
+  const tiles: Tile[] = [];
   for (const info of catalog) {
     const mine = providers.filter((p) => p.kind === info.kind);
-    for (const p of mine) tiles.push({ info, provider: p, key: p.id });
-    if (mine.length === 0 || info.kind === "openai_compatible") tiles.push({ info, provider: null, key: `new-${info.kind}` });
+    for (const p of mine) tiles.push({ info, provider: p, key: p.id, ready: isConfigured(p, info), group: "connected" });
+    if (mine.length === 0 || info.kind === "openai_compatible") tiles.push({ info, provider: null, key: `new-${info.kind}`, ready: false, group: groupOf(info) });
   }
+  for (const tile of tiles) if (tile.provider && !tile.ready) tile.group = groupOf(tile.info);
+  const label = (tile: Tile) => (tile.provider && tile.provider.kind === "openai_compatible" ? tile.provider.name : tile.info.label);
+  const groups = GROUP_ORDER.map((g) => ({ g, items: tiles.filter((x) => x.group === g).sort((a, b) => label(a).localeCompare(label(b))) })).filter((x) => x.items.length > 0);
 
   return (
     <>
       <PageTitle title={t("settings.providers.title")} hint={t("settings.providers.hint")} />
-      <div className="grid grid-cols-2 gap-2.5">
-        {tiles.map(({ info, provider, key }) => {
-          const ready = provider ? isConfigured(provider, info) : false;
-          return (
-            <button
-              key={key}
-              onClick={() => setEditing({ provider, info })}
-              className={cx(
-                "flex min-h-[92px] flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors hover:bg-hover",
-                ready ? "border-line-strong" : "border-line",
-              )}
-            >
-              <span className="flex w-full items-center gap-2.5">
-                <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", ready ? "bg-accent-soft" : "bg-hover")}>
-                  <ProviderLogo kind={info.kind} size={18} />
-                </span>
-                <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{provider && provider.kind === "openai_compatible" ? provider.name : info.label}</span>
-                {provider ? (
-                  ready ? (
-                    <Badge tone="success">
-                      <Check size={11} strokeWidth={3} /> {t("settings.providers.connected")}
-                    </Badge>
-                  ) : !provider.enabled ? (
-                    <Badge>{t("common.off")}</Badge>
-                  ) : (
-                    <Badge tone="warning">{t("settings.models.key")}</Badge>
-                  )
-                ) : (
-                  <span className="flex items-center gap-1 text-[12px] text-muted">
-                    <Plus size={13} /> {t("settings.providers.setUp")}
+      <div className="space-y-5">
+        {groups.map(({ g, items }) => (
+          <section key={g} aria-label={t(`settings.providers.group.${g}`)}>
+            <h3 className="mb-2 flex items-center gap-2 text-[11.5px] font-semibold tracking-wide text-faint uppercase">
+              {t(`settings.providers.group.${g}`)}
+              <span className="rounded-full bg-hover px-1.5 py-px text-[10.5px] font-medium tracking-normal text-muted">{items.length}</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-2.5">
+              {items.map(({ info, provider, key, ready }) => (
+                <button
+                  key={key}
+                  onClick={() => setEditing({ provider, info })}
+                  className={cx(
+                    "flex min-h-[92px] flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors hover:bg-hover",
+                    ready ? "border-line-strong" : "border-line",
+                  )}
+                >
+                  <span className="flex w-full items-center gap-2.5">
+                    <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", ready ? "bg-accent-soft" : "bg-hover")}>
+                      <ProviderLogo kind={info.kind} size={18} />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{provider && provider.kind === "openai_compatible" ? provider.name : info.label}</span>
+                    {provider ? (
+                      ready ? (
+                        <Badge tone="success">
+                          <Check size={11} strokeWidth={3} /> {t("settings.providers.connected")}
+                        </Badge>
+                      ) : !provider.enabled ? (
+                        <Badge>{t("common.off")}</Badge>
+                      ) : (
+                        <Badge tone="warning">{t("settings.models.key")}</Badge>
+                      )
+                    ) : (
+                      <span className="flex items-center gap-1 text-[12px] text-muted">
+                        <Plus size={13} /> {t("settings.providers.setUp")}
+                      </span>
+                    )}
                   </span>
-                )}
-              </span>
-              <span className="line-clamp-2 text-[12px] text-muted">{info.note}</span>
-            </button>
-          );
-        })}
+                  <span className="line-clamp-2 text-[12px] text-muted">{info.note}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
       {editing && <ProviderDialog key={editing.provider?.id ?? editing.info.kind} {...editing} onClose={() => setEditing(null)} />}
     </>

@@ -942,19 +942,90 @@ pub async fn transcribe(
     state.core.transcribe(audio, &mime).await.map_err(e)
 }
 
-/// Returns MP3 audio as base64.
+#[derive(Serialize)]
+pub struct SpeechAudio {
+    mime: &'static str,
+    /// Base64 audio.
+    data: String,
+}
+
+/// Returns the spoken audio (MP3 from ElevenLabs, WAV from a local voice) as base64.
 #[tauri::command]
 pub async fn speak(
     state: State<'_, AppState>,
     text: String,
     agent_id: Option<String>,
-) -> R<String> {
-    let audio = state
+) -> R<SpeechAudio> {
+    let speech = state
         .core
         .speak(&text, agent_id.as_deref())
         .await
         .map_err(e)?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(audio))
+    Ok(SpeechAudio {
+        mime: speech.mime,
+        data: base64::engine::general_purpose::STANDARD.encode(speech.bytes),
+    })
+}
+
+// ---------- PersonaPlex ----------
+
+#[tauri::command]
+pub async fn personaplex_status(
+    state: State<'_, AppState>,
+) -> R<opencue_core::personaplex::PersonaStatus> {
+    Ok(state.core.personaplex_status().await)
+}
+
+#[tauri::command]
+pub async fn personaplex_configure(
+    state: State<'_, AppState>,
+    lan: bool,
+    offload: bool,
+    token: Option<String>,
+) -> R<()> {
+    state
+        .core
+        .personaplex_configure(lan, offload, token)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn personaplex_install(state: State<'_, AppState>) -> R<()> {
+    state.core.personaplex_install().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn personaplex_start(state: State<'_, AppState>) -> R<()> {
+    state.core.personaplex_start().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn personaplex_stop(state: State<'_, AppState>) -> R<()> {
+    state.core.personaplex_stop().await;
+    Ok(())
+}
+
+// ---------- local models ----------
+
+#[tauri::command]
+pub fn models_status(state: State<'_, AppState>) -> Vec<opencue_core::local_models::ModelInfo> {
+    state.core.models_status()
+}
+
+#[tauri::command]
+pub async fn model_install(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.model_install(&id).await.map_err(e)
+}
+
+#[tauri::command]
+pub fn model_cancel(state: State<'_, AppState>, id: String) {
+    state.core.model_cancel(&id)
+}
+
+#[tauri::command]
+pub fn model_delete(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.model_delete(&id).map_err(e)
 }
 
 #[derive(Serialize)]

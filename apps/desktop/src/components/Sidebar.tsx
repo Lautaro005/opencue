@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Bot, Eraser, LayoutDashboard, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users } from "lucide-react";
+import { Bot, Eraser, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cx, shortTime, splitThink } from "../lib/format";
 import { api } from "../lib/api";
@@ -58,10 +58,21 @@ export function Sidebar() {
     <aside style={{ width }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar">
       {handle}
       <div className="flex h-13 items-center justify-between pl-4 pr-2.5" data-tauri-drag-region>
-        <div className="flex items-center gap-2" data-tauri-drag-region>
+        {/* The logo is the way home: it opens the dashboard. */}
+        <a
+          href="#dashboard"
+          onClick={(e) => {
+            e.preventDefault();
+            select(null);
+          }}
+          aria-label={t("dashboard.title")}
+          data-tip={t("dashboard.title")}
+          aria-current={selected === null ? "page" : undefined}
+          className="flex items-center gap-2 rounded-lg py-1 pr-2 pl-1 -ml-1 hover:bg-hover"
+        >
           <Logo />
           <span className="text-[15px] font-semibold tracking-tight">OpenCue</span>
-        </div>
+        </a>
         <div className="relative flex items-center" ref={menuRef}>
           <IconButton label={t("search.title")} onClick={() => setSearchOpen(true)}>
             <Search size={17} />
@@ -99,15 +110,6 @@ export function Sidebar() {
           )}
         </div>
       </div>
-
-      <button
-        onClick={() => select(null)}
-        aria-current={selected === null ? "page" : undefined}
-        className={cx("mx-2 mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13.5px] font-medium transition-colors", selected === null ? "bg-active text-ink" : "text-muted hover:bg-hover hover:text-ink")}
-      >
-        <LayoutDashboard size={16} />
-        {t("dashboard.title")}
-      </button>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-2" aria-label="Agents">
         {threads.length === 0 ? (

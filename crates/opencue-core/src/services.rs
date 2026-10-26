@@ -57,9 +57,36 @@ pub struct ComputerSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VoiceSettings {
+    /// Voice works: speech in and speech out are both available (ElevenLabs key or local models).
     pub configured: bool,
+    /// An ElevenLabs key is saved.
+    #[serde(default)]
+    pub has_key: bool,
     pub voice_id: String,
     pub auto_speak: bool,
+    /// "auto" (local models when there is no ElevenLabs key), "elevenlabs" or "local".
+    #[serde(default = "auto_engine")]
+    pub stt_engine: String,
+    #[serde(default = "auto_engine")]
+    pub tts_engine: String,
+    /// Local speech-to-text model id (Settings → Models → Local); empty is the default.
+    #[serde(default)]
+    pub local_stt: String,
+    #[serde(default)]
+    pub local_tts: String,
+    /// Local voice name (e.g. `ef_dora`); empty picks one for the language.
+    #[serde(default)]
+    pub local_voice: String,
+}
+
+fn auto_engine() -> String {
+    "auto".into()
+}
+
+/// Audio a voice engine made, with its type.
+pub struct Speech {
+    pub bytes: Vec<u8>,
+    pub mime: &'static str,
 }
 
 impl Core {
@@ -902,19 +929,54 @@ impl Core {
         Ok(ElevenLabs::new(key))
     }
 
+    async fn setting_or(&self, key: &str, default: &str) -> String {
+        self.store
+            .setting(key)
+            .await
+            .ok()
+            .flatten()
+            .filter(|v| !v.is_empty())
+            .unwrap_or_else(|| default.to_string())
+    }
+
+    fn has_elevenlabs_key(&self) -> bool {
+        self.secrets
+            .get(ELEVENLABS_KEY)
+            .is_some_and(|k| !k.is_empty())
+    }
+
+    /// Whether speech-to-text runs on local models: chosen, or (auto) when there is no ElevenLabs key.
+    async fn use_local_stt(&self) -> bool {
+        match self.setting_or("stt_engine", "auto").await.as_str() {
+            "local" => true,
+            "elevenlabs" => false,
+            _ => !self.has_elevenlabs_key() && self.local_stt_ready().await.is_some(),
+        }
+    }
+
+    async fn use_local_tts(&self) -> bool {
+        match self.setting_or("tts_engine", "auto").await.as_str() {
+            "local" => true,
+            "elevenlabs" => false,
+            _ => !self.has_elevenlabs_key() && self.local_tts_ready().await.is_some(),
+        }
+    }
+
     pub async fn voice_settings(&self) -> VoiceSettings {
+        let stt_ok = if self.use_local_stt().await {
+            self.local_stt_ready().await.is_some()
+        } else {
+            self.has_elevenlabs_key()
+        };
+        let tts_ok = if self.use_local_tts().await {
+            self.local_tts_ready().await.is_some()
+        } else {
+            self.has_elevenlabs_key()
+        };
         VoiceSettings {
-            configured: self
-                .secrets
-                .get(ELEVENLABS_KEY)
-                .is_some_and(|k| !k.is_empty()),
-            voice_id: self
-                .store
-                .setting("voice_id")
-                .await
-                .ok()
-                .flatten()
-                .unwrap_or_default(),
+            configured: stt_ok && tts_ok,
+            has_key: self.has_elevenlabs_key(),
+            voice_id: self.setting_or("voice_id", "").await,
             auto_speak: self
                 .store
                 .setting("voice_auto_speak")
@@ -923,6 +985,11 @@ impl Core {
                 .flatten()
                 .as_deref()
                 != Some("false"),
+            stt_engine: self.setting_or("stt_engine", "auto").await,
+            tts_engine: self.setting_or("tts_engine", "auto").await,
+            local_stt: self.setting_or("local_stt_model", "").await,
+            local_tts: self.setting_or("local_tts_model", "").await,
+            local_voice: self.setting_or("local_tts_voice", "").await,
         }
     }
 
@@ -934,15 +1001,25 @@ impl Core {
         if let Some(k) = api_key {
             self.secrets.set(ELEVENLABS_KEY, k.trim())?;
         }
-        self.store
-            .set_setting("voice_id", s.voice_id.trim())
-            .await?;
-        self.store
-            .set_setting(
+        let valid = |e: &str| ["auto", "elevenlabs", "local"].contains(&e);
+        anyhow::ensure!(
+            valid(&s.stt_engine) && valid(&s.tts_engine),
+            "unknown voice engine"
+        );
+        for (key, value) in [
+            ("voice_id", s.voice_id.trim().to_string()),
+            (
                 "voice_auto_speak",
-                if s.auto_speak { "true" } else { "false" },
-            )
-            .await?;
+                if s.auto_speak { "true" } else { "false" }.to_string(),
+            ),
+            ("stt_engine", s.stt_engine),
+            ("tts_engine", s.tts_engine),
+            ("local_stt_model", s.local_stt),
+            ("local_tts_model", s.local_tts),
+            ("local_tts_voice", s.local_voice),
+        ] {
+            self.store.set_setting(key, &value).await?;
+        }
         Ok(self.voice_settings().await)
     }
 
@@ -950,15 +1027,47 @@ impl Core {
         self.elevenlabs()?.voices().await
     }
 
+    /// The language to listen for / speak in: the app's language, unless it follows the system.
+    async fn speech_language(&self) -> String {
+        let l = self.setting_or("language", "system").await;
+        if l != "system" {
+            return l;
+        }
+        std::env::var("LANG")
+            .ok()
+            .and_then(|v| v.split(['_', '.', '-']).next().map(str::to_string))
+            .filter(|l| l.len() == 2)
+            .unwrap_or_else(|| "en".into())
+    }
+
     pub async fn transcribe(&self, audio: Vec<u8>, mime: &str) -> anyhow::Result<String> {
         anyhow::ensure!(!audio.is_empty(), "no audio was recorded");
         let lang = self.store.setting("language").await.ok().flatten();
+        if self.use_local_stt().await {
+            anyhow::ensure!(
+                mime.contains("wav"),
+                "local speech recognition needs WAV audio"
+            );
+            // Parakeet and Whisper detect the language; the others follow the app's.
+            let l = self.speech_language().await;
+            return self.local_transcribe(audio, Some(&l)).await;
+        }
         self.elevenlabs()?
             .transcribe(audio, mime, lang.as_deref().filter(|l| *l != "system"))
             .await
     }
 
-    pub async fn speak(&self, text: &str, agent_id: Option<&str>) -> anyhow::Result<Vec<u8>> {
+    pub async fn speak(&self, text: &str, agent_id: Option<&str>) -> anyhow::Result<Speech> {
+        let text = voice::speakable(text);
+        anyhow::ensure!(!text.is_empty(), "nothing to say");
+        if self.use_local_tts().await {
+            let lang = self.speech_language().await;
+            let bytes = self.local_speak(&text, &lang).await?;
+            return Ok(Speech {
+                bytes,
+                mime: "audio/wav",
+            });
+        }
         let mut voice = self.store.setting("voice_id").await.ok().flatten();
         if let Some(id) = agent_id {
             if let Some(v) = self
@@ -972,9 +1081,10 @@ impl Core {
                 voice = Some(v);
             }
         }
-        let text = voice::speakable(text);
-        anyhow::ensure!(!text.is_empty(), "nothing to say");
-        self.elevenlabs()?.speak(&text, voice.as_deref()).await
+        Ok(Speech {
+            bytes: self.elevenlabs()?.speak(&text, voice.as_deref()).await?,
+            mime: "audio/mpeg",
+        })
     }
 
     // ---------- agent tools ----------
@@ -1022,7 +1132,7 @@ impl Core {
                 }
             )),
         }
-        s.push_str("\n\n## Artifacts\nWhen the user asks for something substantial they will keep or reuse (a web page or small app, a diagram, a report, a spreadsheet, a slide deck, a document, a script), make it with `create_artifact` instead of pasting it in the chat, then say in a sentence what you made. Short answers, explanations and snippets stay in the chat. To revise one, call it again with its `artifact_id`.");
+        s.push_str("\n\n## Artifacts\nWhen the user asks for something substantial they will keep or reuse (a web page or small app, a diagram, a report, a spreadsheet, a slide deck, a document, a script), make it with `create_artifact` instead of pasting it in the chat, then say in a sentence what you made. Short answers, explanations and snippets stay in the chat. To revise one, call it again with its `artifact_id`. A canvas is an artifact with `canvas: true` that the user edits by hand in the side panel next to you: before you change a canvas, call `read_artifact` to see their edits and keep them.");
         if caps.dashboard {
             s.push_str("\n\n## Dashboard\nYou are in charge of the user's dashboard, the home screen. When they run /dashboard or ask to change how it looks or what it shows, call `read_dashboard`, then `update_dashboard` with the full new HTML page.");
         }
