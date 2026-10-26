@@ -64,6 +64,11 @@ pub fn team_prompt(
         s.push_str(&format!(
             " Your own working copy is `{w}`: work and commit only there."
         ));
+    } else if let Some(r) = repo {
+        s.push_str(&format!(
+            " Everyone on the team works directly in that folder, `{r}`: it IS the project. Create and edit the files right there (a new app goes at its top level, \
+             not in a subfolder, and never in a hidden folder) and don't copy the project elsewhere."
+        ));
     }
     s.push_str(&format!(
         " The lead is @{lead}{}.\n\n\
@@ -76,9 +81,9 @@ pub fn team_prompt(
          how to tell it is done (a command, a test, an observable result), and \"reply with DONE or BLOCKED\". Teammates can't see your chat. \
          When you receive a handoff, `ACK` first. Whoever hands work out owes the user the result: follow each handoff until it comes back `DONE` or `BLOCKED`; \
          the app reminds a teammate once if they stop without either.\n\n\
-         **Working rules.** One writer per file and per branch at a time: work on your own branch (`agent/<your-name>/<topic>`), never push to the default branch, \
-         and open a pull request when a piece is ready. Read before you edit; make the smallest change that works; run the tests before you say `DONE`. \
-         Say what you did not verify. Don't repeat what a teammate already said: add something or stay quiet. Ask the lead (or the user, with `ask_user`) before changing the scope, \
+         **Working rules.** One writer per file at a time: say which files you are taking in your `ACK`, and don't touch a teammate's. Never push to the default branch; \
+         commit your own work with a clear message and open a pull request when a piece is ready. Read before you edit; make the smallest change that works; run the tests before you say `DONE`. \
+         Say what you did not verify, and where you looked. Put the status note in the same message as your next action, and keep going without asking when a step needs nothing from the user: stop only when blocked or before something destructive. Don't repeat what a teammate already said: add something or stay quiet. Ask the lead (or the user, with `ask_user`) before changing the scope, \
          touching other people's branches, force-pushing, deleting, merging or releasing.",
         if is_lead { " (you)" } else { "" }
     ));
@@ -97,7 +102,7 @@ pub fn coding_agent_instructions(cli_label: &str) -> String {
     format!(
         "You are {cli_label}, a coding agent on a team that works on one repository. Make real changes in your working folder with your tools, \
          run the project's checks before you report, and follow the team protocol (ACK / STATUS / BLOCKED / DONE) from your system prompt. \
-         Work on a branch of your own and propose changes as a pull request; never push to the default branch."
+         Work in the group's folder, commit with clear messages and propose changes as a pull request; never push to the default branch."
     )
 }
 
@@ -268,7 +273,7 @@ impl Core {
             config = json!({});
         }
         config["repo_dir"] = json!(path.display().to_string());
-        config["worktrees"] = json!(worktrees);
+        config["isolate"] = json!(worktrees);
         self.set_group_config(group_id, config).await?;
         for m in &group.members {
             if let Err(e) = self.coding_prepare_member(group_id, &m.agent_id).await {
@@ -302,9 +307,9 @@ impl Core {
         let agent = self.store.get_agent(agent_id).await?;
         let isolate = group
             .config
-            .get("worktrees")
+            .get("isolate")
             .and_then(Value::as_bool)
-            .unwrap_or(true);
+            .unwrap_or(false);
         let folder = if isolate {
             // The lead works in the repository itself; teammates each get a worktree.
             let lead = group
@@ -320,8 +325,14 @@ impl Core {
         } else {
             repo.clone()
         };
+        let want = folder.display().to_string();
+        if agent.settings.working_dir.as_deref() == Some(want.as_str())
+            && agent.settings.computer != crate::computer::ComputerBackend::None
+        {
+            return Ok(());
+        }
         let mut settings = agent.settings.clone();
-        settings.working_dir = Some(folder.display().to_string());
+        settings.working_dir = Some(want);
         if settings.computer == crate::computer::ComputerBackend::None {
             settings.computer = crate::computer::ComputerBackend::Host;
         }

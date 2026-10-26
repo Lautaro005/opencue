@@ -220,6 +220,8 @@ Changes to `site/` deploy the website.
   (name and folder, `git init` for you), live files per agent, coding-agent CLIs as agents, drag-to-reorder and a
   collapsible sidebar, notifications in the **notch**, the light Moshi voice engine for Apple silicon, and the browser
   placed inside the app's own page.
+- [x] **0.5.2**: `/plan` as a self-ticking checklist, coding teams working in one shared project folder, permissions of
+  parallel agents inside the group, a tabbed Computers page that always shows the SPACE setup.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

@@ -98,7 +98,7 @@ function NeedsRepo({ group, onDone }: { group: Group; onDone: () => void }) {
     if (!dir) return;
     setBusy(true);
     try {
-      await api.codingSetRepo(group.id, dir, group.config.worktrees !== false);
+      await api.codingSetRepo(group.id, dir, group.config.isolate === true);
       await useStore.getState().refresh();
       onDone();
     } catch (e) {
@@ -614,7 +614,7 @@ function RepoTab({ group, status, onChanged }: { group: Group; status: RepoStatu
   const setPanel = useStore((s) => s.setPanel);
   const [name, setName] = useState(group.name);
   useEffect(() => setName(group.name), [group.id, group.name]);
-  const worktrees = group.config.worktrees !== false;
+  const worktrees = group.config.isolate === true;
 
   const link = async (dir: string, isolate: boolean) => {
     try {

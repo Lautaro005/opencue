@@ -520,8 +520,8 @@ export const es: Dict = {
     branch: "Rama",
     default: "Rama principal",
     sync: "Adelante / atrás",
-    worktrees: "Un worktree por agente",
-    worktreesHint: "Los compañeros trabajan en su propia carpeta y rama (agent/<nombre>/work), así el trabajo en paralelo no choca.",
+    worktrees: "Copia separada por agente",
+    worktreesHint: "Apagado por defecto: todos trabajan en la carpeta del grupo. Prendelo para que cada compañero tenga su copia oculta (.opencue/worktrees) y su rama.",
   },
   terminal: {
     section: "Terminales",
@@ -541,6 +541,8 @@ export const es: Dict = {
     unpin: "Dejar de mantener encima",
   },
   plan: {
+    untitled: "Plan",
+    checklist: "Lista del plan",
     agentsWorking: "{{names}} están trabajando",
     team: "Agentes en esta ejecución",
     activity: "Todo lo que pasó",
@@ -943,7 +945,9 @@ export const es: Dict = {
       body: "Instrucciones (Markdown)",
     },
     computers: {
-      auto: { title: "Instalar y conectar automáticamente", running: "En marcha", stopped: "Detenido", failed: "Falló", hint: "OpenCue descarga SPACE, instala lo que necesita (Kind, Firecracker…), lo construye y lo inicia, y completa la dirección y el token de abajo. La primera vez tarda bastante (unos 30 GiB de disco).", start: "Iniciar SPACE", stop: "Detener SPACE", reinstall: "Reinstalar", install: "Instalar SPACE", fix: "Arregla {{count}} cosas primero", note: "Linux x86_64 con KVM y Docker. La contraseña de su cuenta de administración local queda en esta computadora." },
+      auto: { title: "Instalar y conectar automáticamente", running: "En marcha", stopped: "Detenido", failed: "Falló", hint: "OpenCue descarga SPACE, instala lo que necesita (Kind, Firecracker…), lo construye y lo inicia, y completa la dirección y el token de abajo. La primera vez tarda bastante (unos 30 GiB de disco).", start: "Iniciar SPACE", stop: "Detener SPACE", reinstall: "Reinstalar", install: "Instalar SPACE", fix: "Arregla {{count}} cosas primero", note: "Linux x86_64 con KVM y Docker. La contraseña de su cuenta de administración local queda en esta computadora.", unsupported: "No en esta compu", unsupportedHint: "La instalación automática necesita Linux x86_64 con KVM, así que no puede correr en esta Mac ni en una PC con Windows. SPACE igual se puede usar desde acá:", alt1: "Instalá SPACE en una máquina Linux (o una VM en la nube) con los pasos del repo de GitHub.", alt2: "Después pegá su dirección y su token en Conexión (abajo) y apretá Probar." },
+      tab: { sandbox: "Sandbox", space: "Perplexity SPACE", vmpal: "VMPal", more: "Host y webhooks" },
+      connection: "Conexión",
       desktop: "Vista de escritorio",
       desktopHint: "Usá una imagen con escritorio para las computadoras Docker y mostralo en el panel Computadora.",
       desktopImage: "Imagen de escritorio",

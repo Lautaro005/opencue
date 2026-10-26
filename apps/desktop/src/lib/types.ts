@@ -86,8 +86,8 @@ export interface Group {
   members: GroupMember[];
   created_at: string;
   kind: GroupKind;
-  /** A coding group's `repo_dir` and `worktrees`. */
-  config: { repo_dir?: string; worktrees?: boolean; [key: string]: unknown };
+  /** A coding group's `repo_dir` and `isolate`. */
+  config: { repo_dir?: string; isolate?: boolean; [key: string]: unknown };
 }
 
 export interface RepoStatus {

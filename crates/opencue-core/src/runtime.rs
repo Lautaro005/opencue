@@ -16,6 +16,16 @@ use crate::tools::{self, arg_str, arg_u64, Toolbox};
 use crate::Core;
 
 pub const MAX_TOOL_STEPS: usize = 16;
+/// Whether a saved plan has steps and all of them are done.
+fn plan_is_finished(plan: &str) -> bool {
+    let marks: Vec<&str> = plan
+        .lines()
+        .filter_map(|l| l.trim().strip_prefix("- ["))
+        .filter_map(|l| l.split_once("] ").map(|(m, _)| m))
+        .collect();
+    !marks.is_empty() && marks.iter().all(|m| *m == "x")
+}
+
 /// `/plan` runs carry out a whole plan in one go, so they get far more tool steps.
 pub const PLAN_TOOL_STEPS: usize = 80;
 
@@ -193,7 +203,7 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
             "The user ran /plan. Work like a careful engineer, in two phases, without stopping in between.\n\
              1. PLAN. Understand the request first (read files, search or look things up if that helps), then call `update_plan` with the COMPLETE list of steps: \
              concrete, in order, at most 12, each one small enough to finish and check. Every step starts as `pending`.\n\
-             2. EXECUTE. Carry the steps out one at a time. Before you start a step call `update_plan` with it as `doing`; when it is finished and checked, call `update_plan` again with it as `done`. \
+             2. EXECUTE. Carry the steps out one at a time. Before you start a step call `update_plan` with it as `doing`; the moment it is finished and checked (or a teammate reports `DONE` for it), call `update_plan` again with it as `done`, so the user's checklist ticks itself. \
              Always send the whole list. Write one short line to the user with each step (what you are about to do, or what you found): they follow it in the plan card. If a step fails, fix the cause, or change the plan with `update_plan` and say why in a line. \
              Don't ask whether to continue; use `ask_user` only for a decision or permission you really need (anything destructive or irreversible).\n\
              3. FINISH. Leave every step `done` (do NOT clear the plan), then answer with a short summary: what you did, what changed, and anything left for the user.\n\n\
@@ -570,6 +580,14 @@ impl Core {
         // DONE or BLOCKED, and they are reminded once if they stop without either.
         let coding = group.kind == "coding";
         let mut owed: HashMap<String, Owed> = HashMap::new();
+        if coding {
+            // Everyone works in the group's folder (or their worktree, if the group asks for one).
+            for m in &members {
+                if let Err(e) = self.coding_prepare_member(&group.id, &m.id).await {
+                    tracing::warn!("could not prepare {}: {e:#}", m.name);
+                }
+            }
+        }
         let launch = |running: &mut futures::stream::FuturesUnordered<
             futures::future::BoxFuture<'static, (String, AgentOutcome)>,
         >,
@@ -1276,6 +1294,10 @@ impl Core {
                     tracing::debug!("profile update failed: {e:#}");
                 }
             });
+        }
+        // A plan with every step ticked is finished: the next message starts from a clean slate.
+        if plan_is_finished(&self.store.plan(&agent.id)) {
+            let _ = self.store.set_plan(&agent.id, "");
         }
         Ok(outcome)
     }
@@ -2407,6 +2429,9 @@ mod tests {
     fn new_commands_expand() {
         let none = |_: &str| None;
         assert!(expand_command("/plan add a login page", none).contains("update_plan"));
+        assert!(plan_is_finished("- [x] a\n- [x] b\n"));
+        assert!(!plan_is_finished("- [x] a\n- [~] b\n"));
+        assert!(!plan_is_finished(""));
         assert!(expand_command("/plan add a login page", none).contains("add a login page"));
         assert!(expand_command("/artifact a landing page", none).contains("create_artifact"));
         assert!(expand_command("/canvas", none).contains("read_artifact"));

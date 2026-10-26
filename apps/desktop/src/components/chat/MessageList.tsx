@@ -120,6 +120,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                   <PlanCard
                     threadId={threadId}
                     started={m.created_at}
+                    task={m.content.trimStart().replace(/^\/plan\s*/i, "").split("\n")[0].slice(0, 120)}
                     run={planRuns.runs.get(m.id)!}
                     agent={(planRuns.runs.get(m.id)!.find((x) => x.agent_id)?.agent_id ?? (isGroup ? null : threadId)) ? agents[planRuns.runs.get(m.id)!.find((x) => x.agent_id)?.agent_id ?? threadId] : undefined}
                     active={workingNow && m.id === lastUserId}
@@ -128,7 +129,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
               )}
               {m.role === "event" && <EventCard m={m} />}
               {m.role === "assistant" && !(planRuns.owner.has(m.id) && (m.tool_calls?.length || (m.status === "streaming" && !m.content))) && (
-                <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
+                <AgentRow agent={agent} showHeader={firstOfRun || (isGroup && planRuns.owner.has(m.id))} isGroup={isGroup}>
                   {m.status === "error" ? (
                     <div className="max-w-full rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
                       <div className="flex items-center gap-1.5 font-medium text-danger">

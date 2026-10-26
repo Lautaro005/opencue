@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, ChevronDown, CircleAlert, CircleCheck, Square } from "lucide-react";
+import { Check, ChevronDown, CircleAlert, Square } from "lucide-react";
 import { api } from "../../lib/api";
 import { cx, splitThink } from "../../lib/format";
 import { useStore } from "../../lib/store";
@@ -17,9 +17,13 @@ interface Step {
 /** The steps of the latest `update_plan` call. */
 export function planSteps(messages: Message[]): Step[] {
   let steps: Step[] = [];
+  // Several agents may keep a list; the checklist is the first one's (the lead's).
+  let owner: string | null | undefined;
   for (const m of messages) {
     for (const c of m.tool_calls ?? []) {
       if (c.name !== "update_plan") continue;
+      if (owner === undefined) owner = m.agent_id;
+      else if (m.agent_id !== owner) continue;
       const raw = (c.arguments as { steps?: unknown }).steps;
       if (Array.isArray(raw)) {
         steps = raw
@@ -39,16 +43,12 @@ function clock(ms: number) {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
-function seconds(ms: number) {
-  return ms < 950 ? `${Math.max(0.1, ms / 1000).toFixed(1)}s` : `${(ms / 1000).toFixed(ms < 10000 ? 1 : 0)}s`;
-}
-
 /**
  * The card a `/plan` run lives in: what the agent is doing right now, how far along the plan is
  * (one segment per step), each thing it did and how long it took, and an Approve / Deny pair when
  * it is waiting on you. It follows the run until the agent answers.
  */
-export function PlanCard({ threadId, started, run, agent, active }: { threadId: string; started: string; run: Message[]; agent?: Agent; active: boolean }) {
+export function PlanCard({ threadId, started, task, run, agent, active }: { threadId: string; started: string; task: string; run: Message[]; agent?: Agent; active: boolean }) {
   const { t } = useTranslation();
   const approvals = useStore((s) => s.approvals);
   const questions = useStore((s) => s.questions);
@@ -69,7 +69,9 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
     return map;
   }, [run]);
   const tools = run.filter((m) => m.role === "tool" && m.tool_name !== "update_plan");
-  const waiting = run.find((m) => m.role === "tool" && m.status === "awaiting_approval");
+  // Every agent waiting on you, not just the first: parallel agents ask at the same time.
+  const waitingAll = run.filter((m) => m.role === "tool" && m.status === "awaiting_approval" && approvals[m.id]);
+  const waiting = waitingAll[0];
   const approval: ApprovalRequest | undefined = waiting ? approvals[waiting.id] : undefined;
   const lastReply = [...run].reverse().find((m) => m.role === "assistant");
   const failed = !active && lastReply?.status === "error";
@@ -103,32 +105,20 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
   );
   const lastNote = active ? notes[notes.length - 1] : undefined;
 
-  const rows = tools.map((m) => {
-    const call = m.tool_call_id ? calls[m.tool_call_id] : undefined;
-    const d = describe(m.tool_name ?? call?.name ?? "tool", call?.arguments, t);
-    const at = new Date(m.created_at).getTime();
-    // How long it took: until the same agent did the next thing (agents work side by side).
-    const next = run.slice(run.indexOf(m) + 1).find((x) => x.agent_id === m.agent_id);
-    const alive = !!m.agent_id && workingIds.includes(m.agent_id);
-    const end = next ? new Date(next.created_at).getTime() : alive && active ? now : at;
-    const interrupted = m.status === "running" && !alive && !active;
-    return { m, d, ms: Math.max(0, end - at), interrupted };
-  });
-  const shown = open ? rows : rows.slice(-4);
-
   const startMs = new Date(started).getTime();
   const lastMs = run.length ? new Date(run[run.length - 1].created_at).getTime() : startMs;
   const elapsed = (active ? now : lastMs) - startMs;
 
-  let title: string;
-  if (waiting && approval) title = t("plan.needsApproval", { action: describe(waiting.tool_name ?? "tool", calls[waiting.tool_call_id ?? ""]?.arguments, t).title.toLowerCase() });
-  else if (failed) title = t("plan.failed");
-  else if (stopped) title = t("plan.stopped");
-  else if (finished) title = t("plan.done", { n: steps.length || tools.length });
-  else if (many && busyNames.length > 1) title = t("plan.agentsWorking", { names: busyNames.join(", ") });
-  else if (doing) title = doing.step;
-  else if (steps.length === 0) title = t("plan.planning");
-  else title = t("plan.working");
+  let status: string;
+  if (waiting && approval) status = t("plan.needsApproval", { action: describe(waiting.tool_name ?? "tool", calls[waiting.tool_call_id ?? ""]?.arguments, t).title.toLowerCase() });
+  else if (failed) status = t("plan.failed");
+  else if (stopped) status = t("plan.stopped");
+  else if (finished) status = t("plan.done", { n: steps.length || tools.length });
+  else if (many && busyNames.length > 1) status = t("plan.agentsWorking", { names: busyNames.join(", ") });
+  else if (doing) status = doing.step;
+  else if (steps.length === 0) status = t("plan.planning");
+  else status = t("plan.working");
+  const title = task || t("plan.untitled");
 
   return (
     <div className="animate-pop w-full max-w-[540px] overflow-hidden rounded-[22px] border border-line bg-bg shadow-sm" data-plan-card>
@@ -137,11 +127,11 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
           {agent ? <AvatarView avatar={agent.avatar} name={agent.name} size={26} /> : <Spinner size={16} />}
           {(active || waiting) && <span className={cx("absolute -top-0.5 -right-0.5 size-2.5 rounded-full ring-2 ring-bg", waiting ? "bg-warning" : "animate-pulse bg-accent")} />}
         </span>
-        <span className="min-w-0 flex-1 truncate text-[14.5px] font-medium">{title}</span>
+        <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold" title={title}>{title}</span>
         <span className="shrink-0 font-mono text-[12.5px] text-muted tabular-nums">{clock(elapsed)}</span>
       </div>
-      <div className="flex items-center justify-between px-4 pt-2.5 text-[12.5px] text-muted">
-        <span className="truncate">{agent?.model ?? agent?.name ?? ""}</span>
+      <div className="flex items-center justify-between gap-3 px-4 pt-2.5 text-[12.5px] text-muted">
+        <span className={cx("truncate", waiting && "text-warning")}>{status}</span>
         <span className="shrink-0">{steps.length ? t("plan.step", { n: Math.max(1, currentIndex), total: steps.length }) : t("plan.planning")}</span>
       </div>
       <div className="flex gap-1.5 px-4 pt-2" role="progressbar" aria-valuemin={0} aria-valuemax={steps.length || 1} aria-valuenow={done}>
@@ -172,34 +162,49 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
         </p>
       )}
 
-      <ul className="space-y-0.5 px-4 pt-3 pb-1">
-        {shown.map(({ m, d, ms, interrupted }) => (
-          <li key={m.id} className="flex items-center gap-3 py-1.5 text-[13.5px]">
-            <span className={cx("shrink-0", m.status === "error" || m.status === "denied" || interrupted ? "text-danger" : "text-muted")}>{m.status === "running" && !interrupted ? <Spinner size={14} /> : interrupted ? <CircleAlert size={14} /> : d.icon}</span>
-            {many && m.agent_id && agents[m.agent_id] && (
-              <span className="shrink-0" data-tip={agents[m.agent_id].name}>
-                <AvatarView avatar={agents[m.agent_id].avatar} name={agents[m.agent_id].name} size={16} />
+      {steps.length > 0 ? (
+        <ul className="space-y-0.5 px-4 pt-3 pb-1" aria-label={t("plan.checklist")}>
+          {steps.map((st, i) => (
+            <li key={i} className="flex items-start gap-3 py-1 text-[13.5px]">
+              <span className="mt-0.5 shrink-0">
+                {st.status === "done" ? (
+                  <span className="flex size-4 items-center justify-center rounded-[5px] bg-accent text-white"><Check size={11} strokeWidth={3.5} /></span>
+                ) : st.status === "doing" && (active || waiting) ? (
+                  <Spinner size={15} />
+                ) : (
+                  <span className="block size-4 rounded-[5px] border border-line-strong" />
+                )}
               </span>
-            )}
-            <span className="min-w-0 flex-1 truncate">
-              <span className="text-ink">{d.title}</span>
-              {d.detail && <span className="ml-1.5 text-muted">{d.detail}</span>}
-            </span>
-            <span className="shrink-0 text-[12.5px] text-muted tabular-nums">{m.status === "awaiting_approval" ? "0s" : seconds(ms)}</span>
-          </li>
-        ))}
-        {rows.length === 0 && steps.length === 0 && active && (
-          <li className="flex items-center gap-3 py-1.5 text-[13.5px] text-muted">
+              <span className={cx("min-w-0 flex-1", st.status === "done" ? "text-muted line-through decoration-faint" : st.status === "doing" ? "font-medium text-ink" : "text-ink/80")}>{st.step}</span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        active && (
+          <p className="flex items-center gap-3 px-4 pt-3 pb-1 text-[13.5px] text-muted">
             <Spinner size={14} /> {t("plan.planning")}
-          </li>
-        )}
-        {waiting && (
-          <li className="flex items-center gap-3 py-1.5 text-[13.5px] text-muted">
-            <span className="size-3.5 shrink-0 rounded-sm border border-warning" />
-            <span className="flex-1 truncate">{t("plan.waiting", { action: describe(waiting.tool_name ?? "tool", calls[waiting.tool_call_id ?? ""]?.arguments, t).title.toLowerCase() })}</span>
-          </li>
-        )}
-      </ul>
+          </p>
+        )
+      )}
+      {waitingAll.length > 0 && (
+        <ul className="space-y-1 px-4 pt-2 pb-1">
+          {waitingAll.map((w) => {
+            const who = w.agent_id ? agents[w.agent_id] : undefined;
+            const ap = approvals[w.id];
+            return (
+              <li key={w.id} className="flex items-center gap-2 rounded-xl border border-warning/40 bg-warning-soft px-2.5 py-1.5 text-[13px]">
+                {who && <AvatarView avatar={who.avatar} name={who.name} size={18} />}
+                <span className="min-w-0 flex-1 truncate">
+                  {who && many && <span className="font-medium">{who.name}: </span>}
+                  {t("plan.waiting", { action: describe(w.tool_name ?? "tool", calls[w.tool_call_id ?? ""]?.arguments, t).title.toLowerCase() })}
+                </span>
+                <button onClick={() => void api.resolveApproval(ap.id, true)} className="rounded-full bg-accent px-3 py-1 text-[12.5px] font-medium text-white hover:bg-accent-hover">{t("plan.approve")}</button>
+                <button onClick={() => void api.resolveApproval(ap.id, false)} className="rounded-full border border-line px-3 py-1 text-[12.5px] hover:bg-hover">{t("plan.deny")}</button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
 
       {open && (
         <div className="mx-4 mt-1 mb-2 max-h-80 overflow-y-auto rounded-xl bg-hover/60 px-3 py-2.5 text-[12.5px]">
@@ -231,30 +236,8 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
           </ul>
         </div>
       )}
-      {open && steps.length > 0 && (
-        <ol className="mx-4 mt-1 mb-2 space-y-1 rounded-xl bg-hover/60 px-3 py-2.5 text-[13px]">
-          {steps.map((s, i) => (
-            <li key={i} className="flex items-start gap-2">
-              <span className="mt-0.5 shrink-0">
-                {s.status === "done" ? <CircleCheck size={14} className="text-success" /> : s.status === "doing" ? <Spinner size={13} /> : <span className="mt-0.5 block size-3 rounded-full border border-line-strong" />}
-              </span>
-              <span className={cx(s.status === "done" && "text-muted line-through decoration-faint")}>{s.step}</span>
-            </li>
-          ))}
-        </ol>
-      )}
-
       <div className="flex items-center gap-2.5 px-4 pt-2 pb-3.5">
-        {waiting && approval ? (
-          <>
-            <button onClick={() => void api.resolveApproval(approval.id, true)} className="inline-flex items-center gap-1.5 rounded-full bg-accent px-5 py-2 text-[14px] font-medium text-white hover:bg-accent-hover">
-              <Check size={16} /> {t("plan.approve")}
-            </button>
-            <button onClick={() => void api.resolveApproval(approval.id, false)} className="inline-flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-[14px] hover:bg-hover">
-              ✕ {t("plan.deny")}
-            </button>
-          </>
-        ) : active ? (
+        {active ? (
           <button onClick={() => void api.stopThread(threadId)} className="inline-flex items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-[13px] hover:bg-hover">
             <Square size={11} fill="currentColor" /> {t("chat.stop")}
           </button>

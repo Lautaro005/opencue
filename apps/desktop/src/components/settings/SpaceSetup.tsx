@@ -29,7 +29,21 @@ export function SpaceSetup({ onChanged }: { onChanged: () => void }) {
     if (s && was.current === "installing" && s.state === "ready") onChanged();
     if (s) was.current = s.state;
   }, [s, onChanged]);
-  if (!s || !s.supported) return null;
+  if (!s) return null;
+  if (!s.supported)
+    return (
+      <div className="border-b border-line px-4 py-3.5">
+        <div className="flex items-center gap-2">
+          <span className="text-[13.5px] font-medium">{t("settings.computers.auto.title")}</span>
+          <Badge tone="neutral">{t("settings.computers.auto.unsupported")}</Badge>
+        </div>
+        <p className="mt-0.5 text-[12px] text-muted">{t("settings.computers.auto.unsupportedHint")}</p>
+        <ol className="mt-2 list-decimal space-y-0.5 pl-5 text-[12px] text-muted">
+          <li>{t("settings.computers.auto.alt1")}</li>
+          <li>{t("settings.computers.auto.alt2")}</li>
+        </ol>
+      </div>
+    );
 
   const run = (fn: () => Promise<void>) => void fn().catch((e) => showToast(String(e))).finally(load);
   const blockers = s.checks.filter((c) => !c.ok);
