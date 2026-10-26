@@ -36,6 +36,16 @@ pub enum CoreEvent {
         total: u64,
         error: Option<String>,
     },
+    /// A terminal session printed something (base64 bytes).
+    TermOutput {
+        id: String,
+        data: String,
+    },
+    /// A terminal session's program ended.
+    TermExit {
+        id: String,
+        code: i32,
+    },
     /// An agent started or stopped working in a thread.
     Busy {
         thread_id: String,

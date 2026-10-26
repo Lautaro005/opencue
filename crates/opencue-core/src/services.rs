@@ -470,6 +470,8 @@ impl Core {
     // ---------- computers ----------
 
     pub(crate) async fn computer_config(&self) -> ComputerConfig {
+        // A SPACE that OpenCue installed keeps a fresh sign-in.
+        self.space_refresh_token().await;
         let get = |k: &'static str| async move {
             self.store
                 .setting(k)

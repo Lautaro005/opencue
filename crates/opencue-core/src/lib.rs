@@ -26,9 +26,11 @@ pub mod paths;
 pub mod personaplex;
 pub mod providers;
 pub mod secrets;
+pub mod space_setup;
 pub mod skills;
 pub mod store;
 pub mod templates;
+pub mod terminal;
 pub mod tools;
 pub mod vmpal;
 pub mod voice;
@@ -91,6 +93,10 @@ pub struct Core {
     pub(crate) downloads: local_models::Downloads,
     /// The PersonaPlex server (real-time voice) this app started, if any.
     pub(crate) persona: personaplex::Runtime,
+    /// Terminal sessions (Claude Code, Codex… in a pseudo-terminal) that are running.
+    pub(crate) terms: terminal::Terminals,
+    /// The SPACE installation OpenCue runs for the user (Settings → Computers → SPACE).
+    pub(crate) space: space_setup::Setup,
 }
 
 impl Core {
@@ -145,6 +151,8 @@ impl Core {
             computer_logs: Mutex::new(HashMap::new()),
             downloads: Default::default(),
             persona: Default::default(),
+            terms: Default::default(),
+            space: Default::default(),
         }))
     }
 

@@ -6,6 +6,7 @@ import { useStore } from "../../lib/store";
 import type { ComputerSettings, DockerSetup, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Spinner, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
+import { SpaceSetup } from "./SpaceSetup";
 
 export const SPACE_REPO = "https://github.com/perplexityai/SPACE";
 
@@ -208,10 +209,11 @@ export function ComputersSection() {
           </span>
         }
       >
-        <div className="flex items-start gap-3 px-4 pt-3.5 text-[12.5px] text-muted">
+        <div className="flex items-start gap-3 px-4 pt-3.5 pb-3 text-[12.5px] text-muted">
           <Server size={16} className="mt-0.5 shrink-0" />
           <span>{s.os === "linux" ? t("settings.computers.spaceHint") : t("settings.computers.spaceRemote")}</span>
         </div>
+        <SpaceSetup onChanged={() => void api.computerSettings().then(setS)} />
         <div className="grid grid-cols-2 gap-2 px-4 py-3">
           <Field label={t("settings.computers.spaceUrl")}>
             <Input value={s.space_url} placeholder="http://localhost:8080/v1" onChange={(e) => setS({ ...s, space_url: e.target.value })} onBlur={() => void save(s)} />

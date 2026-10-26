@@ -1242,3 +1242,100 @@ pub async fn github_comment(
 pub async fn coding_fix_ci(state: State<'_, AppState>, group_id: String, number: u64) -> R<()> {
     state.core.coding_fix_ci(&group_id, number).await.map_err(e)
 }
+
+// ---------- terminal sessions ----------
+
+#[tauri::command]
+pub fn term_tools(state: State<'_, AppState>) -> Vec<opencue_core::terminal::ToolInfo> {
+    state.core.term_tools()
+}
+
+#[tauri::command]
+pub async fn term_list(state: State<'_, AppState>) -> R<Vec<opencue_core::terminal::TermInfo>> {
+    Ok(state.core.term_list().await)
+}
+
+#[tauri::command]
+pub async fn term_create(
+    state: State<'_, AppState>,
+    tool: String,
+    cwd: String,
+    cols: u16,
+    rows: u16,
+) -> R<opencue_core::terminal::TermInfo> {
+    state
+        .core
+        .term_create(&tool, &cwd, cols, rows)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn term_restart(state: State<'_, AppState>, id: String, cols: u16, rows: u16) -> R<()> {
+    state.core.term_restart(&id, cols, rows).await.map_err(e)
+}
+
+#[tauri::command]
+pub fn term_write(state: State<'_, AppState>, id: String, data: String) -> R<()> {
+    state.core.term_write(&id, &data).map_err(e)
+}
+
+#[tauri::command]
+pub fn term_resize(state: State<'_, AppState>, id: String, cols: u16, rows: u16) {
+    state.core.term_resize(&id, cols, rows)
+}
+
+#[tauri::command]
+pub fn term_snapshot(state: State<'_, AppState>, id: String) -> String {
+    state.core.term_snapshot(&id)
+}
+
+#[tauri::command]
+pub fn term_kill(state: State<'_, AppState>, id: String) {
+    state.core.term_kill(&id)
+}
+
+#[tauri::command]
+pub async fn term_close(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.term_close(&id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn term_rename(state: State<'_, AppState>, id: String, label: String) -> R<()> {
+    state.core.term_rename(&id, &label).await.map_err(e)
+}
+
+/// The user's home folder: where a new terminal session starts unless another is picked.
+#[tauri::command]
+pub fn home_dir() -> String {
+    directories::UserDirs::new()
+        .map(|d| d.home_dir().display().to_string())
+        .unwrap_or_default()
+}
+
+// ---------- SPACE (Perplexity's sandbox) ----------
+
+#[tauri::command]
+pub async fn space_status(state: State<'_, AppState>) -> R<opencue_core::space_setup::SpaceStatus> {
+    Ok(state.core.space_status().await)
+}
+
+#[tauri::command]
+pub async fn space_install(state: State<'_, AppState>) -> R<()> {
+    state.core.space_install().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn space_start(state: State<'_, AppState>) -> R<()> {
+    state.core.space_start().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn space_stop(state: State<'_, AppState>) -> R<()> {
+    state.core.space_stop().await.map_err(e)
+}
+
+#[tauri::command]
+pub fn space_cancel(state: State<'_, AppState>) {
+    state.core.space_cancel()
+}

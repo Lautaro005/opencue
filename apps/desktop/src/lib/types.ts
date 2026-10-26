@@ -379,8 +379,26 @@ export interface CatalogStatus {
   via_composio: boolean;
 }
 
+export interface TermInfo {
+  id: string;
+  tool: string;
+  label: string;
+  cwd: string;
+  created_at: string;
+  alive: boolean;
+}
+
+export interface TermTool {
+  key: string;
+  label: string;
+  installed: boolean;
+  install: string;
+}
+
 export type CoreEvent =
   | { type: "message"; message: Message }
+  | { type: "term_output"; id: string; data: string }
+  | { type: "term_exit"; id: string; code: number }
   | { type: "tool_progress"; thread_id: string; message_id: string; agent_id: string; tool: string; title: string | null; chars: number }
   | { type: "model_progress"; id: string; phase: string; done: number; total: number; error: string | null }
   | { type: "delta"; thread_id: string; message_id: string; agent_id: string; text: string }
@@ -599,4 +617,16 @@ export interface BrowserTab {
   url: string;
   title: string;
   active: boolean;
+}
+
+export interface SpaceStatus {
+  supported: boolean;
+  /** idle | checking | installing | ready | error */
+  state: string;
+  step: string;
+  checks: { id: string; ok: boolean; detail: string }[];
+  log: string;
+  dir: string;
+  managed: boolean;
+  api_up: boolean;
 }

@@ -503,6 +503,18 @@ export const en = {
     worktrees: "A worktree for each agent",
     worktreesHint: "Teammates work in their own folder and branch (agent/<name>/work), so parallel work never collides.",
   },
+  terminal: {
+    section: "Terminals",
+    running: "running",
+    ended: "ended",
+    restart: "Restart",
+    stop: "Stop",
+    close: "Close session",
+    closeConfirm: "Close the {{name}} session? Its terminal is stopped and removed from the list.",
+    endedHint: "This session ended.",
+    start: "Start again",
+    notInstalled: "{{name}} is not installed. Install it with: {{how}}",
+  },
   panel: {
     popOut: "Open in its own window",
     pin: "Keep on top",
@@ -880,6 +892,7 @@ export const en = {
       body: "Instructions (Markdown)",
     },
     computers: {
+      auto: { title: "Install and connect automatically", running: "Running", stopped: "Stopped", failed: "Failed", hint: "OpenCue downloads SPACE, installs what it needs (Kind, Firecracker…), builds and starts it, and fills in the address and token below. It takes a while the first time (about 30 GiB of disk).", start: "Start SPACE", stop: "Stop SPACE", reinstall: "Reinstall", install: "Install SPACE", fix: "Fix {{count}} things first", note: "Linux x86_64 with KVM and Docker. The password for its local admin account stays on this computer." },
       desktop: "Desktop view",
       desktopHint: "Run Docker computers from a desktop image and show it in the Computer panel.",
       desktopImage: "Desktop image",

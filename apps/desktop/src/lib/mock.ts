@@ -54,6 +54,7 @@ const agents: Agent[] = [
   agent("a6", "Research Assistant", "heart", "dots", "#f04848"),
 ];
 
+const terms: { id: string; tool: string; label: string; cwd: string; created_at: string; alive: boolean }[] = [{ id: "t1", tool: "claude", label: "Claude Code", cwd: "/Users/you/code/opencue", created_at: ago(30), alive: true }];
 const repoStatus = { dir: "/Users/you/code/opencue", is_repo: true, git_installed: true, gh_installed: true, gh_user: "Lautaro005", slug: "Lautaro005/opencue", branch: "feat/council", default_branch: "main", ahead: 2, behind: 0, changed_files: 3, additions: 48, deletions: 6, worktrees: [{ path: "/Users/you/code/opencue", branch: "feat/council" }, { path: "/Users/you/code/opencue/.opencue/worktrees/builder", branch: "agent/builder/work" }], error: null };
 const pulls = [
   { number: 12, title: "Add the AI council", branch: "feat/council", base: "main", author: "Lautaro005", draft: false, review: "REVIEW_REQUIRED", checks: { total: 5, passed: 3, failed: 1, pending: 1, failing: ["test (windows-latest)"] }, url: "https://github.com/Lautaro005/opencue/pull/12", updated_at: new Date().toISOString(), additions: 420, deletions: 12, files: 9, mergeable: "MERGEABLE", auto_merge: false },
@@ -545,6 +546,27 @@ const handlers: Record<string, (a: Args) => unknown> = {
   save_voice_settings: ({ settings, apiKey }) => Object.assign(voice, settings, { configured: voice.configured || !!apiKey }),
   list_voices: () => [{ id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, { id: "pNInz6obpgDQGcFmaJgB", name: "Adam" }],
   transcribe: () => "Hola, ¿qué tengo en la agenda hoy?",
+  space_status: () => ({ supported: false, state: "idle", step: "", checks: [], log: "", dir: "", managed: false, api_up: false }),
+  space_install: () => undefined,
+  space_start: () => undefined,
+  space_stop: () => undefined,
+  space_cancel: () => undefined,
+  term_tools: () => [{ key: "claude", label: "Claude Code", installed: true, install: "npm install -g @anthropic-ai/claude-code" }, { key: "codex", label: "Codex", installed: true, install: "npm install -g @openai/codex" }, { key: "grok", label: "Grok Build", installed: false, install: "see x.ai/cli" }, { key: "shell", label: "Terminal", installed: true, install: "" }],
+  term_list: () => terms,
+  term_create: ({ tool, cwd }) => {
+    const t = { id: id(), tool: String(tool), label: String(tool) === "codex" ? "Codex" : String(tool) === "shell" ? "Terminal" : "Claude Code", cwd: String(cwd), created_at: ago(0), alive: true };
+    terms.push(t);
+    emit({ type: "threads_changed" });
+    return t;
+  },
+  term_restart: () => undefined,
+  term_write: () => undefined,
+  term_resize: () => undefined,
+  term_snapshot: () => btoa("\x1b[1;38;5;208m* Claude Code\x1b[0m (browser preview: terminals run in the desktop app)\r\n\r\n> "),
+  term_kill: () => undefined,
+  term_close: ({ id: tid }) => { terms.splice(terms.findIndex((t) => t.id === tid), 1); emit({ type: "threads_changed" }); },
+  term_rename: () => undefined,
+  home_dir: () => "/Users/you",
   save_canvas: ({ id }) => { throw new Error("canvas editing works in the desktop app (" + id + ")"); },
   speak: () => ({ mime: "audio/wav", data: "" }),
   models_status: () => localModels,

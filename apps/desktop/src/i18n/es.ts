@@ -505,6 +505,18 @@ export const es: Dict = {
     worktrees: "Un worktree por agente",
     worktreesHint: "Los compañeros trabajan en su propia carpeta y rama (agent/<nombre>/work), así el trabajo en paralelo no choca.",
   },
+  terminal: {
+    section: "Terminales",
+    running: "en curso",
+    ended: "terminada",
+    restart: "Reiniciar",
+    stop: "Detener",
+    close: "Cerrar sesión",
+    closeConfirm: "¿Cerrar la sesión de {{name}}? Se detiene su terminal y se quita de la lista.",
+    endedHint: "Esta sesión terminó.",
+    start: "Iniciar de nuevo",
+    notInstalled: "{{name}} no está instalado. Instálalo con: {{how}}",
+  },
   panel: {
     popOut: "Abrir en su propia ventana",
     pin: "Mantener encima",
@@ -882,6 +894,7 @@ export const es: Dict = {
       body: "Instrucciones (Markdown)",
     },
     computers: {
+      auto: { title: "Instalar y conectar automáticamente", running: "En marcha", stopped: "Detenido", failed: "Falló", hint: "OpenCue descarga SPACE, instala lo que necesita (Kind, Firecracker…), lo construye y lo inicia, y completa la dirección y el token de abajo. La primera vez tarda bastante (unos 30 GiB de disco).", start: "Iniciar SPACE", stop: "Detener SPACE", reinstall: "Reinstalar", install: "Instalar SPACE", fix: "Arregla {{count}} cosas primero", note: "Linux x86_64 con KVM y Docker. La contraseña de su cuenta de administración local queda en esta computadora." },
       desktop: "Vista de escritorio",
       desktopHint: "Usá una imagen con escritorio para las computadoras Docker y mostralo en el panel Computadora.",
       desktopImage: "Imagen de escritorio",
