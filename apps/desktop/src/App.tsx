@@ -9,7 +9,7 @@ import { GroupDetails } from "./components/panel/GroupDetails";
 import { CodingPanel } from "./components/panel/CodingPanel";
 import { ComputerPanel } from "./components/panel/ComputerPanel";
 import { ArtifactPanel } from "./components/panel/ArtifactPanel";
-import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
+import { CliAgentsDialog, CreateAgentDialog, CreateCodingDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
 import { SettingsModal } from "./components/settings/SettingsModal";
 import { Spinner } from "./components/ui";
 import { ConfirmHost, ContextMenuHost, TooltipHost } from "./components/ui/Overlays";
@@ -110,6 +110,8 @@ export default function App() {
       {(panel === "artifact" || panel === "canvas") && selected && <ArtifactPanel />}
       <CreateAgentDialog />
       <CreateGroupDialog />
+      <CreateCodingDialog />
+      <CliAgentsDialog />
       <SettingsModal />
       <Walkthrough />
       <ConfirmHost />

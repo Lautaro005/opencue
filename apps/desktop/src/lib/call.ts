@@ -12,6 +12,13 @@ import { playSpeech, transcribeBlob } from "./audio";
 import { useStore } from "./store";
 import type { Message } from "./types";
 
+/** One piece of what the agent says: a sentence or two, with its audio already being made. */
+interface Utterance {
+  id: string;
+  content: string;
+  speech?: Promise<import("./types").SpeechAudio | null>;
+}
+
 export type CallState = "connecting" | "listening" | "hearing" | "thinking" | "speaking" | "ended";
 
 export interface CallEvents {
@@ -58,7 +65,8 @@ export function spokenText(md: string): string {
     .trim();
 }
 
-const SILENCE_MS = 1100;
+/** How long a pause ends the turn: short utterances get a little longer (people stop to think), long ones less. */
+const silenceFor = (spokenMs: number) => (spokenMs < 1500 ? 950 : 700);
 const MIN_SPEECH_MS = 350;
 
 export class Call {
@@ -81,7 +89,9 @@ export class Call {
   private recStart = 0;
   private useElevenLabs = false;
   private spoken = new Set<string>();
-  private queue: Message[] = [];
+  private queue: Utterance[] = [];
+  /** How much of each streaming reply has been handed to the voice already. */
+  private consumed = new Map<string, number>();
   private playing = false;
   private waitingReply = false;
 
@@ -188,7 +198,7 @@ export class Call {
     if (this.recorder) {
       if (loud) this.silenceSince = 0;
       else if (!this.silenceSince) this.silenceSince = now;
-      else if (now - this.silenceSince > SILENCE_MS) void this.finishRecording();
+      else if (now - this.silenceSince > silenceFor(this.silenceSince - this.recStart)) void this.finishRecording();
       return;
     }
     if (this.state === "thinking") return;
@@ -233,7 +243,7 @@ export class Call {
     const rec = this.recorder;
     if (!rec) return;
     this.recorder = null;
-    const long = performance.now() - this.recStart - SILENCE_MS > MIN_SPEECH_MS;
+    const long = this.silenceSince - this.recStart > MIN_SPEECH_MS;
     const done = new Promise<void>((resolve) => (rec.onstop = () => resolve()));
     rec.stop();
     await done;
@@ -302,10 +312,29 @@ export class Call {
   private onStore(messages: Message[], working: boolean) {
     if (this.ended) return;
     for (const m of messages) {
-      if (this.spoken.has(m.id) || m.role !== "assistant" || m.status !== "done" || m.tool_calls?.length) continue;
-      this.spoken.add(m.id);
-      const text = spokenText(splitThink(m.content).text);
-      if (text) this.queue.push({ ...m, content: text });
+      if (this.spoken.has(m.id) || m.role !== "assistant" || m.status === "error") continue;
+      const done = m.status !== "streaming";
+      let text = spokenText(splitThink(m.content).text);
+      // A code block still being written is never read out.
+      const fences = (splitThink(m.content).text.match(/```/g) ?? []).length;
+      if (!done && fences % 2 === 1) text = spokenText(splitThink(m.content).text.slice(0, splitThink(m.content).text.lastIndexOf("```")));
+      const from = this.consumed.get(m.id) ?? 0;
+      // While a reply is still being written, speak each finished sentence at once, so the voice
+      // starts after the first sentence instead of after the whole answer.
+      let cut = text.length;
+      if (!done) {
+        const ends = [...text.matchAll(/[.!?…]+["')\]]*\s/g)];
+        cut = ends.length ? (ends[ends.length - 1].index ?? 0) + ends[ends.length - 1][0].length : 0;
+      }
+      if (cut > from) {
+        const piece = text.slice(from, cut).trim();
+        this.consumed.set(m.id, cut);
+        if (piece) this.queue.push({ id: m.id, content: piece });
+      }
+      if (done) {
+        this.spoken.add(m.id);
+        this.consumed.delete(m.id);
+      }
     }
     if (this.queue.length && !this.playing) void this.playNext();
     if (!working && !this.queue.length && !this.playing && this.waitingReply && this.state === "thinking") {
@@ -323,7 +352,10 @@ export class Call {
     this.set("speaking");
     this.on.saying(m.content);
     try {
-      if (this.speakerOn) await this.speak(m.content);
+      // The next sentence's audio is made while this one plays, so there is no gap between them.
+      const next = this.queue[0];
+      if (next && !next.speech && this.useElevenLabs && this.speakerOn) next.speech = api.speak(next.content, this.agentId).catch(() => null);
+      if (this.speakerOn) await this.speak(m);
     } catch (e) {
       this.on.error(String(e));
     }
@@ -343,9 +375,10 @@ export class Call {
     }
   }
 
-  private async speak(text: string) {
+  private async speak(m: Utterance) {
+    const text = m.content;
     if (this.useElevenLabs) {
-      const speech = await api.speak(text, this.agentId);
+      const speech = (await m.speech) ?? (await api.speak(text, this.agentId));
       if (!speech.data || this.ended) return;
       await playSpeech(speech, (a) => (this.audio = a));
       this.audio = null;

@@ -101,6 +101,15 @@ pub fn coding_agent_instructions(cli_label: &str) -> String {
     )
 }
 
+/// One working folder of a coding group and what changed in it.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct Lane {
+    pub agent_ids: Vec<String>,
+    pub dir: String,
+    pub branch: Option<String>,
+    pub files: Vec<github::FileChange>,
+}
+
 impl Core {
     /// The group and its repository folder.
     async fn coding_dir(&self, group_id: &str) -> anyhow::Result<(Group, PathBuf)> {
@@ -133,6 +142,40 @@ impl Core {
     pub async fn github_changes(&self, group_id: &str) -> anyhow::Result<Changes> {
         let (_, dir) = self.coding_dir(group_id).await?;
         github::changes(&dir).await
+    }
+
+    /// Which files each teammate has created or changed so far, from their own working folders
+    /// (a worktree each, or the shared repository): what the Activity list of the panel shows.
+    pub async fn coding_activity(&self, group_id: &str) -> anyhow::Result<Vec<Lane>> {
+        let (group, repo) = self.coding_dir(group_id).await?;
+        let mut lanes: Vec<Lane> = vec![];
+        for m in &group.members {
+            let Ok(agent) = self.store.get_agent(&m.agent_id).await else {
+                continue;
+            };
+            let dir = agent
+                .settings
+                .working_dir
+                .as_deref()
+                .filter(|d| !d.trim().is_empty())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| repo.clone());
+            if let Some(l) = lanes
+                .iter_mut()
+                .find(|l| l.dir == dir.display().to_string())
+            {
+                l.agent_ids.push(agent.id.clone());
+                continue;
+            }
+            let branch = github::status(&dir).await.branch;
+            lanes.push(Lane {
+                agent_ids: vec![agent.id.clone()],
+                dir: dir.display().to_string(),
+                branch,
+                files: github::changed_files(&dir).await,
+            });
+        }
+        Ok(lanes)
     }
 
     pub async fn github_create_pr(
@@ -210,8 +253,15 @@ impl Core {
             path.is_absolute(),
             "the repository folder must be a full path"
         );
+        // The folder is the project: made if it doesn't exist, and turned into a git repository
+        // (with a first commit, so branches and worktrees work) if it isn't one yet.
+        std::fs::create_dir_all(&path)?;
         anyhow::ensure!(path.is_dir(), "{} is not a folder", path.display());
-        let status = github::status(&path).await;
+        let mut status = github::status(&path).await;
+        if !status.is_repo {
+            github::init_repo(&path).await?;
+            status = github::status(&path).await;
+        }
         anyhow::ensure!(status.is_repo, "{} is not a git repository", path.display());
         let mut config = group.config.clone();
         if !config.is_object() {

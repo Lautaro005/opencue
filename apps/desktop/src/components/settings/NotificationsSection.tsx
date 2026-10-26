@@ -15,6 +15,7 @@ export function NotificationsSection() {
 
   const on = (key: string) => settings[key] !== "false";
   const master = on("notify_enabled");
+  const channel = settings.notify_channel === "notch" ? "notch" : "system";
   const row = (key: string, label: string, hint: string) => (
     <CardRow label={t(label)} hint={t(hint)}>
       <Toggle checked={on(key)} onChange={(v) => void setSetting(key, String(v))} label={t(label)} disabled={!master} />
@@ -40,6 +41,23 @@ export function NotificationsSection() {
         </CardRow>
       </Card>
       <Card>
+        <CardRow label={t("settings.notifications.where")} hint={t("settings.notifications.whereHint")}>
+          <div className="flex gap-1 rounded-lg bg-hover p-0.5" role="radiogroup" aria-label={t("settings.notifications.where")}>
+            {(["system", "notch"] as const).map((k) => (
+              <button
+                key={k}
+                role="radio"
+                aria-checked={channel === k}
+                disabled={!master}
+                onClick={() => void setSetting("notify_channel", k)}
+                className={`rounded-md px-3 py-1 text-[12.5px] font-medium transition-colors ${channel === k ? "bg-elevated shadow-sm" : "text-muted hover:text-ink"}`}
+              >
+                {t(k === "system" ? "settings.notifications.whereSystem" : "settings.notifications.whereNotch")}
+              </button>
+            ))}
+          </div>
+        </CardRow>
+        {channel === "notch" && row("notify_working", "settings.notifications.working", "settings.notifications.workingHint")}
         {row("notify_replies", "settings.notifications.replies", "settings.notifications.repliesHint")}
         {row("notify_approvals", "settings.notifications.approvals", "settings.notifications.approvalsHint")}
         {row("notify_background_only", "settings.notifications.backgroundOnly", "settings.notifications.backgroundOnlyHint")}

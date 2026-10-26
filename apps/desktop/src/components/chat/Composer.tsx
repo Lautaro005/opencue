@@ -419,8 +419,8 @@ export function Composer({
             </button>
           ) : (
             <button
-              aria-label={t("chat.send")}
-              data-tip={t("chat.send")}
+              aria-label={busy ? t("chat.queue") : t("chat.send")}
+              data-tip={busy ? t("chat.queue") : t("chat.send")}
               onClick={submit}
               disabled={!text.trim() && files.length === 0}
               className="flex size-8 items-center justify-center rounded-full bg-accent text-white transition-opacity hover:bg-accent-hover disabled:opacity-30"

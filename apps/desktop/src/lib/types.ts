@@ -141,6 +141,14 @@ export interface FileChange {
   deletions: number;
 }
 
+/** One working folder of a coding group and what changed in it. */
+export interface Lane {
+  agent_ids: string[];
+  dir: string;
+  branch: string | null;
+  files: FileChange[];
+}
+
 export interface Changes {
   files: FileChange[];
   patch: string;
@@ -346,7 +354,7 @@ export interface Question {
   kind: "question" | "permission";
   title: string;
   body: string;
-  options: string[];
+  options: { title: string; description: string }[];
 }
 
 export interface DockerSetup {
@@ -402,6 +410,7 @@ export type CoreEvent =
   | { type: "tool_progress"; thread_id: string; message_id: string; agent_id: string; tool: string; title: string | null; chars: number }
   | { type: "model_progress"; id: string; phase: string; done: number; total: number; error: string | null }
   | { type: "delta"; thread_id: string; message_id: string; agent_id: string; text: string }
+  | { type: "messages_removed"; thread_id: string; ids: string[] }
   | { type: "busy"; thread_id: string; agent_id: string; busy: boolean }
   | { type: "approval_requested"; approval: ApprovalRequest }
   | { type: "approval_resolved"; approval_id: string; approved: boolean }
@@ -540,6 +549,9 @@ export interface LocalModel {
 }
 
 export interface PersonaStatus {
+  /** "personaplex" (NVIDIA, CUDA) or "moshi_mlx" (light, Apple silicon). */
+  engine: string;
+  mlx_supported: boolean;
   installed: boolean;
   installing: boolean;
   running: boolean;

@@ -2,6 +2,7 @@
 
 mod browser;
 mod commands;
+mod notch;
 mod notify;
 mod views;
 
@@ -136,7 +137,15 @@ pub fn run() {
                 core.paths().root().join("browser"),
             );
             core.set_browser_host(browser.clone());
+            let wants_notch = tauri::async_runtime::block_on(core.store.setting("notify_channel"))
+                .ok()
+                .flatten()
+                .as_deref()
+                == Some("notch");
             app.manage(AppState { core, browser });
+            if wants_notch {
+                let _ = notch::ensure(app.handle());
+            }
             allow_microphone(app);
 
             // Tray: agents keep working while the window is closed. The menu opens on click, with
@@ -326,6 +335,12 @@ pub fn run() {
             commands::github_status,
             commands::github_pulls,
             commands::github_changes,
+            commands::coding_activity,
+            commands::unqueue_message,
+            commands::notch_info,
+            commands::notch_place,
+            commands::notch_hide,
+            commands::main_in_view,
             commands::github_create_pr,
             commands::github_merge_pr,
             commands::github_comment,

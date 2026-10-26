@@ -152,9 +152,9 @@ async function simulateReply(threadId: string, text: string) {
         thread_id: threadId,
         agent_id: threadId,
         kind: permission ? "permission" : "question",
-        title: "",
-        body: permission ? "Run COMPOSIO_SEARCH_TOOLS on Trello to find the cards in the brain column of cue-agents." : "Which Trello board should I read, cue-agents or personal?",
-        options: permission ? [] : ["cue-agents", "personal"],
+        title: permission ? "" : "Which Trello board should I read?",
+        body: permission ? "Run COMPOSIO_SEARCH_TOOLS on Trello to find the cards in the brain column of cue-agents." : "There are two boards with a brain column.",
+        options: permission ? [] : [{ title: "cue-agents", description: "The team board, where the brain column is used the most." }, { title: "personal", description: "Your own board, with fewer cards." }],
       },
     });
     return;
@@ -247,12 +247,12 @@ const localModels = [
   { id: "kokoro-v1", kind: "tts", label: "Kokoro 82M v1.0 (multilingual)", size: 330 * MB, license: "Apache-2.0", source: "hexgrad/Kokoro-82M", languages: ["en", "es", "fr"], note: "Natural voices in 8 languages.", ram_gb: 1, installed: false, supported: true },
   { id: "sherpa-runtime", kind: "runtime", label: "sherpa-onnx runtime (v2.0.0)", size: 27 * MB, license: "Apache-2.0", source: "github.com/k2-fsa/sherpa-onnx", languages: [], note: "Runs the models.", ram_gb: 0, installed: false, supported: true },
 ];
-const persona = { installed: false, installing: false, running: false, ready: false, has_token: false, lan: false, offload: false, gpu: null as string | null, python: "3.12", url: null as string | null, lan_url: null as string | null, qr_svg: null as string | null, log: "" };
+const persona = { engine: "personaplex", mlx_supported: true, installed: false, installing: false, running: false, ready: false, has_token: false, lan: false, offload: false, gpu: null as string | null, python: "3.12", url: null as string | null, lan_url: null as string | null, qr_svg: null as string | null, log: "" };
 const voice = { configured: false, has_key: false, voice_id: "", auto_speak: true, stt_engine: "auto", tts_engine: "auto", local_stt: "", local_tts: "", local_voice: "" };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.5.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.5.1-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -301,6 +301,15 @@ const handlers: Record<string, (a: Args) => unknown> = {
   github_status: () => repoStatus,
   github_pulls: () => pulls,
   github_changes: () => changes,
+  notch_info: () => ({ macos: true, notch_height: 32 }),
+  notch_place: () => undefined,
+  notch_hide: () => undefined,
+  main_in_view: () => !!(window as unknown as { __inView?: boolean }).__inView,
+  unqueue_message: ({ threadId, messageId }) => { const i = messages.findIndex((x) => x.id === messageId); if (i >= 0) messages.splice(i, 1); emit({ type: "messages_removed", thread_id: String(threadId), ids: [String(messageId)] }); },
+  coding_activity: ({ groupId }) => {
+    const g = groups.find((x) => x.id === groupId);
+    return (g?.members ?? []).slice(0, 2).map((mm, i) => ({ agent_ids: [mm.agent_id], dir: `/work/${i}`, branch: `agent/${i}`, files: changes.files.slice(0, 3) }));
+  },
   github_create_pr: () => "https://github.com/Lautaro005/opencue/pull/12",
   github_merge_pr: ({ number, auto }) => (auto ? `Auto-merge is on for #${number}.` : `Merged #${number}.`),
   github_comment: () => undefined,
@@ -588,7 +597,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   model_cancel: () => undefined,
   model_delete: ({ id }) => void (localModels.find((x) => x.id === id)!.installed = false),
   personaplex_status: () => persona,
-  personaplex_configure: ({ lan, offload }) => void Object.assign(persona, { lan, offload }),
+  personaplex_configure: ({ lan, offload, engine }) => void Object.assign(persona, { lan, offload }, engine ? { engine } : {}),
   personaplex_install: () => void Object.assign(persona, { installed: true }),
   personaplex_start: () => void Object.assign(persona, { running: true, ready: true, url: "https://localhost:8998" }),
   personaplex_stop: () => void Object.assign(persona, { running: false, ready: false, url: null }),
@@ -596,7 +605,8 @@ const handlers: Record<string, (a: Args) => unknown> = {
 };
 
 // Lets the browser preview be driven from a test or the console.
-(window as unknown as { __emit: typeof emit }).__emit = emit;
+(window as unknown as { __emit: typeof emit; __settings: typeof settings }).__emit = emit;
+(window as unknown as { __settings: typeof settings }).__settings = settings;
 
 export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
   const h = handlers[cmd];

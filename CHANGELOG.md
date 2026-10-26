@@ -2,6 +2,42 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.5.1 — 2026-10-26
+
+### New
+
+- **Agents work in parallel.** In any group, whoever is named starts at once, and a teammate handed work with
+  `send_to_agent` starts *while the sender carries on* instead of after it. The plan card shows every agent taking part
+  (working, waiting for you, idle), their notes as they go and what each one did; **Open run** opens the whole timeline.
+  In the sidebar a group shows the faces of the agents working, hopping.
+- **Message queue.** Write while an agent is working and the message waits ("Queued", with *Take back*). The agent reads
+  it at its next step, or before it hands the turn back, and answers it; whatever arrives after that starts a new run.
+- **Questions as cards.** `ask_user` shows the question, a line under it, up to three answers (a title and what choosing
+  it means) and an **Other…** field. Permissions of the CLI agents' own tools now show up **in the group** where they are
+  working (before they went to the agent's private chat, where nobody saw them).
+- **Agents choose how to work.** The prompt now tells them to plan multi-step work, make an artifact (or a canvas) for
+  anything you will read or run, and to write a short line now and then during long work.
+- **Coding teams.** *New coding team* opens a window with the app's name and its folder: OpenCue creates the folder and
+  runs `git init` (with a first commit) when it is not a repository. A **Files right now** list shows what each agent has
+  created or edited in its worktree, refreshed every few seconds while they work. *Add an agent* opens downwards.
+- **Coding agents.** The sidebar's + has **Coding agents**: Claude Code, Codex, Grok Build, Antigravity, Mistral Vibe and
+  Muse Code, as agents that keep that tool's own harness (the CLI has to be installed). The terminals section is gone.
+- **Sidebar.** A button next to the logo collapses it to the faces; drag an agent or group to reorder it.
+- **Notch.** Settings → Notifications → **Where** can send alerts to a small black window at the top of the screen instead
+  of system notifications: it opens out of the camera housing on a Mac for a permission or a question (answer there), shows
+  a thin pill with the faces of the agents working and a short "finished". It stays hidden while the app is in front.
+- **A lighter voice model.** Settings → Models → Local → *Voice call model*: **Kyutai Moshi** (4-bit, Apple silicon) is a real
+  two-way model about a fifth the size of PersonaPlex, with no GPU card and no token. Calls with local or ElevenLabs voices now
+  start speaking at the first finished sentence, make the next sentence's audio while one plays, and end your turn faster.
+
+### Fixed
+
+- The browser pane no longer covers the address row on macOS: it is now a view *inside* the app's own page, so the title
+  bar, full screen and the macOS version cannot move it.
+- A group's plan card no longer shows "the agent is typing" under it, and a tool left "running" by an interrupted run shows
+  as interrupted instead of spinning.
+- The dashboard header lost its two buttons.
+
 ## 0.5.0 — 2026-10-26
 
 ### New

@@ -45,6 +45,12 @@ export function TemplatesDialog() {
   const useGroup = async (key: string) => {
     const g = GROUP_TEMPLATES.find((x) => x.key === key);
     if (!g) return;
+    // A coding team first asks for the name of the app and its folder, in a window of its own.
+    if (g.kind === "coding") {
+      useStore.setState({ codingTemplate: g });
+      useStore.getState().setDialog("create-coding");
+      return;
+    }
     setBusy(key);
     try {
       await done(await createGroupFromTemplate(g));

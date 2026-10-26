@@ -46,6 +46,11 @@ pub enum CoreEvent {
         id: String,
         code: i32,
     },
+    /// Messages were taken out of a thread (a queued message the user took back).
+    MessagesRemoved {
+        thread_id: String,
+        ids: Vec<String>,
+    },
     /// An agent started or stopped working in a thread.
     Busy {
         thread_id: String,

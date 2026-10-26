@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, ChevronDown, CircleAlert, CircleCheck, Square } from "lucide-react";
 import { api } from "../../lib/api";
-import { cx } from "../../lib/format";
+import { cx, splitThink } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import type { Agent, ApprovalRequest, Message, ToolCall } from "../../lib/types";
 import { AvatarView } from "../AvatarView";
@@ -32,6 +32,8 @@ export function planSteps(messages: Message[]): Step[] {
   return steps;
 }
 
+const NO_IDS: string[] = [];
+
 function clock(ms: number) {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -49,6 +51,9 @@ function seconds(ms: number) {
 export function PlanCard({ threadId, started, run, agent, active }: { threadId: string; started: string; run: Message[]; agent?: Agent; active: boolean }) {
   const { t } = useTranslation();
   const approvals = useStore((s) => s.approvals);
+  const questions = useStore((s) => s.questions);
+  const agents = useStore((s) => s.agents);
+  const workingIds = useStore((s) => s.working[threadId]) ?? NO_IDS;
   const [open, setOpen] = useState(false);
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
@@ -74,12 +79,40 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
   const finished = !active && !failed && !stopped;
   const currentIndex = Math.min(steps.length, done + (doing ? 1 : 0));
 
-  const rows = tools.map((m, i) => {
+  // Everyone who took part, with what they are doing: several agents work in parallel in a group.
+  const askers = useMemo(() => new Set(Object.values(questions).map((q) => q.agent_id)), [questions]);
+  const team = useMemo(() => {
+    const ids: string[] = [];
+    for (const m of run) if (m.agent_id && m.role !== "event" && !ids.includes(m.agent_id)) ids.push(m.agent_id);
+    return ids
+      .map((id) => agents[id])
+      .filter(Boolean)
+      .map((a) => ({ agent: a, state: workingIds.includes(a.id) ? (askers.has(a.id) || run.some((m) => m.agent_id === a.id && m.status === "awaiting_approval") ? "waiting" : "working") : "idle" }));
+  }, [run, agents, workingIds, askers]);
+  const many = team.length > 1;
+  const busyNames = team.filter((x) => x.state !== "idle").map((x) => x.agent.name);
+
+  // What the agents say as they go (their notes between tool calls): the latest one is shown live.
+  const notes = useMemo(
+    () =>
+      run
+        .filter((m) => m.role === "assistant" && m.status !== "error")
+        .map((m) => ({ m, text: splitThink(m.content).text.trim() }))
+        .filter((x) => x.text),
+    [run],
+  );
+  const lastNote = active ? notes[notes.length - 1] : undefined;
+
+  const rows = tools.map((m) => {
     const call = m.tool_call_id ? calls[m.tool_call_id] : undefined;
     const d = describe(m.tool_name ?? call?.name ?? "tool", call?.arguments, t);
-    const next = tools[i + 1] ?? run[run.indexOf(m) + 1];
-    const end = next ? new Date(next.created_at).getTime() : active ? now : new Date(m.created_at).getTime();
-    return { m, d, ms: Math.max(0, end - new Date(m.created_at).getTime()) };
+    const at = new Date(m.created_at).getTime();
+    // How long it took: until the same agent did the next thing (agents work side by side).
+    const next = run.slice(run.indexOf(m) + 1).find((x) => x.agent_id === m.agent_id);
+    const alive = !!m.agent_id && workingIds.includes(m.agent_id);
+    const end = next ? new Date(next.created_at).getTime() : alive && active ? now : at;
+    const interrupted = m.status === "running" && !alive && !active;
+    return { m, d, ms: Math.max(0, end - at), interrupted };
   });
   const shown = open ? rows : rows.slice(-4);
 
@@ -92,6 +125,7 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
   else if (failed) title = t("plan.failed");
   else if (stopped) title = t("plan.stopped");
   else if (finished) title = t("plan.done", { n: steps.length || tools.length });
+  else if (many && busyNames.length > 1) title = t("plan.agentsWorking", { names: busyNames.join(", ") });
   else if (doing) title = doing.step;
   else if (steps.length === 0) title = t("plan.planning");
   else title = t("plan.working");
@@ -120,10 +154,33 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
         ))}
       </div>
 
+      {many && (
+        <div className="flex flex-wrap gap-1.5 px-4 pt-3" aria-label={t("plan.team")}>
+          {team.map(({ agent: a, state }) => (
+            <span key={a.id} className={cx("inline-flex items-center gap-1.5 rounded-full border py-0.5 pr-2.5 pl-0.5 text-[12px]", state === "working" ? "border-accent/40 bg-accent-soft" : state === "waiting" ? "border-warning/50 bg-warning-soft" : "border-line text-muted")}>
+              <AvatarView avatar={a.avatar} name={a.name} size={18} />
+              {a.name}
+              <span className={cx("size-1.5 rounded-full", state === "working" ? "animate-pulse bg-accent" : state === "waiting" ? "bg-warning" : "bg-faint")} />
+            </span>
+          ))}
+        </div>
+      )}
+      {lastNote && (
+        <p className="mx-4 mt-3 line-clamp-2 border-l-2 border-accent/40 pl-3 text-[13px] leading-snug text-muted">
+          {many && lastNote.m.agent_id && agents[lastNote.m.agent_id] && <span className="font-medium text-ink">{agents[lastNote.m.agent_id].name}: </span>}
+          {lastNote.text}
+        </p>
+      )}
+
       <ul className="space-y-0.5 px-4 pt-3 pb-1">
-        {shown.map(({ m, d, ms }) => (
+        {shown.map(({ m, d, ms, interrupted }) => (
           <li key={m.id} className="flex items-center gap-3 py-1.5 text-[13.5px]">
-            <span className={cx("shrink-0", m.status === "error" || m.status === "denied" ? "text-danger" : "text-muted")}>{m.status === "running" ? <Spinner size={14} /> : d.icon}</span>
+            <span className={cx("shrink-0", m.status === "error" || m.status === "denied" || interrupted ? "text-danger" : "text-muted")}>{m.status === "running" && !interrupted ? <Spinner size={14} /> : interrupted ? <CircleAlert size={14} /> : d.icon}</span>
+            {many && m.agent_id && agents[m.agent_id] && (
+              <span className="shrink-0" data-tip={agents[m.agent_id].name}>
+                <AvatarView avatar={agents[m.agent_id].avatar} name={agents[m.agent_id].name} size={16} />
+              </span>
+            )}
             <span className="min-w-0 flex-1 truncate">
               <span className="text-ink">{d.title}</span>
               {d.detail && <span className="ml-1.5 text-muted">{d.detail}</span>}
@@ -144,6 +201,36 @@ export function PlanCard({ threadId, started, run, agent, active }: { threadId: 
         )}
       </ul>
 
+      {open && (
+        <div className="mx-4 mt-1 mb-2 max-h-80 overflow-y-auto rounded-xl bg-hover/60 px-3 py-2.5 text-[12.5px]">
+          <p className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("plan.activity")}</p>
+          <ul className="space-y-1.5">
+            {run
+              .filter((m) => (m.role === "assistant" && m.status !== "error" && splitThink(m.content).text.trim()) || (m.role === "tool" && m.tool_name !== "update_plan") || m.role === "event")
+              .map((m) => {
+                const who = m.agent_id ? agents[m.agent_id] : undefined;
+                const call = m.tool_call_id ? calls[m.tool_call_id] : undefined;
+                const d = m.role === "tool" ? describe(m.tool_name ?? call?.name ?? "tool", call?.arguments, t) : null;
+                return (
+                  <li key={m.id} className="flex items-start gap-2">
+                    <span className="mt-0.5 shrink-0">{who ? <AvatarView avatar={who.avatar} name={who.name} size={16} /> : <span className="block size-4" />}</span>
+                    <span className="selectable min-w-0 flex-1 whitespace-pre-wrap break-words">
+                      {d ? (
+                        <>
+                          <span className="text-ink">{d.title}</span>
+                          {d.detail && <span className="ml-1.5 text-muted">{d.detail}</span>}
+                        </>
+                      ) : (
+                        <span className={m.role === "event" ? "text-muted italic" : "text-ink/90"}>{m.role === "assistant" ? splitThink(m.content).text.trim().slice(0, 600) : m.content.slice(0, 300)}</span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-[11px] text-faint tabular-nums">{new Date(m.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>
+                  </li>
+                );
+              })}
+          </ul>
+        </div>
+      )}
       {open && steps.length > 0 && (
         <ol className="mx-4 mt-1 mb-2 space-y-1 rounded-xl bg-hover/60 px-3 py-2.5 text-[13px]">
           {steps.map((s, i) => (

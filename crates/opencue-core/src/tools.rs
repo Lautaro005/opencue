@@ -204,14 +204,27 @@ impl Toolbox {
         }
         specs.push(spec(
             ASK_USER,
-            "Ask the user something and wait for the answer: a question you need answered before going on, a choice between options, or permission for something sensitive. The user sees a highlighted card in the chat and answers there. Use it instead of guessing; don't use it for things you can find out yourself.",
+            "Ask the user something and wait for the answer: a question you need answered before going on, a choice between options, or permission for something sensitive. The user sees a highlighted card in the chat and answers there. Use it instead of guessing; don't use it for things you can find out yourself. For a question, give up to three concrete options (each with a title and a line saying what it means, the one you recommend first); the card always adds an \"Other\" field for an answer of their own.",
             json!({
                 "type": "object",
                 "properties": {
-                    "question": { "type": "string", "description": "What you need to know, or what you want permission to do and why." },
-                    "title": { "type": "string", "description": "Optional short heading for the card." },
-                    "kind": { "type": "string", "enum": ["question", "permission"], "description": "\"permission\" shows Accept / Reject buttons; \"question\" shows a text field (or your options)." },
-                    "options": { "type": "array", "items": { "type": "string" }, "description": "Optional answers to offer as buttons." }
+                    "question": { "type": "string", "description": "The question itself (for permission: what you want to do and why)." },
+                    "subtitle": { "type": "string", "description": "Optional line under the question with the context that helps to answer." },
+                    "title": { "type": "string", "description": "Optional short heading for a permission card." },
+                    "kind": { "type": "string", "enum": ["question", "permission"], "description": "\"permission\" shows Accept / Reject buttons; \"question\" shows the options and a text field." },
+                    "options": {
+                        "type": "array",
+                        "maxItems": 3,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "title": { "type": "string", "description": "Short answer." },
+                                "description": { "type": "string", "description": "One line: what happens if they pick it." }
+                            },
+                            "required": ["title"]
+                        },
+                        "description": "Up to three answers to offer."
+                    }
                 },
                 "required": ["question"]
             }),

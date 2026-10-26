@@ -5,11 +5,12 @@ import "./i18n";
 import { applyTheme } from "./lib/theme";
 import App from "./App";
 import { FloatApp } from "./components/FloatApp";
+import { NotchApp } from "./components/NotchApp";
 
 applyTheme();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {window.__FLOAT__ ? <FloatApp /> : <App />}
+    {window.__NOTCH__ ? <NotchApp /> : window.__FLOAT__ ? <FloatApp /> : <App />}
   </StrictMode>,
 );

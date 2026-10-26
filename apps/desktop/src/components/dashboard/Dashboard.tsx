@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Plus, SlidersHorizontal } from "lucide-react";
 import { api } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import type { DashboardData } from "../../lib/types";
 import { Logo } from "../Sidebar";
 import { frameBase } from "../panel/ArtifactPanel";
-import { IconButton } from "../ui";
 
 const REFRESH_MS = 5000;
 
@@ -19,7 +17,6 @@ export function Dashboard() {
   const { t } = useTranslation();
   const select = useStore((s) => s.select);
   const setDialog = useStore((s) => s.setDialog);
-  const openSettings = useStore((s) => s.openSettings);
   const hasAgents = useStore((s) => s.threads.length > 0);
   const frame = useRef<HTMLIFrameElement>(null);
   const data = useRef<DashboardData | null>(null);
@@ -102,14 +99,6 @@ export function Dashboard() {
     <main className="flex min-w-0 flex-1 flex-col bg-bg">
       <header className="flex h-13 shrink-0 items-center gap-2 border-b border-line px-4" data-tauri-drag-region>
         <h1 className="text-[14px] font-semibold">{t("dashboard.title")}</h1>
-        <div className="ml-auto flex items-center gap-0.5">
-          <IconButton label={t("dashboard.customize")} onClick={() => openSettings("general")}>
-            <SlidersHorizontal size={17} />
-          </IconButton>
-          <IconButton label={t("sidebar.createAgent")} onClick={() => setDialog("create-agent")}>
-            <Plus size={18} />
-          </IconButton>
-        </div>
       </header>
       {base !== null && (
         <iframe

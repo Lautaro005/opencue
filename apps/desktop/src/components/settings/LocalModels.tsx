@@ -203,25 +203,45 @@ function PersonaPlex() {
       refresh();
     }
   };
-  const configure = (patch: { lan?: boolean; offload?: boolean; token?: string }) => run(() => api.personaConfigure(patch.lan ?? s.lan, patch.offload ?? s.offload, patch.token));
+  const configure = (patch: { lan?: boolean; offload?: boolean; token?: string; engine?: string }) => run(() => api.personaConfigure(patch.lan ?? s.lan, patch.offload ?? s.offload, patch.token, patch.engine));
+  const mlx = s.engine === "moshi_mlx";
 
   return (
     <Card
-      title="NVIDIA PersonaPlex"
+      title={t("settings.local.persona.title")}
       action={
-        <button onClick={() => void openUrl("https://github.com/NVIDIA/personaplex")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
+        <button onClick={() => void openUrl(mlx ? "https://github.com/kyutai-labs/moshi" : "https://github.com/NVIDIA/personaplex")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
           GitHub <ExternalLink size={12} />
         </button>
       }
     >
+      <div className="grid grid-cols-2 gap-2 px-4 pt-3" role="radiogroup" aria-label={t("settings.local.persona.engine")}>
+        {(["moshi_mlx", "personaplex"] as const).map((k) => {
+          const off = k === "moshi_mlx" && !s.mlx_supported;
+          return (
+            <button
+              key={k}
+              role="radio"
+              aria-checked={s.engine === k}
+              disabled={busy || off || s.running || s.installing}
+              onClick={() => s.engine !== k && void configure({ engine: k })}
+              className={`rounded-xl border px-3 py-2 text-left transition-colors ${s.engine === k ? "border-accent bg-accent-soft" : "border-line hover:bg-hover"} ${off ? "opacity-50" : ""}`}
+            >
+              <span className="block text-[13px] font-medium">{t(`settings.local.persona.engines.${k}`)}</span>
+              <span className="block text-[11.5px] leading-snug text-muted">{off ? t("settings.local.persona.needsMac") : t(`settings.local.persona.engines.${k}Hint`)}</span>
+            </button>
+          );
+        })}
+      </div>
       <div className="px-4 py-3">
-        <p className="text-[12.5px] text-muted">{t("settings.local.persona.about")}</p>
+        <p className="text-[12.5px] text-muted">{mlx ? t("settings.local.persona.aboutMlx") : t("settings.local.persona.about")}</p>
         <div className="mt-2 flex flex-wrap gap-1.5">
-          <Badge tone={s.gpu ? "success" : "warning"}>{s.gpu ? s.gpu : t("settings.local.persona.noGpu")}</Badge>
+          {!mlx && <Badge tone={s.gpu ? "success" : "warning"}>{s.gpu ? s.gpu : t("settings.local.persona.noGpu")}</Badge>}
           <Badge tone={s.python ? "success" : "warning"}>{s.python ? `Python ${s.python}` : t("settings.local.persona.noPython")}</Badge>
-          <Badge>MIT · NVIDIA Open Model</Badge>
+          <Badge>{mlx ? "CC-BY 4.0 · Kyutai" : "MIT · NVIDIA Open Model"}</Badge>
         </div>
       </div>
+      {!mlx && (
       <CardRow label={t("settings.local.persona.token")} hint={s.has_token ? t("settings.local.persona.tokenSaved") : t("settings.local.persona.tokenHint")}>
         <div className="flex gap-1.5">
           <Input type="password" className="w-52" value={token} placeholder={s.has_token ? "••••••••" : "hf_…"} onChange={(e) => setToken(e.target.value)} />
@@ -233,12 +253,17 @@ function PersonaPlex() {
           </Button>
         </div>
       </CardRow>
-      <CardRow label={t("settings.local.persona.lan")} hint={t("settings.local.persona.lanHint")}>
-        <Toggle checked={s.lan} onChange={(v) => void configure({ lan: v })} label={t("settings.local.persona.lan")} />
-      </CardRow>
-      <CardRow label={t("settings.local.persona.offload")} hint={t("settings.local.persona.offloadHint")}>
-        <Toggle checked={s.offload} onChange={(v) => void configure({ offload: v })} label={t("settings.local.persona.offload")} />
-      </CardRow>
+      )}
+      {!mlx && (
+        <>
+          <CardRow label={t("settings.local.persona.lan")} hint={t("settings.local.persona.lanHint")}>
+            <Toggle checked={s.lan} onChange={(v) => void configure({ lan: v })} label={t("settings.local.persona.lan")} />
+          </CardRow>
+          <CardRow label={t("settings.local.persona.offload")} hint={t("settings.local.persona.offloadHint")}>
+            <Toggle checked={s.offload} onChange={(v) => void configure({ offload: v })} label={t("settings.local.persona.offload")} />
+          </CardRow>
+        </>
+      )}
       <div className="flex flex-wrap items-center gap-2 px-4 py-3">
         {!s.installed ? (
           <Button variant="primary" disabled={busy || s.installing || !s.python} onClick={() => void run(() => api.personaInstall())}>
@@ -254,7 +279,7 @@ function PersonaPlex() {
             </Button>
           </>
         ) : (
-          <Button variant="primary" disabled={busy || !s.has_token} onClick={() => void run(() => api.personaStart())}>
+          <Button variant="primary" disabled={busy || (!mlx && !s.has_token)} onClick={() => void run(() => api.personaStart())}>
             <Play size={13} /> {t("settings.local.persona.start")}
           </Button>
         )}

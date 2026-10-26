@@ -79,14 +79,6 @@ pub struct TauriBrowser {
     shown: Mutex<Option<String>>,
     /// The window the page is shown in: the main one, or a floating Computer window.
     win: Mutex<String>,
-    /// How far the system's own placement was off from what the UI asked for, measured once the page
-    /// is on screen (logical pixels, positive moves it down).
-    correction: Mutex<f64>,
-    /// Bumped on every placement, so only the last one is measured.
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    placed: AtomicU64,
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
-    me: std::sync::Weak<TauriBrowser>,
     pages: Mutex<HashMap<String, Arc<Page>>>,
     tabs: Mutex<HashMap<String, Tabs>>,
 }
@@ -123,15 +115,12 @@ fn store_id(agent_id: &str) -> [u8; 16] {
 
 impl TauriBrowser {
     pub fn new(app: AppHandle, data_dir: std::path::PathBuf) -> Arc<Self> {
-        Arc::new_cyclic(|me| Self {
-            me: me.clone(),
+        Arc::new(Self {
             app,
             data_dir,
             bounds: Mutex::new(Bounds::default()),
             shown: Mutex::new(None),
             win: Mutex::new("main".into()),
-            correction: Mutex::new(0.0),
-            placed: AtomicU64::new(0),
             pages: Mutex::new(HashMap::new()),
             tabs: Mutex::new(HashMap::new()),
         })
@@ -161,37 +150,6 @@ impl TauriBrowser {
 
     fn is_shown(&self, agent_id: &str) -> bool {
         self.shown.lock().unwrap().as_deref() == Some(agent_id)
-    }
-
-    /// On macOS the system places a child view from the top of the window frame, title bar
-    /// included, so everything lands that much too high (over the toolbar). The difference between
-    /// the window and its content is the title bar (zero in full screen); other systems need none.
-    fn origin_shift(&self) -> f64 {
-        #[cfg(target_os = "macos")]
-        {
-            let label = self.win.lock().unwrap().clone();
-            if let Some(window) = self.app.get_window(&label) {
-                if window.is_fullscreen().unwrap_or(false) {
-                    return 0.0;
-                }
-                if let (Ok(outer), Ok(inner), Ok(scale)) = (
-                    window.outer_size(),
-                    window.inner_size(),
-                    window.scale_factor(),
-                ) {
-                    let bar = (outer.height as f64 - inner.height as f64) / scale;
-                    if (0.0..200.0).contains(&bar) {
-                        return bar;
-                    }
-                }
-            }
-        }
-        0.0
-    }
-
-    /// The vertical shift to add to what the UI asked for: the title-bar guess plus what was measured.
-    fn shift(&self) -> f64 {
-        self.origin_shift() + *self.correction.lock().unwrap()
     }
 
     /// A new tab (and its webview), born out of sight: it only appears when the UI has placed it,
@@ -244,7 +202,7 @@ impl TauriBrowser {
         let b = *self.bounds.lock().unwrap();
         let on_screen = b.known && self.is_shown(agent_id);
         let (x, y, w, h) = if on_screen {
-            (b.x, b.y + self.shift(), b.w, b.h)
+            (b.x, b.y, b.w, b.h)
         } else {
             (-10000.0, -10000.0, 900.0, 600.0)
         };
@@ -262,7 +220,9 @@ impl TauriBrowser {
             }
         }
         let view = window.add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w, h))?;
-        if !on_screen {
+        if on_screen {
+            self.apply(&view, x, y, w, h);
+        } else {
             let _ = view.hide();
         }
         let mut all = self.tabs.lock().unwrap();
@@ -309,69 +269,26 @@ impl TauriBrowser {
             }
             self.apply(&v, x, y, w, h);
             let _ = v.show();
-            self.measure_later(agent_id.to_string(), y);
         }
     }
 
+    /// Put the page at these coordinates of the window the UI is in (CSS pixels from the top left of
+    /// the app's own page).
     fn apply(&self, v: &Webview, x: f64, y: f64, w: f64, h: f64) {
-        let _ = v.set_position(LogicalPosition::new(x, y + self.shift()));
-        let _ = v.set_size(LogicalSize::new(w.max(1.0), h.max(1.0)));
-    }
-
-    /// Once the page has settled where it was put, check where it really is next to the app's own
-    /// page and nudge it by the difference, so it never sits over the toolbar above it (or leaves a
-    /// gap) however the system counts the title bar.
-    fn measure_later(&self, agent_id: String, target_y: f64) {
         #[cfg(target_os = "macos")]
         {
-            let gen = self.placed.fetch_add(1, Ordering::SeqCst) + 1;
-            let Some(this) = self.me.upgrade() else {
+            // The system counts a child view's position from the window frame (title bar included),
+            // so a page placed that way sits a title bar too high, over the toolbar. Instead the page
+            // becomes a view *inside* the app's own page, where CSS pixels are exactly the view's own
+            // coordinates, whatever the title bar, full screen or macOS version.
+            let win = self.win.lock().unwrap().clone();
+            if let Some(ui) = self.app.get_webview(&win) {
+                macos::attach(v, &ui, x, y, w.max(1.0), h.max(1.0));
                 return;
-            };
-            tauri::async_runtime::spawn(async move {
-                tokio::time::sleep(Duration::from_millis(160)).await;
-                if this.placed.load(Ordering::SeqCst) != gen {
-                    return;
-                }
-                for _ in 0..2 {
-                    let Some(view) = this.webview(&agent_id) else {
-                        return;
-                    };
-                    let win = this.win.lock().unwrap().clone();
-                    let Some(ui) = this.app.get_webview(&win) else {
-                        return;
-                    };
-                    let measured = tauri::async_runtime::spawn_blocking(move || {
-                        Some((macos::top_in_window(&view)?, macos::top_in_window(&ui)?))
-                    })
-                    .await
-                    .ok()
-                    .flatten();
-                    let Some((child_top, ui_top)) = measured else {
-                        return;
-                    };
-                    // Where the page should be: the UI's top edge plus what the UI asked for.
-                    let err = (ui_top + target_y) - child_top;
-                    if err.abs() < 1.0 {
-                        return;
-                    }
-                    let corr = *this.correction.lock().unwrap() + err;
-                    if corr.abs() > 160.0 || this.placed.load(Ordering::SeqCst) != gen {
-                        return;
-                    }
-                    *this.correction.lock().unwrap() = corr;
-                    let b = *this.bounds.lock().unwrap();
-                    if let Some(v) = this.webview(&agent_id) {
-                        this.apply(&v, b.x, b.y, b.w, b.h);
-                    }
-                    tokio::time::sleep(Duration::from_millis(80)).await;
-                }
-            });
+            }
         }
-        #[cfg(not(target_os = "macos"))]
-        {
-            let _ = (agent_id, target_y);
-        }
+        let _ = v.set_position(LogicalPosition::new(x, y));
+        let _ = v.set_size(LogicalSize::new(w.max(1.0), h.max(1.0)));
     }
 
     /// Hide the page when `win` is the window showing it (another window's panel closing must not
@@ -664,39 +581,54 @@ impl BrowserHost for TauriBrowser {
 #[cfg(target_os = "macos")]
 mod macos {
     use objc2::msg_send;
+    use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
-    use objc2_foundation::NSRect;
-    use std::time::Duration;
+    use objc2_foundation::{NSPoint, NSRect, NSSize};
     use tauri::Webview;
 
-    /// How far the top edge of a webview is below the top of its window (points, the same unit as
-    /// CSS pixels), read from the native view. Blocks until the main thread answers: call it off
-    /// the main thread.
-    pub fn top_in_window(view: &Webview) -> Option<f64> {
-        let (tx, rx) = std::sync::mpsc::channel();
-        view.with_webview(move |wv| {
-            let ptr = wv.inner() as *mut AnyObject;
-            if ptr.is_null() {
+    /// A native view that may cross to the main thread: it is only touched there.
+    struct Held(Retained<AnyObject>);
+    // SAFETY: the view is retained here and only used inside a main-thread callback.
+    unsafe impl Send for Held {}
+
+    /// Make `child` a view inside `ui` (the app's own page) at these coordinates, in CSS pixels from
+    /// the top left of that page. Safe to call again and again as the box moves.
+    pub fn attach(child: &Webview, ui: &Webview, x: f64, y: f64, w: f64, h: f64) {
+        let ui = ui.clone();
+        let _ = child.with_webview(move |cw| {
+            let ptr = cw.inner() as *mut AnyObject;
+            // SAFETY: the pointer is the live WKWebView the runtime handed us on the main thread.
+            let Some(held) = (unsafe { Retained::retain(ptr) }) else {
                 return;
-            }
-            // SAFETY: the pointer is the live WKWebView the runtime handed us, used on the main
-            // thread inside this callback.
-            let top = unsafe {
-                let v: &AnyObject = &*ptr;
-                let bounds: NSRect = msg_send![v, bounds];
-                let in_window: NSRect =
-                    msg_send![v, convertRect: bounds, toView: None::<&AnyObject>];
-                let window: *mut AnyObject = msg_send![v, window];
-                if window.is_null() {
+            };
+            let held = Held(held);
+            let _ = ui.with_webview(move |uw| {
+                let held = held;
+                let parent = uw.inner() as *mut AnyObject;
+                if parent.is_null() {
                     return;
                 }
-                let frame: NSRect = msg_send![&*window, frame];
-                // Window coordinates count up from the bottom edge.
-                frame.size.height - (in_window.origin.y + in_window.size.height)
-            };
-            let _ = tx.send(top);
-        })
-        .ok()?;
-        rx.recv_timeout(Duration::from_millis(400)).ok()
+                // SAFETY: both views are live WKWebViews and this runs on the main thread.
+                unsafe {
+                    let parent: &AnyObject = &*parent;
+                    let child: &AnyObject = &held.0;
+                    let current: *mut AnyObject = msg_send![child, superview];
+                    if !std::ptr::eq(current, parent as *const AnyObject as *mut AnyObject) {
+                        let _: () = msg_send![parent, addSubview: child];
+                    }
+                    // Fixed: a resizing parent must not stretch it; the UI places it again itself.
+                    let _: () = msg_send![child, setAutoresizingMask: 0usize];
+                    let flipped: bool = msg_send![parent, isFlipped];
+                    let top = if flipped {
+                        y
+                    } else {
+                        let b: NSRect = msg_send![parent, bounds];
+                        b.size.height - y - h
+                    };
+                    let frame = NSRect::new(NSPoint::new(x, top), NSSize::new(w, h));
+                    let _: () = msg_send![child, setFrame: frame];
+                }
+            });
+        });
     }
 }

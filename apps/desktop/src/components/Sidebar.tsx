@@ -1,16 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Bot, Eraser, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users, X } from "lucide-react";
+import { Bot, Eraser, LayoutTemplate, MessageSquarePlus, PanelLeftClose, PanelLeftOpen, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, SquareTerminal, Trash2, Users } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cx, shortTime, splitThink } from "../lib/format";
-import { api, pickFolder } from "../lib/api";
+import { api } from "../lib/api";
 import { confirmDialog } from "../lib/confirm";
 import { AvatarView, GroupAvatar, UserAvatar } from "./AvatarView";
 import { IconButton, Typing, useClickOutside } from "./ui";
 import { useResizable } from "./ui/Resizer";
-import { TermIcon } from "./terminal/TermIcon";
-import type { TermTool } from "../lib/types";
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -23,34 +21,9 @@ export function Sidebar() {
   const update = useStore((s) => s.update);
   const settings = useStore((s) => s.settings);
   const working = useStore((s) => s.working);
+  const agents = useStore((s) => s.agents);
   const [menu, setMenu] = useState(false);
-  const [tools, setTools] = useState<TermTool[]>([]);
-  const terminals = useStore((s) => s.terminals);
-  const selectedTerm = useStore((s) => s.selectedTerm);
-  const selectTerm = useStore((s) => s.selectTerm);
-  const showToast = useStore((s) => s.showToast);
   const menuRef = useRef<HTMLDivElement>(null);
-  // Which command-line tools this computer has, for the New menu.
-  useEffect(() => {
-    if (menu) void api.termTools().then(setTools).catch(() => {});
-  }, [menu]);
-  const openTerminal = async (tool: TermTool) => {
-    setMenu(false);
-    if (!tool.installed) {
-      showToast(t("terminal.notInstalled", { name: tool.label, how: tool.install || "—" }));
-      return;
-    }
-    // A coding tool works in a project folder: ask which one (a plain shell starts at home).
-    const cwd = tool.key === "shell" ? await api.homeDir() : await pickFolder();
-    if (!cwd) return;
-    try {
-      const info = await api.termCreate(tool.key, cwd, 110, 32);
-      await useStore.getState().refreshTerminals();
-      selectTerm(info.id);
-    } catch (e) {
-      showToast(String(e));
-    }
-  };
   useClickOutside(menuRef, () => setMenu(false), menu);
 
   const setSetting = useStore((s) => s.setSetting);
@@ -62,11 +35,86 @@ export function Sidebar() {
       return [];
     }
   }, [settings.pinned_threads]);
-  // Pinned chats go first, in the order they were pinned; the rest keep the usual order.
+  const order = useMemo(() => {
+    try {
+      const v = JSON.parse(settings.thread_order || "[]");
+      return Array.isArray(v) ? (v as string[]) : [];
+    } catch {
+      return [];
+    }
+  }, [settings.thread_order]);
+  // Pinned chats go first, in the order they were pinned; the rest are in the order the user
+  // dragged them to (new ones, not placed yet, come first).
   const threads = useMemo(() => {
     const pins = allThreads.filter((th) => pinned.includes(th.id)).sort((a, b) => pinned.indexOf(a.id) - pinned.indexOf(b.id));
-    return [...pins, ...allThreads.filter((th) => !pinned.includes(th.id))];
-  }, [allThreads, pinned]);
+    const rest = allThreads.filter((th) => !pinned.includes(th.id));
+    const placed = rest.filter((th) => order.includes(th.id)).sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+    return [...pins, ...rest.filter((th) => !order.includes(th.id)), ...placed];
+  }, [allThreads, pinned, order]);
+
+  // Drag an agent or group to move it (pinned ones among the pinned, the others among the others).
+  const [drag, setDrag] = useState<{ id: string; over: string | null; after: boolean } | null>(null);
+  const press = useRef<{ id: string; x: number; y: number; moved: boolean } | null>(null);
+  const justDragged = useRef(false);
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+  const threadsRef = useRef(threads);
+  threadsRef.current = threads;
+  const commitMove = (id: string, over: string, after: boolean) => {
+    const list = threadsRef.current;
+    const isPin = pinned.includes(id);
+    if (id === over || isPin !== pinned.includes(over)) return;
+    const ids = list.filter((th) => pinned.includes(th.id) === isPin).map((th) => th.id).filter((x) => x !== id);
+    const at = ids.indexOf(over) + (after ? 1 : 0);
+    ids.splice(at, 0, id);
+    void setSetting(isPin ? "pinned_threads" : "thread_order", JSON.stringify(ids));
+  };
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const p = press.current;
+      if (!p) return;
+      if (!p.moved && Math.hypot(e.clientX - p.x, e.clientY - p.y) < 6) return;
+      p.moved = true;
+      const row = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-thread]");
+      if (!row) return setDrag({ id: p.id, over: null, after: false });
+      const r = row.getBoundingClientRect();
+      setDrag({ id: p.id, over: row.dataset.thread ?? null, after: e.clientY > r.top + r.height / 2 });
+    };
+    const up = () => {
+      const p = press.current;
+      press.current = null;
+      const d = dragRef.current;
+      if (p?.moved) {
+        justDragged.current = true;
+        window.setTimeout(() => (justDragged.current = false), 0);
+        if (d?.over) commitMove(d.id, d.over, d.after);
+      }
+      setDrag(null);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem("opencue:sidebar-collapsed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const toggleCollapsed = () =>
+    setCollapsed((v) => {
+      try {
+        localStorage.setItem("opencue:sidebar-collapsed", v ? "0" : "1");
+      } catch {
+        /* storage unavailable */
+      }
+      return !v;
+    });
   const [tmenu, setThreadMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const togglePin = (id: string) => void setSetting("pinned_threads", JSON.stringify(pinned.includes(id) ? pinned.filter((x) => x !== id) : [...pinned, id]));
@@ -83,25 +131,30 @@ export function Sidebar() {
   const { width, handle } = useResizable("opencue:sidebar-width", 280, 220, 460, "right");
 
   return (
-    <aside style={{ width }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar">
-      {handle}
-      <div className="flex h-13 items-center justify-between pl-4 pr-2.5" data-tauri-drag-region>
-        {/* The logo is the way home: it opens the dashboard. */}
-        <a
-          href="#dashboard"
-          onClick={(e) => {
-            e.preventDefault();
-            select(null);
-          }}
-          aria-label={t("dashboard.title")}
-          data-tip={t("dashboard.title")}
-          aria-current={selected === null ? "page" : undefined}
-          className="flex items-center gap-2 rounded-lg py-1 pr-2 pl-1 -ml-1 hover:bg-hover"
-        >
-          <Logo />
-          <span className="text-[15px] font-semibold tracking-tight">OpenCue</span>
-        </a>
-        <div className="relative flex items-center" ref={menuRef}>
+    <aside style={{ width: collapsed ? 64 : width }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar transition-[width] duration-150">
+      {!collapsed && handle}
+      <div className={cx("flex items-center", collapsed ? "flex-col gap-1 pt-2.5 pb-1" : "h-13 justify-between pl-4 pr-2.5")} data-tauri-drag-region>
+        <div className="flex min-w-0 items-center gap-0.5">
+          {/* The logo is the way home: it opens the dashboard. */}
+          <a
+            href="#dashboard"
+            onClick={(e) => {
+              e.preventDefault();
+              select(null);
+            }}
+            aria-label={t("dashboard.title")}
+            data-tip={t("dashboard.title")}
+            aria-current={selected === null ? "page" : undefined}
+            className="flex items-center gap-2 rounded-lg py-1 pr-2 pl-1 -ml-1 hover:bg-hover"
+          >
+            <Logo />
+            {!collapsed && <span className="text-[15px] font-semibold tracking-tight">OpenCue</span>}
+          </a>
+          <IconButton label={collapsed ? t("sidebar.expand") : t("sidebar.collapse")} onClick={toggleCollapsed} className="size-7">
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </IconButton>
+        </div>
+        <div className={cx("relative flex items-center", collapsed && "flex-col")} ref={menuRef}>
           <IconButton label={t("search.title")} onClick={() => setSearchOpen(true)}>
             <Search size={17} />
           </IconButton>
@@ -109,7 +162,7 @@ export function Sidebar() {
             <Plus size={18} />
           </IconButton>
           {menu && (
-            <div className="animate-pop absolute right-0 top-9 z-30 w-56 rounded-xl border border-line bg-elevated p-1 shadow-pop">
+            <div className={cx("animate-pop absolute top-9 z-30 w-56 rounded-xl border border-line bg-elevated p-1 shadow-pop", collapsed ? "left-0" : "right-0")}>
               <MenuItem
                 icon={<Bot size={16} />}
                 label={t("sidebar.createAgent")}
@@ -134,65 +187,21 @@ export function Sidebar() {
                   setDialog("templates");
                 }}
               />
-              {tools.length > 0 && (
-                <>
-                  <p className="mt-1 border-t border-line px-2.5 pt-2 pb-1 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("terminal.section")}</p>
-                  {tools.map((tool) => (
-                    <button key={tool.key} onClick={() => void openTerminal(tool)} className={cx("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13.5px] hover:bg-hover", !tool.installed && "opacity-50")}>
-                      <span className="text-muted">
-                        <TermIcon tool={tool.key} size={16} />
-                      </span>
-                      {tool.label}
-                    </button>
-                  ))}
-                </>
-              )}
+              <MenuItem
+                icon={<SquareTerminal size={16} />}
+                label={t("cli.title")}
+                onClick={() => {
+                  setMenu(false);
+                  setDialog("cli-agents");
+                }}
+              />
             </div>
           )}
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-2 pb-2" aria-label="Agents">
-        {terminals.length > 0 && (
-          <section className="mb-2" aria-label={t("terminal.section")}>
-            <h3 className="px-2.5 pt-1 pb-1 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("terminal.section")}</h3>
-            <ul className="space-y-0.5">
-              {terminals.map((term) => (
-                <li key={term.id} className="group relative">
-                  <button
-                    onClick={() => selectTerm(term.id)}
-                    className={cx("flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition-colors", selectedTerm === term.id ? "bg-[#14171d] text-[#dcdfe4]" : "hover:bg-hover")}
-                  >
-                    <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", "bg-white text-[#17171a] shadow-sm")}>
-                      <TermIcon tool={term.tool} size={15} />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-1.5 text-[13.5px] font-medium">
-                        <span className="truncate">{term.label}</span>
-                        <span className={cx("size-1.5 shrink-0 rounded-full", term.alive ? "bg-success" : "bg-faint")} />
-                      </span>
-                      <span className={cx("block truncate font-mono text-[11px]", selectedTerm === term.id ? "text-[#8a909c]" : "text-muted")}>{term.cwd.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? term.cwd}</span>
-                    </span>
-                  </button>
-                  <button
-                    onClick={async () => {
-                      if (await confirmDialog(t("terminal.closeConfirm", { name: term.label }), { confirmLabel: t("terminal.close") })) {
-                        await api.termClose(term.id);
-                        await useStore.getState().refreshTerminals();
-                      }
-                    }}
-                    aria-label={t("terminal.close")}
-                    data-tip={t("terminal.close")}
-                    className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-hover hover:text-danger"
-                  >
-                    <X size={13} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        {threads.length === 0 && terminals.length === 0 ? (
+      <nav className={cx("flex-1 overflow-y-auto pb-2", collapsed ? "px-1.5" : "px-2")} aria-label="Agents">
+        {threads.length === 0 ? (
           <div className="mx-2 mt-6 rounded-xl border border-dashed border-line-strong px-4 py-6 text-center">
             <p className="font-medium">{t("sidebar.empty")}</p>
             <p className="mt-1 text-[12.5px] text-muted">{t("sidebar.emptyHint")}</p>
@@ -206,56 +215,88 @@ export function Sidebar() {
         ) : (
           <ul className="space-y-0.5">
             {threads.map((th) => {
-              const isWorking = th.busy && (working[th.id]?.length ?? 0) > 0;
+              const workers = th.busy ? working[th.id] ?? [] : [];
+              const isWorking = workers.length > 0;
+              const workerAgents = workers.map((id) => agents[id]).filter(Boolean);
+              const dropping = drag?.over === th.id && drag.id !== th.id;
               return (
                 <li
                   key={th.id}
+                  data-thread={th.id}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     e.stopPropagation();
                     setThreadMenu({ id: th.id, x: e.clientX, y: e.clientY });
                   }}
+                  className={cx("relative", drag?.id === th.id && "opacity-40")}
                 >
+                  {dropping && <span className={cx("pointer-events-none absolute right-2 left-2 z-10 h-0.5 rounded-full bg-accent", drag?.after ? "-bottom-px" : "-top-px")} />}
                   <button
-                    onClick={() => renaming !== th.id && select(th.id)}
+                    onPointerDown={(e) => {
+                      if (e.button === 0 && renaming !== th.id) press.current = { id: th.id, x: e.clientX, y: e.clientY, moved: false };
+                    }}
+                    onClick={() => !justDragged.current && renaming !== th.id && select(th.id)}
+                    aria-label={collapsed ? th.name : undefined}
+                    data-tip={collapsed ? th.name : undefined}
                     className={cx(
-                      "group flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition-colors",
+                      "group flex w-full items-center rounded-xl py-2 text-left transition-colors",
+                      collapsed ? "justify-center px-0" : "gap-3 px-2.5",
                       selected === th.id ? "bg-active" : "hover:bg-hover",
                     )}
                   >
-                    {th.kind === "group" ? <GroupAvatar avatars={th.avatars} size={40} /> : <AvatarView avatar={th.avatars[0]} name={th.name} size={40} />}
-                    <span className="min-w-0 flex-1">
-                      <span className="flex items-baseline justify-between gap-2">
-                        {renaming === th.id ? (
-                          <input
-                            autoFocus
-                            defaultValue={th.name}
-                            onClick={(e) => e.stopPropagation()}
-                            onBlur={(e) => void saveName(th.id, th.kind, e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") e.currentTarget.blur();
-                              if (e.key === "Escape") setRenaming(null);
-                            }}
-                            className="min-w-0 flex-1 rounded-md border border-accent bg-elevated px-1.5 py-0.5 text-[14px] font-medium outline-none"
-                          />
-                        ) : (
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            {pinned.includes(th.id) && <Pin size={11} className="shrink-0 text-faint" aria-label={t("sidebar.menu.pinned")} />}
-                            <span className="truncate text-[14px] font-medium">{th.name}</span>
-                          </span>
-                        )}
-                        <span className="shrink-0 text-[11.5px] text-faint">{shortTime(th.last_at)}</span>
-                      </span>
-                      <span className="mt-0.5 block truncate text-[12.5px] text-muted">
-                        {isWorking ? (
-                          <span className="inline-flex items-center gap-1.5 text-accent">
-                            <Typing /> {t("sidebar.working")}
-                          </span>
-                        ) : (
-                          (th.last_message ? splitThink(th.last_message).text || " " : " ")
-                        )}
-                      </span>
+                    <span className="relative shrink-0">
+                      {th.kind === "group" ? <GroupAvatar avatars={th.avatars} size={40} /> : <AvatarView avatar={th.avatars[0]} name={th.name} size={40} />}
+                      {isWorking && <span className="absolute -right-0.5 -bottom-0.5 size-3 animate-pulse rounded-full bg-accent ring-2 ring-sidebar" />}
                     </span>
+                    {!collapsed && (
+                      <span className="min-w-0 flex-1">
+                        <span className="flex items-baseline justify-between gap-2">
+                          {renaming === th.id ? (
+                            <input
+                              autoFocus
+                              defaultValue={th.name}
+                              onClick={(e) => e.stopPropagation()}
+                              onBlur={(e) => void saveName(th.id, th.kind, e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") e.currentTarget.blur();
+                                if (e.key === "Escape") setRenaming(null);
+                              }}
+                              className="min-w-0 flex-1 rounded-md border border-accent bg-elevated px-1.5 py-0.5 text-[14px] font-medium outline-none"
+                            />
+                          ) : (
+                            <span className="flex min-w-0 items-center gap-1.5">
+                              {pinned.includes(th.id) && <Pin size={11} className="shrink-0 text-faint" aria-label={t("sidebar.menu.pinned")} />}
+                              <span className="truncate text-[14px] font-medium">{th.name}</span>
+                            </span>
+                          )}
+                          <span className="shrink-0 text-[11.5px] text-faint">{shortTime(th.last_at)}</span>
+                        </span>
+                        <span className="mt-0.5 block truncate text-[12.5px] text-muted">
+                          {isWorking ? (
+                            <span className="inline-flex max-w-full items-center gap-1.5 text-accent">
+                              {th.kind === "group" && workerAgents.length > 0 ? (
+                                <>
+                                  <span className="flex shrink-0 -space-x-1">
+                                    {workerAgents.slice(0, 3).map((a) => (
+                                      <span key={a.id} className="animate-bounce rounded-full ring-2 ring-sidebar" style={{ animationDuration: "1.1s", animationDelay: `${(a.name.length % 5) * 90}ms` }}>
+                                        <AvatarView avatar={a.avatar} name={a.name} size={15} />
+                                      </span>
+                                    ))}
+                                  </span>
+                                  <span className="truncate">{workerAgents.map((a) => a.name).join(", ")}</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Typing /> {t("sidebar.working")}
+                                </>
+                              )}
+                            </span>
+                          ) : (
+                            (th.last_message ? splitThink(th.last_message).text || " " : " ")
+                          )}
+                        </span>
+                      </span>
+                    )}
                   </button>
                 </li>
               );
@@ -298,17 +339,19 @@ export function Sidebar() {
           }}
         />
       )}
-      {update && (
+      {update && !collapsed && (
         <button onClick={() => openSettings("about")} className="mx-3 mb-2 flex items-center gap-2 rounded-xl bg-accent-soft px-3 py-2 text-left text-[12.5px] font-medium text-accent hover:opacity-90">
           <Sparkles size={14} /> {t("update.available", { version: update.version })}
         </button>
       )}
-      <div className="flex items-center gap-2 border-t border-line px-3 py-2.5">
-        <button onClick={() => openSettings("account")} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-hover">
+      <div className={cx("flex items-center gap-2 border-t border-line py-2.5", collapsed ? "flex-col px-1" : "px-3")}>
+        <button onClick={() => openSettings("account")} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-1 text-left hover:bg-hover" aria-label={userName}>
           <UserAvatar name={userName} size={30} />
-          <span className="min-w-0">
-            <span className="block truncate text-[13px] font-medium">{userName}</span>
-          </span>
+          {!collapsed && (
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-medium">{userName}</span>
+            </span>
+          )}
         </button>
         <IconButton label={t("sidebar.settings")} onClick={() => openSettings()}>
           <Settings size={17} />

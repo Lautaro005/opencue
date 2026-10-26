@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Check, ChevronRight, Copy, MessageCircle, Pencil, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Clock, Copy, MessageCircle, Pencil, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { useStore } from "../../lib/store";
+import { api } from "../../lib/api";
 import type { Agent, Message, ToolCall } from "../../lib/types";
 import { clockTime, cx, splitThink } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
@@ -24,7 +25,9 @@ function dayLabel(iso: string, lang: string) {
 
 export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: boolean }) {
   const { t, i18n } = useTranslation();
-  const messages = useStore((s) => s.messages[threadId] ?? EMPTY);
+  const all = useStore((s) => s.messages[threadId] ?? EMPTY);
+  // What the user wrote while the agents were busy waits at the bottom until they read it.
+  const messages = useMemo(() => (all.some((m) => m.status === "queued") ? [...all.filter((m) => m.status !== "queued"), ...all.filter((m) => m.status === "queued")] : all), [all]);
   const agents = useStore((s) => s.agents);
   const approvals = useStore((s) => s.approvals);
   const toolProgress = useStore((s) => s.toolProgress);
@@ -75,6 +78,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
     let cur: Message[] | null = null;
     let curId = "";
     for (const m of messages) {
+      if (m.role === "user" && m.status === "queued") continue;
       if (m.role === "user") {
         cur = /^\/plan(\s|$)/i.test(m.content.trimStart()) ? [] : null;
         curId = m.id;
@@ -87,7 +91,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
     return { runs, owner };
   }, [messages]);
 
-  const lastUserId = useMemo(() => [...messages].reverse().find((m) => m.role === "user")?.id, [messages]);
+  const lastUserId = useMemo(() => [...messages].reverse().find((m) => m.role === "user" && m.status !== "queued")?.id, [messages]);
 
   let lastDay = "";
   let prevAuthor: string | null = null;
@@ -123,7 +127,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                 </div>
               )}
               {m.role === "event" && <EventCard m={m} />}
-              {m.role === "assistant" && (
+              {m.role === "assistant" && !(planRuns.owner.has(m.id) && (m.tool_calls?.length || (m.status === "streaming" && !m.content))) && (
                 <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
                   {m.status === "error" ? (
                     <div className="max-w-full rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
@@ -275,7 +279,15 @@ function UserBubble({ m, firstOfRun, isLast }: { m: Message; firstOfRun: boolean
             </div>
           </div>
         ) : (
-          m.content && <div className="selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink">{m.content}</div>
+          m.content && <div className={cx("selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink", m.status === "queued" && "opacity-70")}>{m.content}</div>
+        )}
+        {m.status === "queued" && (
+          <div className="flex items-center gap-2 text-[11.5px] text-muted">
+            <Clock size={12} /> {t("chat.queued")}
+            <button onClick={() => void api.unqueueMessage(m.thread_id, m.id).catch(() => {})} className="rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-accent hover:bg-hover">
+              {t("chat.unqueue")}
+            </button>
+          </div>
         )}
         <div className="mt-0.5 flex h-6 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <span className="mr-1 text-[11px] text-faint">{clockTime(m.created_at)}</span>

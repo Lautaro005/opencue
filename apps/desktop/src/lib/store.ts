@@ -2,11 +2,12 @@ import { create } from "zustand";
 import { api, onCoreEvent, filesToAttachments, type UpdateInfo } from "./api";
 import { onMessageForVoice } from "./voice";
 import i18n from "../i18n";
+import type { GroupTemplate } from "./templates";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, TermInfo, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | "artifact" | "canvas" | null;
 export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
-export type Dialog = "create-agent" | "create-group" | "templates" | "walkthrough" | null;
+export type Dialog = "create-agent" | "create-group" | "create-coding" | "cli-agents" | "templates" | "walkthrough" | null;
 
 export interface ModelList {
   list: string[];
@@ -26,6 +27,8 @@ interface State {
   /** The artifact shown in the side panel. */
   artifactView: { id: string; version?: number } | null;
   dialog: Dialog;
+  /** The coding-team template waiting for its name and folder in the create-coding dialog. */
+  codingTemplate: GroupTemplate | null;
   settingsSection: SettingsSection | null;
   messages: Record<string, Message[]>;
   /** thread id → agent ids currently working */
@@ -113,6 +116,7 @@ export const useStore = create<State>((set, get) => ({
   artifactView: null,
   prefill: null,
   dialog: null,
+  codingTemplate: null,
   settingsSection: null,
   messages: {},
   working: {},
@@ -272,6 +276,8 @@ function upsertMessage(list: Message[] | undefined, m: Message): Message[] {
   const cur = list ?? [];
   const i = cur.findIndex((x) => x.id === m.id);
   if (i === -1) return [...cur, m];
+  // A queued message the agents have just read joins the conversation at its end.
+  if (cur[i].status === "queued" && m.status !== "queued") return [...cur.filter((x) => x.id !== m.id), m];
   const next = cur.slice();
   next[i] = m;
   return next;
@@ -330,6 +336,9 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
         next[i] = { ...next[i], content: next[i].content + ev.text };
         return { messages: { ...s.messages, [ev.thread_id]: next } };
       });
+      break;
+    case "messages_removed":
+      set((s) => (s.messages[ev.thread_id] ? { messages: { ...s.messages, [ev.thread_id]: s.messages[ev.thread_id].filter((x) => !ev.ids.includes(x.id)) } } : {}));
       break;
     case "busy":
       set((s) => {

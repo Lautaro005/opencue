@@ -84,6 +84,8 @@ pub struct Core {
     bridge_started: std::sync::atomic::AtomicBool,
     /// Thread each agent is currently answering in, to place its questions.
     active_threads: Mutex<HashMap<String, String>>,
+    /// Where a running group takes the work its members hand to each other (they start at once).
+    group_chans: Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<runtime::Handoff>>>,
     /// What an @mention in a 1:1 chat tells the agent for the turn that follows.
     mention_hints: Mutex<HashMap<String, String>>,
     skills: skills::Skills,
@@ -146,6 +148,7 @@ impl Core {
             computer_used: Mutex::new(HashMap::new()),
             bridge_started: std::sync::atomic::AtomicBool::new(false),
             active_threads: Mutex::new(HashMap::new()),
+            group_chans: Mutex::new(HashMap::new()),
             mention_hints: Mutex::new(HashMap::new()),
             skills: skills::Skills::new(paths.skills_dir()),
             computer_logs: Mutex::new(HashMap::new()),

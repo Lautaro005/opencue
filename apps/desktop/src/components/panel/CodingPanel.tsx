@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUpRight, Check, ChevronDown, CircleAlert, CircleDot, FolderGit2, GitBranch, GitPullRequest, GitPullRequestDraft, LoaderCircle, Plus, RefreshCw, TerminalSquare, Trash2, UserPlus, Wrench, X } from "lucide-react";
+import { ArrowUpRight, Check, ChevronDown, CircleAlert, CircleDot, FileText, FolderGit2, GitBranch, GitPullRequest, GitPullRequestDraft, LoaderCircle, Plus, RefreshCw, TerminalSquare, Trash2, UserPlus, Wrench, X } from "lucide-react";
 import { api, openUrl, pickFolder } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
 import { cx, shortTime } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { addCodingAgent, CODING_CLIS, sessionsOf, type Session, type SessionState } from "../../lib/coding";
-import type { Changes, Group, Pull, RepoStatus } from "../../lib/types";
+import type { Changes, Group, Lane, Pull, RepoStatus } from "../../lib/types";
 import { AvatarView } from "../AvatarView";
 import { Badge, Button, DialogHeader, Field, IconButton, Input, Modal, Spinner, Textarea, Toggle, useClickOutside } from "../ui";
 import { useResizable } from "../ui/Resizer";
@@ -161,6 +161,7 @@ function Sessions({ group }: { group: Group }) {
 
   return (
     <div className="px-3 py-3">
+      <Activity group={group} />
       {STATE_ORDER.map((state) => {
         const list = sessions.filter((s) => s.state === state);
         if (list.length === 0) return null;
@@ -212,7 +213,7 @@ function Sessions({ group }: { group: Group }) {
           {t("coding.addAgent")}
         </button>
         {open && (
-          <div className="animate-pop absolute right-0 bottom-full left-0 z-30 mb-1 max-h-80 overflow-y-auto rounded-xl border border-line bg-elevated p-1 shadow-pop">
+          <div className="animate-pop absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-xl border border-line bg-elevated p-1 shadow-pop">
             <p className="px-2.5 pt-1.5 pb-1 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("coding.cliAgents")}</p>
             {CODING_CLIS.map((c) => (
               <button key={c.kind} onClick={() => void addCli(c)} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-hover">
@@ -230,6 +231,100 @@ function Sessions({ group }: { group: Group }) {
       </div>
       <p className="px-2 pt-3 text-[11.5px] leading-snug text-faint">{t("coding.protocolHint")}</p>
     </div>
+  );
+}
+
+// ---------- activity ----------
+
+/**
+ * The files the team is creating and editing right now, per working folder (each agent works in a
+ * worktree of its own): updated every few seconds while anyone is working, so a long run is never
+ * a black box.
+ */
+function Activity({ group }: { group: Group }) {
+  const { t } = useTranslation();
+  const agents = useStore((s) => s.agents);
+  const busy = useStore((s) => (s.working[group.id]?.length ?? 0) > 0);
+  const [lanes, setLanes] = useState<Lane[] | null>(null);
+  const seen = useRef<Record<string, string>>({});
+  const [fresh, setFresh] = useState<Set<string>>(new Set());
+  const hasRepo = !!group.config.repo_dir;
+  useEffect(() => {
+    if (!hasRepo) return;
+    let live = true;
+    const load = () =>
+      void api
+        .codingActivity(group.id)
+        .then((next) => {
+          if (!live) return;
+          // Files that appeared or grew since the last look are marked for a moment.
+          const marks = new Set<string>();
+          const now: Record<string, string> = {};
+          for (const l of next)
+            for (const f of l.files) {
+              const key = `${l.dir}|${f.path}`;
+              const sig = `${f.status}${f.additions}/${f.deletions}`;
+              now[key] = sig;
+              if (seen.current[key] !== sig && Object.keys(seen.current).length > 0) marks.add(key);
+            }
+          seen.current = now;
+          if (marks.size) {
+            setFresh(marks);
+            window.setTimeout(() => live && setFresh(new Set()), 2500);
+          }
+          setLanes(next);
+        })
+        .catch(() => {});
+    load();
+    const timer = window.setInterval(load, busy ? 2500 : 10000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [group.id, hasRepo, busy]);
+
+  const withFiles = (lanes ?? []).filter((l) => l.files.length > 0);
+  if (!hasRepo) return null;
+  return (
+    <section className="mb-3" aria-label={t("coding.activity")}>
+      <h3 className="mb-1 flex items-center gap-2 px-2 text-[11px] font-semibold tracking-wide text-faint uppercase">
+        {busy ? <LoaderCircle size={11} className="animate-spin text-accent" /> : <FileText size={11} />}
+        {t("coding.activity")}
+      </h3>
+      {withFiles.length === 0 ? (
+        <p className="px-2 py-1 text-[12px] text-muted">{busy ? t("coding.activityWaiting") : t("coding.activityNone")}</p>
+      ) : (
+        withFiles.map((l) => (
+          <div key={l.dir} className="mb-2 rounded-xl border border-line px-2.5 py-2">
+            <div className="mb-1 flex items-center gap-1.5 text-[12px]">
+              <span className="flex -space-x-1">
+                {l.agent_ids.map((id) => agents[id] && <AvatarView key={id} avatar={agents[id].avatar} name={agents[id].name} size={16} />)}
+              </span>
+              <span className="min-w-0 flex-1 truncate font-medium">{l.agent_ids.map((id) => agents[id]?.name).filter(Boolean).join(", ")}</span>
+              {l.branch && (
+                <span className="inline-flex shrink-0 items-center gap-0.5 font-mono text-[10.5px] text-faint">
+                  <GitBranch size={10} /> {l.branch}
+                </span>
+              )}
+            </div>
+            <ul>
+              {l.files.slice(0, 12).map((f) => (
+                <li key={f.path} className={cx("flex items-center gap-2 rounded-md px-1 py-0.5 transition-colors duration-700", fresh.has(`${l.dir}|${f.path}`) && "bg-accent-soft")}>
+                  <span className={cx("w-3.5 text-center font-mono text-[10.5px] font-bold", f.status === "A" || f.status === "?" ? "text-success" : f.status === "D" ? "text-danger" : "text-warning")}>{f.status}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{f.path}</span>
+                  {(f.additions > 0 || f.deletions > 0) && (
+                    <span className="shrink-0 font-mono text-[10.5px]">
+                      <span className="text-success">+{f.additions}</span> <span className="text-danger">−{f.deletions}</span>
+                    </span>
+                  )}
+                </li>
+              ))}
+              {l.files.length > 12 && <li className="px-1 pt-0.5 text-[11px] text-faint">{t("coding.moreFiles", { count: l.files.length - 12 })}</li>}
+            </ul>
+          </div>
+        ))
+      )}
+    </section>
   );
 }
 
