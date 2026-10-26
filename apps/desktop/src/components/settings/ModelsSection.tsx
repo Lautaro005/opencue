@@ -8,6 +8,7 @@ import type { ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, IconButton, Input, Spinner, Toggle } from "../ui";
 import { PageTitle } from "./SettingsModal";
+import { LocalModels } from "./LocalModels";
 
 /** Models of the providers that are set up: search them, and choose which ones show in pickers. */
 export function ModelsSection() {
@@ -17,6 +18,7 @@ export function ModelsSection() {
   const openSettings = useStore((s) => s.openSettings);
   const [catalog, setCatalog] = useState<ProviderInfo[]>([]);
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<"cloud" | "local">("cloud");
 
   useEffect(() => void api.providerCatalog().then(setCatalog), []);
   const ready = providers.filter((p) => isConfigured(p, catalog.find((c) => c.kind === p.kind)));
@@ -28,7 +30,16 @@ export function ModelsSection() {
   return (
     <>
       <PageTitle title={t("settings.models.title")} hint={t("settings.models.hint")} />
-      {catalog.length > 0 && ready.length === 0 ? (
+      <div className="mb-5 inline-flex rounded-lg bg-hover p-0.5" role="tablist">
+        {(["cloud", "local"] as const).map((k) => (
+          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cx("rounded-md px-3.5 py-1.5 text-[12.5px] font-medium", tab === k ? "bg-bg text-ink shadow-sm" : "text-muted hover:text-ink")}>
+            {t(`settings.models.tab.${k}`)}
+          </button>
+        ))}
+      </div>
+      {tab === "local" ? (
+        <LocalModels />
+      ) : catalog.length > 0 && ready.length === 0 ? (
         <div className="rounded-xl border border-dashed border-line px-5 py-8 text-center">
           <p className="text-[13px] text-muted">{t("settings.models.noneReady")}</p>
           <Button className="mt-3" variant="primary" onClick={() => openSettings("providers")}>

@@ -411,3 +411,51 @@ button {
 /* A message the search jumped to. */
 @keyframes flash-bg { from { background: color-mix(in srgb, var(--warning) 28%, transparent); } to { background: transparent; } }
 [data-mid].flash + * { animation: flash-bg 1.8s ease-out; border-radius: 12px; }
+
+/* An artifact being written: the card has the accent color's moving border until it is done. */
+.art-card {
+  border: 2px solid transparent;
+  border-radius: 16px;
+  background:
+    linear-gradient(var(--bg), var(--bg)) padding-box,
+    conic-gradient(from var(--ask-angle), var(--accent), color-mix(in srgb, var(--accent) 14%, transparent) 30%, var(--accent) 55%, color-mix(in srgb, var(--accent) 14%, transparent) 80%, var(--accent)) border-box;
+  animation: ask-spin 2.8s linear infinite;
+}
+.art-card[data-busy="false"] {
+  animation: none;
+  background: var(--bg);
+  border-color: var(--border);
+}
+.art-card[data-busy="false"]:hover {
+  border-color: var(--border-strong);
+}
+@media (prefers-reduced-motion: reduce) {
+  .art-card[data-busy="true"] {
+    animation: none;
+    background: var(--bg);
+    border-color: var(--accent);
+  }
+}
+@keyframes bar-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(260%); }
+}
+.bar-indeterminate {
+  position: relative;
+  overflow: hidden;
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.bar-indeterminate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 38%;
+  border-radius: 999px;
+  background: var(--accent);
+  animation: bar-slide 1.3s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar-indeterminate::after { animation: none; width: 100%; opacity: 0.5; }
+}

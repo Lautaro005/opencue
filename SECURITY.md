@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.3.x`, currently `0.4.2`) | ✅ |
+| Latest release (`0.5.x`, currently `0.5.0`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -64,6 +64,16 @@ In scope:
   or instruction files through OpenCue's fault
 - **IPC / webview** — the UI calling privileged commands from untrusted content (rendered Markdown, links, email bodies),
   or the microphone being enabled without the user pressing the button
+- **Downloads and installers OpenCue runs for you** — local speech models and the `sherpa-onnx` runtime (from GitHub
+  releases), PersonaPlex's Python environment (`pip`) and the SPACE installer (`git clone` of perplexityai/SPACE, then its
+  own scripts): anything fetched from somewhere other than the sources named in Settings, archives that write outside
+  their folder, or an installer step run without the user pressing Install
+- **Terminals** — a terminal session (Claude Code, Codex, a shell…) started without the user choosing it, one session
+  reading another's output or input, or content from a chat opening a session or typing into one
+- **Coding groups** — `git` / `gh` run outside the repository folder the user picked, a pull request created, merged or
+  commented on without the user pressing the button (or an agent's own approved action), or an agent's worktree
+  reaching files outside the repository
+- **Floating windows** — a floating window being given more commands or access than the main window
 - **Supply chain** — compromised dependencies, release artifacts, update signatures or the website produced by our
   GitHub Actions workflows
 
@@ -71,7 +81,7 @@ Out of scope:
 
 - Actions an agent takes in **Fully autonomous** mode, or on **This computer** after the user approved the command
 - Commands that run inside the Docker or SPACE sandbox itself (that is their purpose), unless they escape it
-- Behaviour of third-party services and tools themselves — model providers, the catalog apps' own servers (Google, Notion, GitHub…), ElevenLabs, email providers, SPACE,
+- Behaviour of third-party services and tools themselves — speech and PersonaPlex models and their licenses, `sherpa-onnx`, `git`, the GitHub CLI, Claude Code, Codex and the other CLIs run in terminals, model providers, the catalog apps' own servers (Google, Notion, GitHub…), ElevenLabs, email providers, SPACE,
   Docker and desktop images (e.g. linuxserver.io Webtop), MCP servers, the `codex` and `claude` CLIs — report those
   upstream
 - Installers not being notarized or code-signed by Apple / Microsoft (known; update bundles are signed)

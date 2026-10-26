@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Monitor, Phone, SquareUser, Users } from "lucide-react";
+import { AudioLines, Monitor, Phone, SquareUser, Users } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { api } from "../../lib/api";
+import { api, openUrl } from "../../lib/api";
 import { AvatarView, GroupAvatar } from "../AvatarView";
-import { IconButton, Typing } from "../ui";
+import { IconButton, Typing, useClickOutside } from "../ui";
 import { Composer } from "./Composer";
 import { MessageList } from "./MessageList";
 import { DmView } from "./DmView";
@@ -65,14 +65,11 @@ export function ChatView() {
         </button>
         <div className="ml-auto flex items-center gap-0.5">
           {agent && (
-            <IconButton
-              label={voiceReady ? t("call.start") : t("call.needKey")}
-              active={calling}
-              onClick={() => (voiceReady ? startCall(agent.id) : openSettings("voice"))}
-              className={voiceReady ? undefined : "opacity-40"}
-            >
-              <Phone size={18} />
-            </IconButton>
+            <CallButton
+              voiceReady={voiceReady}
+              calling={calling}
+              onCall={() => (voiceReady ? startCall(agent.id) : openSettings("voice"))}
+            />
           )}
           {agent && (
             <IconButton label={t("computer.title")} active={panel === "computer"} onClick={() => setPanel(panel === "computer" ? null : "computer")}>
@@ -101,5 +98,51 @@ export function ChatView() {
 
       <Composer threadId={selected} name={name} members={members} mentionable={others} busy={busy} onSend={(text, files) => void send(selected, text, files)} onStop={() => void api.stopThread(selected)} />
     </main>
+  );
+}
+
+/** The phone: a normal call, or (when PersonaPlex is running) a real-time voice call with it. */
+function CallButton({ voiceReady, calling, onCall }: { voiceReady: boolean; calling: boolean; onCall: () => void }) {
+  const { t } = useTranslation();
+  const [menu, setMenu] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  useClickOutside(ref, () => setMenu(null), menu !== null);
+  const click = async () => {
+    const p = await api.personaStatus().catch(() => null);
+    if (p?.running && p.ready && p.url) setMenu(p.url);
+    else onCall();
+  };
+  return (
+    <div className="relative" ref={ref}>
+      <IconButton label={voiceReady ? t("call.start") : t("call.needKey")} active={calling} onClick={() => void click()} className={voiceReady ? undefined : "opacity-40"}>
+        <Phone size={18} />
+      </IconButton>
+      {menu && (
+        <div className="animate-pop absolute top-9 right-0 z-30 w-60 rounded-xl border border-line bg-elevated p-1 shadow-pop">
+          <button
+            onClick={() => {
+              setMenu(null);
+              onCall();
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-hover"
+          >
+            <Phone size={15} className="text-muted" /> {t("call.normal")}
+          </button>
+          <button
+            onClick={() => {
+              void openUrl(menu);
+              setMenu(null);
+            }}
+            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] hover:bg-hover"
+          >
+            <AudioLines size={15} className="text-muted" />
+            <span>
+              {t("call.persona")}
+              <span className="block text-[11.5px] text-muted">{t("call.personaHint")}</span>
+            </span>
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

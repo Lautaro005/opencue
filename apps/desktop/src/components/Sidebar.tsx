@@ -1,14 +1,16 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
-import { Bot, Eraser, LayoutDashboard, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users } from "lucide-react";
+import { Bot, Eraser, LayoutTemplate, MessageSquarePlus, Pencil, Pin, PinOff, Plus, RotateCcw, Search, Settings, Sparkles, Trash2, Users, X } from "lucide-react";
 import { useStore } from "../lib/store";
 import { cx, shortTime, splitThink } from "../lib/format";
-import { api } from "../lib/api";
+import { api, pickFolder } from "../lib/api";
 import { confirmDialog } from "../lib/confirm";
 import { AvatarView, GroupAvatar, UserAvatar } from "./AvatarView";
 import { IconButton, Typing, useClickOutside } from "./ui";
 import { useResizable } from "./ui/Resizer";
+import { TermIcon } from "./terminal/TermIcon";
+import type { TermTool } from "../lib/types";
 
 export function Sidebar() {
   const { t } = useTranslation();
@@ -22,7 +24,33 @@ export function Sidebar() {
   const settings = useStore((s) => s.settings);
   const working = useStore((s) => s.working);
   const [menu, setMenu] = useState(false);
+  const [tools, setTools] = useState<TermTool[]>([]);
+  const terminals = useStore((s) => s.terminals);
+  const selectedTerm = useStore((s) => s.selectedTerm);
+  const selectTerm = useStore((s) => s.selectTerm);
+  const showToast = useStore((s) => s.showToast);
   const menuRef = useRef<HTMLDivElement>(null);
+  // Which command-line tools this computer has, for the New menu.
+  useEffect(() => {
+    if (menu) void api.termTools().then(setTools).catch(() => {});
+  }, [menu]);
+  const openTerminal = async (tool: TermTool) => {
+    setMenu(false);
+    if (!tool.installed) {
+      showToast(t("terminal.notInstalled", { name: tool.label, how: tool.install || "—" }));
+      return;
+    }
+    // A coding tool works in a project folder: ask which one (a plain shell starts at home).
+    const cwd = tool.key === "shell" ? await api.homeDir() : await pickFolder();
+    if (!cwd) return;
+    try {
+      const info = await api.termCreate(tool.key, cwd, 110, 32);
+      await useStore.getState().refreshTerminals();
+      selectTerm(info.id);
+    } catch (e) {
+      showToast(String(e));
+    }
+  };
   useClickOutside(menuRef, () => setMenu(false), menu);
 
   const setSetting = useStore((s) => s.setSetting);
@@ -58,10 +86,21 @@ export function Sidebar() {
     <aside style={{ width }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar">
       {handle}
       <div className="flex h-13 items-center justify-between pl-4 pr-2.5" data-tauri-drag-region>
-        <div className="flex items-center gap-2" data-tauri-drag-region>
+        {/* The logo is the way home: it opens the dashboard. */}
+        <a
+          href="#dashboard"
+          onClick={(e) => {
+            e.preventDefault();
+            select(null);
+          }}
+          aria-label={t("dashboard.title")}
+          data-tip={t("dashboard.title")}
+          aria-current={selected === null ? "page" : undefined}
+          className="flex items-center gap-2 rounded-lg py-1 pr-2 pl-1 -ml-1 hover:bg-hover"
+        >
           <Logo />
           <span className="text-[15px] font-semibold tracking-tight">OpenCue</span>
-        </div>
+        </a>
         <div className="relative flex items-center" ref={menuRef}>
           <IconButton label={t("search.title")} onClick={() => setSearchOpen(true)}>
             <Search size={17} />
@@ -70,7 +109,7 @@ export function Sidebar() {
             <Plus size={18} />
           </IconButton>
           {menu && (
-            <div className="animate-pop absolute right-0 top-9 z-30 w-52 rounded-xl border border-line bg-elevated p-1 shadow-pop">
+            <div className="animate-pop absolute right-0 top-9 z-30 w-56 rounded-xl border border-line bg-elevated p-1 shadow-pop">
               <MenuItem
                 icon={<Bot size={16} />}
                 label={t("sidebar.createAgent")}
@@ -95,22 +134,65 @@ export function Sidebar() {
                   setDialog("templates");
                 }}
               />
+              {tools.length > 0 && (
+                <>
+                  <p className="mt-1 border-t border-line px-2.5 pt-2 pb-1 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("terminal.section")}</p>
+                  {tools.map((tool) => (
+                    <button key={tool.key} onClick={() => void openTerminal(tool)} className={cx("flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-[13.5px] hover:bg-hover", !tool.installed && "opacity-50")}>
+                      <span className="text-muted">
+                        <TermIcon tool={tool.key} size={16} />
+                      </span>
+                      {tool.label}
+                    </button>
+                  ))}
+                </>
+              )}
             </div>
           )}
         </div>
       </div>
 
-      <button
-        onClick={() => select(null)}
-        aria-current={selected === null ? "page" : undefined}
-        className={cx("mx-2 mb-1 flex items-center gap-2.5 rounded-xl px-3 py-2 text-left text-[13.5px] font-medium transition-colors", selected === null ? "bg-active text-ink" : "text-muted hover:bg-hover hover:text-ink")}
-      >
-        <LayoutDashboard size={16} />
-        {t("dashboard.title")}
-      </button>
-
       <nav className="flex-1 overflow-y-auto px-2 pb-2" aria-label="Agents">
-        {threads.length === 0 ? (
+        {terminals.length > 0 && (
+          <section className="mb-2" aria-label={t("terminal.section")}>
+            <h3 className="px-2.5 pt-1 pb-1 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("terminal.section")}</h3>
+            <ul className="space-y-0.5">
+              {terminals.map((term) => (
+                <li key={term.id} className="group relative">
+                  <button
+                    onClick={() => selectTerm(term.id)}
+                    className={cx("flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left transition-colors", selectedTerm === term.id ? "bg-[#14171d] text-[#dcdfe4]" : "hover:bg-hover")}
+                  >
+                    <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", "bg-white text-[#17171a] shadow-sm")}>
+                      <TermIcon tool={term.tool} size={15} />
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 text-[13.5px] font-medium">
+                        <span className="truncate">{term.label}</span>
+                        <span className={cx("size-1.5 shrink-0 rounded-full", term.alive ? "bg-success" : "bg-faint")} />
+                      </span>
+                      <span className={cx("block truncate font-mono text-[11px]", selectedTerm === term.id ? "text-[#8a909c]" : "text-muted")}>{term.cwd.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? term.cwd}</span>
+                    </span>
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (await confirmDialog(t("terminal.closeConfirm", { name: term.label }), { confirmLabel: t("terminal.close") })) {
+                        await api.termClose(term.id);
+                        await useStore.getState().refreshTerminals();
+                      }
+                    }}
+                    aria-label={t("terminal.close")}
+                    data-tip={t("terminal.close")}
+                    className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-faint opacity-0 transition-opacity group-hover:opacity-100 hover:bg-hover hover:text-danger"
+                  >
+                    <X size={13} />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+        {threads.length === 0 && terminals.length === 0 ? (
           <div className="mx-2 mt-6 rounded-xl border border-dashed border-line-strong px-4 py-6 text-center">
             <p className="font-medium">{t("sidebar.empty")}</p>
             <p className="mt-1 text-[12.5px] text-muted">{t("sidebar.emptyHint")}</p>

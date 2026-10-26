@@ -153,6 +153,7 @@ impl LlmProvider for AnthropicProvider {
 
         let mut out = ChatResponse::default();
         let mut blocks: BTreeMap<u64, Block> = BTreeMap::new();
+        let mut watch = super::ToolWatch::default();
         let mut stream = resp.bytes_stream().eventsource();
         while let Some(event) = stream.next().await {
             let event = event?;
@@ -169,6 +170,9 @@ impl LlmProvider for AnthropicProvider {
                 "content_block_start" => {
                     let index = data["index"].as_u64().unwrap_or(0);
                     let cb = &data["content_block"];
+                    if cb["type"].as_str() == Some("tool_use") {
+                        watch.feed(&req.on_tool, index, cb["name"].as_str().unwrap_or(""), "");
+                    }
                     blocks.insert(
                         index,
                         Block {
@@ -194,6 +198,7 @@ impl LlmProvider for AnthropicProvider {
                                 (blocks.get_mut(&index), delta["partial_json"].as_str())
                             {
                                 b.json.push_str(p);
+                                watch.feed(&req.on_tool, index, "", p);
                             }
                         }
                         _ => {}
@@ -284,6 +289,8 @@ mod tests {
             temperature: None,
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
+            cwd: None,
         };
         let msgs = to_anthropic_messages(&req);
         assert_eq!(msgs.len(), 3);

@@ -2,9 +2,9 @@ import { create } from "zustand";
 import { api, onCoreEvent, filesToAttachments, type UpdateInfo } from "./api";
 import { onMessageForVoice } from "./voice";
 import i18n from "../i18n";
-import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, ThreadSummary } from "./types";
+import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, TermInfo, ThreadSummary } from "./types";
 
-export type Panel = "profile" | "group" | "computer" | "artifact" | null;
+export type Panel = "profile" | "group" | "computer" | "artifact" | "canvas" | null;
 export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
 export type Dialog = "create-agent" | "create-group" | "templates" | "walkthrough" | null;
 
@@ -48,6 +48,15 @@ interface State {
   update: UpdateInfo | null;
   /** Bumped by the menu-bar "Check for Updates"; the About page runs a check when it changes. */
   updateCheckNonce: number;
+  /** Tool calls (artifacts) a model is still writing, by assistant message id. */
+  toolProgress: Record<string, { tool: string; title: string | null; chars: number }>;
+  /** Terminal sessions (Claude Code, Codex…) and the one on screen. */
+  terminals: TermInfo[];
+  selectedTerm: string | null;
+  refreshTerminals: () => Promise<void>;
+  selectTerm: (id: string | null) => void;
+  /** Local model downloads, by model id. */
+  modelProgress: Record<string, { phase: string; done: number; total: number; error: string | null }>;
 
   init: () => Promise<void>;
   refresh: () => Promise<void>;
@@ -59,7 +68,7 @@ interface State {
   openMessage: (threadId: string, messageId: string) => Promise<void>;
   closeDm: () => void;
   setPanel: (p: Panel) => void;
-  openArtifact: (id: string, version?: number) => void;
+  openArtifact: (id: string, version?: number, canvas?: boolean) => void;
   /** Text to put in the composer when the next chat opens (e.g. "/dashboard "). */
   prefill: string | null;
   setPrefill: (text: string | null) => void;
@@ -117,13 +126,17 @@ export const useStore = create<State>((set, get) => ({
   models: {},
   update: null,
   updateCheckNonce: 0,
+  toolProgress: {},
+  modelProgress: {},
+  terminals: [],
+  selectedTerm: null,
 
   init: async () => {
     if (!listening) {
       listening = true;
       await onCoreEvent((ev) => handleEvent(ev, set, get));
     }
-    const [settings] = await Promise.all([api.getSettings(), get().refresh(), get().refreshProviders()]);
+    const [settings] = await Promise.all([api.getSettings(), get().refresh(), get().refreshProviders(), get().refreshTerminals()]);
     const pending = await api.pendingQuestions().catch(() => [] as Question[]);
     set({ settings, ready: true, questions: Object.fromEntries(pending.map((q) => [q.id, q])) });
     // The dashboard is home: the app opens on it, and any chat is one click away.
@@ -141,14 +154,22 @@ export const useStore = create<State>((set, get) => ({
     if (sel && !threads.some((t) => t.id === sel)) get().select(null);
   },
 
+  refreshTerminals: async () => {
+    const list = await api.termList().catch(() => [] as TermInfo[]);
+    set((s) => ({ terminals: list, selectedTerm: s.selectedTerm && list.some((t) => t.id === s.selectedTerm) ? s.selectedTerm : null }));
+  },
+  selectTerm: (id) => set(id ? { selectedTerm: id, selected: null, panel: null, dm: null } : { selectedTerm: null }),
+
   refreshProviders: async () => set({ providers: await api.listProviders() }),
 
   select: (id) => {
     const { panel, groups } = get();
     const isGroup = !!(id && groups[id]);
     // Keep the right panel open but switch it to the matching kind.
-    const nextPanel: Panel = panel && panel !== "artifact" ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
-    set({ selected: id, panel: nextPanel, dm: null });
+    const nextPanel: Panel = panel && panel !== "artifact" && panel !== "canvas" ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
+    // A coding group's panel (sessions, changes, pull requests) is part of working in it.
+    const coding = isGroup && groups[id!]?.kind === "coding";
+    set({ selected: id, panel: coding && nextPanel === null ? "group" : nextPanel, dm: null, selectedTerm: id ? null : get().selectedTerm });
     try {
       if (id) localStorage.setItem("opencue.selected", id);
     } catch {}
@@ -269,7 +290,9 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       // An agent just made something: show it next to the chat.
       const made = m.attachments?.find((a) => a.artifact);
       if (made?.artifact && get().selected === m.thread_id && !get().messages[m.thread_id]?.some((x) => x.id === m.id)) {
-        set(() => ({ panel: "artifact" as Panel, artifactView: { id: made.artifact!.id, version: made.artifact!.version } }));
+        // The card in the chat opens it with a click; "open automatically" in Settings skips the click.
+        if (get().settings.artifact_auto_open === "true") get().openArtifact(made.artifact.id, made.artifact.version, made.artifact.canvas);
+        window.dispatchEvent(new CustomEvent("opencue:artifact-changed", { detail: { id: made.artifact.id } }));
       }
       set((s) => (s.messages[m.thread_id] ? { messages: { ...s.messages, [m.thread_id]: upsertMessage(s.messages[m.thread_id], m) } } : {}));
       if (m.status !== "awaiting_approval") {
@@ -283,6 +306,20 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       onMessageForVoice(m, get().settings.voice_auto_speak !== "false");
       break;
     }
+    case "term_output":
+      window.dispatchEvent(new CustomEvent("opencue:term-output", { detail: ev }));
+      break;
+    case "term_exit":
+      window.dispatchEvent(new CustomEvent("opencue:term-exit", { detail: ev }));
+      void get().refreshTerminals();
+      break;
+    case "tool_progress":
+      set((s) => ({ toolProgress: { ...s.toolProgress, [ev.message_id]: { tool: ev.tool, title: ev.title, chars: ev.chars } } }));
+      break;
+    case "model_progress":
+      set((s) => ({ modelProgress: { ...s.modelProgress, [ev.id]: { phase: ev.phase, done: ev.done, total: ev.total, error: ev.error } } }));
+      window.dispatchEvent(new CustomEvent("opencue:models-changed"));
+      break;
     case "delta":
       set((s) => {
         const list = s.messages[ev.thread_id];
@@ -325,6 +362,7 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
       break;
     case "threads_changed":
       scheduleRefresh(get);
+      void get().refreshTerminals();
       break;
     case "error":
       get().showToast(ev.message);

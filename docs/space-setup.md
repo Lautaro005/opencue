@@ -1,8 +1,19 @@
 # SPACE setup
 
 OpenCue's **SPACE** computer runs each agent's commands in a [SPACE](https://github.com/perplexityai/SPACE) sandbox —
-Perplexity's open-source Firecracker microVM platform — over its HTTP API. OpenCue **connects to** a SPACE server; it does
-not install or manage SPACE itself.
+Perplexity's open-source Firecracker microVM platform — over its HTTP API.
+
+## Automatic install (0.5.0, Linux x86_64 with KVM)
+
+**Settings → Computers → Perplexity SPACE → Install SPACE** does everything below for you: it runs the host checks, clones
+`perplexityai/SPACE` into `<data folder>/space/SPACE`, runs `install-prereqs.sh`, `install-fc-vendor.sh` and `up.sh`
+(SPACE's own scripts, as its installation guide describes), waits for the API on `127.0.0.1:8080`, signs in as `root@local`
+with a random password that OpenCue keeps in `secrets.json`, and fills in the API URL, the `seed:latest` template and the
+token (renewed automatically). **Start** repeats the bring-up after a reboot and **Stop** runs SPACE's `teardown.sh`.
+It needs Docker, `/dev/kvm`, `/dev/net/tun`, an apt-based system, root or passwordless `sudo` and 30 GiB free. On macOS
+and Windows use a SPACE server on another Linux computer, as described next.
+
+## Connecting to a SPACE you run yourself
 
 ## Requirements
 

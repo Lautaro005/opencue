@@ -10,6 +10,8 @@ import { Markdown } from "./Markdown";
 import { ToolCard } from "./ToolCard";
 import { AttachmentList } from "./Attachments";
 import { QuestionCards } from "./AskCard";
+import { ArtifactProgress } from "./ArtifactProgress";
+import { PlanCard } from "./PlanCard";
 
 const EMPTY: Message[] = [];
 
@@ -25,6 +27,8 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
   const messages = useStore((s) => s.messages[threadId] ?? EMPTY);
   const agents = useStore((s) => s.agents);
   const approvals = useStore((s) => s.approvals);
+  const toolProgress = useStore((s) => s.toolProgress);
+  const workingNow = useStore((s) => (s.working[threadId]?.length ?? 0) > 0);
   const questionCount = useStore((s) => Object.keys(s.questions).length);
   const openSettings = useStore((s) => s.openSettings);
   const scroller = useRef<HTMLDivElement>(null);
@@ -64,6 +68,25 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
     if (el) stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
   };
 
+  // A /plan message owns what follows it up to the next message from the user: that is one card.
+  const planRuns = useMemo(() => {
+    const runs = new Map<string, Message[]>();
+    const owner = new Map<string, string>();
+    let cur: Message[] | null = null;
+    let curId = "";
+    for (const m of messages) {
+      if (m.role === "user") {
+        cur = /^\/plan(\s|$)/i.test(m.content.trimStart()) ? [] : null;
+        curId = m.id;
+        if (cur) runs.set(m.id, cur);
+      } else if (cur) {
+        cur.push(m);
+        owner.set(m.id, curId);
+      }
+    }
+    return { runs, owner };
+  }, [messages]);
+
   const lastUserId = useMemo(() => [...messages].reverse().find((m) => m.role === "user")?.id, [messages]);
 
   let lastDay = "";
@@ -88,6 +111,17 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
               <span data-mid={m.id} className="block h-0" />
               {divider && <div className="my-3 text-center text-[11.5px] font-medium text-faint">{divider}</div>}
               {m.role === "user" && <UserBubble m={m} firstOfRun={firstOfRun} isLast={m.id === lastUserId} />}
+              {m.role === "user" && planRuns.runs.has(m.id) && (
+                <div className="mt-1 mb-1">
+                  <PlanCard
+                    threadId={threadId}
+                    started={m.created_at}
+                    run={planRuns.runs.get(m.id)!}
+                    agent={(planRuns.runs.get(m.id)!.find((x) => x.agent_id)?.agent_id ?? (isGroup ? null : threadId)) ? agents[planRuns.runs.get(m.id)!.find((x) => x.agent_id)?.agent_id ?? threadId] : undefined}
+                    active={workingNow && m.id === lastUserId}
+                  />
+                </div>
+              )}
               {m.role === "event" && <EventCard m={m} />}
               {m.role === "assistant" && (
                 <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
@@ -105,15 +139,16 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                     </div>
                   ) : m.content ? (
                     <AssistantText m={m} />
-                  ) : m.status === "streaming" ? (
+                  ) : m.status === "streaming" && !toolProgress[m.id] ? (
                     <div className="inline-flex h-10 items-center rounded-[20px] bg-agent px-4 text-muted">
                       <Typing />
                     </div>
                   ) : null}
+                  {m.status === "streaming" && toolProgress[m.id] && <ArtifactProgress title={toolProgress[m.id].title} chars={toolProgress[m.id].chars} />}
                   {m.attachments?.length ? <AttachmentList items={m.attachments} /> : null}
                 </AgentRow>
               )}
-              {m.role === "tool" && (
+              {m.role === "tool" && !planRuns.owner.has(m.id) && (
                 <AgentRow agent={agent} showHeader={firstOfRun} isGroup={isGroup}>
                   <ToolCard message={m} call={m.tool_call_id ? calls[m.tool_call_id] : undefined} approval={approvals[m.id]} agentName={agent?.name ?? ""} agentId={m.agent_id} isGroup={isGroup} />
                 </AgentRow>

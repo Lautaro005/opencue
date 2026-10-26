@@ -185,8 +185,19 @@ pub async fn create_group(
     state: State<'_, AppState>,
     name: String,
     agent_ids: Vec<String>,
+    kind: Option<String>,
+    config: Option<serde_json::Value>,
 ) -> R<Group> {
-    state.core.create_group(&name, &agent_ids).await.map_err(e)
+    state
+        .core
+        .create_group_kind(
+            &name,
+            &agent_ids,
+            kind.as_deref().unwrap_or("chat"),
+            config.unwrap_or_else(|| serde_json::json!({})),
+        )
+        .await
+        .map_err(e)
 }
 
 #[tauri::command]
@@ -207,6 +218,11 @@ pub async fn update_group(
 }
 
 #[tauri::command]
+pub async fn set_group_kind(state: State<'_, AppState>, id: String, kind: String) -> R<()> {
+    state.core.set_group_kind(&id, &kind).await.map_err(e)
+}
+
+#[tauri::command]
 pub async fn delete_group(state: State<'_, AppState>, id: String) -> R<()> {
     state.core.delete_group(&id).await.map_err(e)
 }
@@ -219,7 +235,6 @@ pub async fn add_group_member(
 ) -> R<()> {
     state
         .core
-        .store
         .add_group_member(&group_id, &agent_id)
         .await
         .map_err(e)
@@ -309,6 +324,16 @@ pub fn get_artifact(
     id: String,
 ) -> R<opencue_core::artifacts::Artifact> {
     state.core.get_artifact(&id).map_err(e)
+}
+
+/// The user edited a canvas by hand: keep it as a new version.
+#[tauri::command]
+pub fn save_canvas(
+    state: State<'_, AppState>,
+    id: String,
+    content: String,
+) -> R<opencue_core::artifacts::Artifact> {
+    state.core.save_canvas(&id, &content).map_err(e)
 }
 
 #[tauri::command]
@@ -416,13 +441,21 @@ pub async fn whatsapp_disconnect(state: State<'_, AppState>) -> R<()> {
 // ---------- built-in browser ----------
 
 #[tauri::command]
-pub fn browser_place(state: State<'_, AppState>, agent_id: String, x: f64, y: f64, w: f64, h: f64) {
-    state.browser.place(&agent_id, x, y, w, h);
+pub fn browser_place(
+    window: tauri::Window,
+    state: State<'_, AppState>,
+    agent_id: String,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+) {
+    state.browser.place(window.label(), &agent_id, x, y, w, h);
 }
 
 #[tauri::command]
-pub fn browser_hide(state: State<'_, AppState>) {
-    state.browser.hide();
+pub fn browser_hide(window: tauri::Window, state: State<'_, AppState>) {
+    state.browser.hide(window.label());
 }
 
 #[tauri::command]
@@ -942,19 +975,90 @@ pub async fn transcribe(
     state.core.transcribe(audio, &mime).await.map_err(e)
 }
 
-/// Returns MP3 audio as base64.
+#[derive(Serialize)]
+pub struct SpeechAudio {
+    mime: &'static str,
+    /// Base64 audio.
+    data: String,
+}
+
+/// Returns the spoken audio (MP3 from ElevenLabs, WAV from a local voice) as base64.
 #[tauri::command]
 pub async fn speak(
     state: State<'_, AppState>,
     text: String,
     agent_id: Option<String>,
-) -> R<String> {
-    let audio = state
+) -> R<SpeechAudio> {
+    let speech = state
         .core
         .speak(&text, agent_id.as_deref())
         .await
         .map_err(e)?;
-    Ok(base64::engine::general_purpose::STANDARD.encode(audio))
+    Ok(SpeechAudio {
+        mime: speech.mime,
+        data: base64::engine::general_purpose::STANDARD.encode(speech.bytes),
+    })
+}
+
+// ---------- PersonaPlex ----------
+
+#[tauri::command]
+pub async fn personaplex_status(
+    state: State<'_, AppState>,
+) -> R<opencue_core::personaplex::PersonaStatus> {
+    Ok(state.core.personaplex_status().await)
+}
+
+#[tauri::command]
+pub async fn personaplex_configure(
+    state: State<'_, AppState>,
+    lan: bool,
+    offload: bool,
+    token: Option<String>,
+) -> R<()> {
+    state
+        .core
+        .personaplex_configure(lan, offload, token)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn personaplex_install(state: State<'_, AppState>) -> R<()> {
+    state.core.personaplex_install().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn personaplex_start(state: State<'_, AppState>) -> R<()> {
+    state.core.personaplex_start().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn personaplex_stop(state: State<'_, AppState>) -> R<()> {
+    state.core.personaplex_stop().await;
+    Ok(())
+}
+
+// ---------- local models ----------
+
+#[tauri::command]
+pub fn models_status(state: State<'_, AppState>) -> Vec<opencue_core::local_models::ModelInfo> {
+    state.core.models_status()
+}
+
+#[tauri::command]
+pub async fn model_install(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.model_install(&id).await.map_err(e)
+}
+
+#[tauri::command]
+pub fn model_cancel(state: State<'_, AppState>, id: String) {
+    state.core.model_cancel(&id)
+}
+
+#[tauri::command]
+pub fn model_delete(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.model_delete(&id).map_err(e)
 }
 
 #[derive(Serialize)]
@@ -992,4 +1096,246 @@ pub async fn add_vmpal(state: State<'_, AppState>, toml: String) -> R<VmPalInfo>
 #[tauri::command]
 pub async fn test_vmpal(state: State<'_, AppState>, name: String) -> R<McpServerStatus> {
     state.core.test_vmpal(&name).await.map_err(e)
+}
+
+// ---------- floating windows ----------
+
+/// Open a panel (an artifact, a canvas or an agent's computer) in a window of its own that can
+/// be dragged anywhere on the desktop. Opening the same one again brings it to the front.
+#[tauri::command]
+pub async fn open_float(app: tauri::AppHandle, kind: String, id: String, title: String) -> R<()> {
+    use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+    if !["artifact", "canvas", "computer"].contains(&kind.as_str()) {
+        return Err("unknown panel".into());
+    }
+    let clean: String = id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(64)
+        .collect();
+    let label = format!("float-{kind}-{clean}");
+    if let Some(w) = app.get_webview_window(&label) {
+        let _ = w.show();
+        let _ = w.unminimize();
+        let _ = w.set_focus();
+        return Ok(());
+    }
+    let wide = kind == "computer";
+    // The page reads this to know what to show; nothing else about the window is shared.
+    let init = format!(
+        "window.__FLOAT__ = {};",
+        serde_json::json!({ "kind": kind, "id": clean })
+    );
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::App("index.html".into()))
+        .title(title)
+        .inner_size(if wide { 760.0 } else { 600.0 }, 720.0)
+        .min_inner_size(320.0, 240.0)
+        .resizable(true)
+        .initialization_script(init)
+        .build()
+        .map_err(|err| err.to_string())?;
+    Ok(())
+}
+
+/// Keep a floating window above the others (or let it go back).
+#[tauri::command]
+pub fn float_pin(window: tauri::WebviewWindow, on: bool) -> R<()> {
+    window.set_always_on_top(on).map_err(|err| err.to_string())
+}
+
+#[tauri::command]
+pub fn close_float(window: tauri::WebviewWindow) -> R<()> {
+    window.close().map_err(|err| err.to_string())
+}
+
+// ---------- coding groups: git and GitHub ----------
+
+#[tauri::command]
+pub async fn coding_set_repo(
+    state: State<'_, AppState>,
+    group_id: String,
+    dir: String,
+    worktrees: bool,
+) -> R<opencue_core::github::RepoStatus> {
+    state
+        .core
+        .coding_set_repo(&group_id, &dir, worktrees)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_status(
+    state: State<'_, AppState>,
+    group_id: String,
+) -> R<opencue_core::github::RepoStatus> {
+    state.core.github_status(&group_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_pulls(
+    state: State<'_, AppState>,
+    group_id: String,
+    pr_state: Option<String>,
+) -> R<Vec<opencue_core::github::Pull>> {
+    state
+        .core
+        .github_pulls(&group_id, pr_state.as_deref().unwrap_or("open"))
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_changes(
+    state: State<'_, AppState>,
+    group_id: String,
+) -> R<opencue_core::github::Changes> {
+    state.core.github_changes(&group_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_create_pr(
+    state: State<'_, AppState>,
+    group_id: String,
+    title: String,
+    body: String,
+    base: Option<String>,
+    draft: bool,
+) -> R<String> {
+    state
+        .core
+        .github_create_pr(&group_id, &title, &body, base.as_deref(), draft)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_merge_pr(
+    state: State<'_, AppState>,
+    group_id: String,
+    number: u64,
+    method: String,
+    auto: bool,
+) -> R<String> {
+    state
+        .core
+        .github_merge_pr(&group_id, number, &method, auto)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_comment(
+    state: State<'_, AppState>,
+    group_id: String,
+    number: u64,
+    body: String,
+) -> R<()> {
+    state
+        .core
+        .github_comment(&group_id, number, &body)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn coding_fix_ci(state: State<'_, AppState>, group_id: String, number: u64) -> R<()> {
+    state.core.coding_fix_ci(&group_id, number).await.map_err(e)
+}
+
+// ---------- terminal sessions ----------
+
+#[tauri::command]
+pub fn term_tools(state: State<'_, AppState>) -> Vec<opencue_core::terminal::ToolInfo> {
+    state.core.term_tools()
+}
+
+#[tauri::command]
+pub async fn term_list(state: State<'_, AppState>) -> R<Vec<opencue_core::terminal::TermInfo>> {
+    Ok(state.core.term_list().await)
+}
+
+#[tauri::command]
+pub async fn term_create(
+    state: State<'_, AppState>,
+    tool: String,
+    cwd: String,
+    cols: u16,
+    rows: u16,
+) -> R<opencue_core::terminal::TermInfo> {
+    state
+        .core
+        .term_create(&tool, &cwd, cols, rows)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn term_restart(state: State<'_, AppState>, id: String, cols: u16, rows: u16) -> R<()> {
+    state.core.term_restart(&id, cols, rows).await.map_err(e)
+}
+
+#[tauri::command]
+pub fn term_write(state: State<'_, AppState>, id: String, data: String) -> R<()> {
+    state.core.term_write(&id, &data).map_err(e)
+}
+
+#[tauri::command]
+pub fn term_resize(state: State<'_, AppState>, id: String, cols: u16, rows: u16) {
+    state.core.term_resize(&id, cols, rows)
+}
+
+#[tauri::command]
+pub fn term_snapshot(state: State<'_, AppState>, id: String) -> String {
+    state.core.term_snapshot(&id)
+}
+
+#[tauri::command]
+pub fn term_kill(state: State<'_, AppState>, id: String) {
+    state.core.term_kill(&id)
+}
+
+#[tauri::command]
+pub async fn term_close(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.term_close(&id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn term_rename(state: State<'_, AppState>, id: String, label: String) -> R<()> {
+    state.core.term_rename(&id, &label).await.map_err(e)
+}
+
+/// The user's home folder: where a new terminal session starts unless another is picked.
+#[tauri::command]
+pub fn home_dir() -> String {
+    directories::UserDirs::new()
+        .map(|d| d.home_dir().display().to_string())
+        .unwrap_or_default()
+}
+
+// ---------- SPACE (Perplexity's sandbox) ----------
+
+#[tauri::command]
+pub async fn space_status(state: State<'_, AppState>) -> R<opencue_core::space_setup::SpaceStatus> {
+    Ok(state.core.space_status().await)
+}
+
+#[tauri::command]
+pub async fn space_install(state: State<'_, AppState>) -> R<()> {
+    state.core.space_install().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn space_start(state: State<'_, AppState>) -> R<()> {
+    state.core.space_start().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn space_stop(state: State<'_, AppState>) -> R<()> {
+    state.core.space_stop().await.map_err(e)
+}
+
+#[tauri::command]
+pub fn space_cancel(state: State<'_, AppState>) {
+    state.core.space_cancel()
 }

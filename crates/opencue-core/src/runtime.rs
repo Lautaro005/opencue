@@ -16,6 +16,8 @@ use crate::tools::{self, arg_str, arg_u64, Toolbox};
 use crate::Core;
 
 pub const MAX_TOOL_STEPS: usize = 16;
+/// `/plan` runs carry out a whole plan in one go, so they get far more tool steps.
+pub const PLAN_TOOL_STEPS: usize = 80;
 
 /// What every agent knows about OpenCue, before its own instructions. Kept short on purpose; the
 /// user never sees or edits it.
@@ -33,6 +35,14 @@ const SPILL_HEAD: usize = 3_000;
 /// Past this many characters of live conversation the older part is summarized.
 const COMPACT_CHARS: usize = 90_000;
 const HELPER_STEPS: usize = 8;
+
+/// Work a teammate was handed in a coding group and has not yet reported back on.
+struct Owed {
+    from: String,
+    from_name: String,
+    task: String,
+    reminded: bool,
+}
 
 #[derive(Default)]
 pub(crate) struct AgentOutcome {
@@ -172,6 +182,31 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
         args
     };
     match cmd.to_lowercase().as_str() {
+        "plan" => format!(
+            "The user ran /plan. Work like a careful engineer, in two phases, without stopping in between.\n\
+             1. PLAN. Understand the request first (read files, search or look things up if that helps), then call `update_plan` with the COMPLETE list of steps: \
+             concrete, in order, at most 12, each one small enough to finish and check. Every step starts as `pending`.\n\
+             2. EXECUTE. Carry the steps out one at a time. Before you start a step call `update_plan` with it as `doing`; when it is finished and checked, call `update_plan` again with it as `done`. \
+             Always send the whole list. If a step fails, fix the cause, or change the plan with `update_plan` and say why in a line. \
+             Don't ask whether to continue; use `ask_user` only for a decision or permission you really need (anything destructive or irreversible).\n\
+             3. FINISH. Leave every step `done` (do NOT clear the plan), then answer with a short summary: what you did, what changed, and anything left for the user.\n\n\
+             Request: {request}"
+        ),
+        "artifact" => format!(
+            "The user ran /artifact. Make what they ask for as an artifact with `create_artifact`: choose the type that fits best \
+             (html page or app, svg, markdown, mermaid diagram, code, spreadsheet, document, deck, pdf…) and write the COMPLETE content in one call. \
+             If they asked for nothing specific, ask what they want to make. When it is created, say in one sentence what it is and offer one improvement.\n\nRequest: {request}"
+        ),
+        "canvas" => format!(
+            "The user ran /canvas. Open a canvas: an artifact with `canvas: true` (use `create_artifact`; markdown for writing, code with a `language` for programs, html for a page) that you and the user build together in the side panel. \
+             Write a solid first version, not a stub. The user can edit it by hand at any time, so before every change call `read_artifact` with its id, keep their edits, and send the COMPLETE new content. \
+             If you already made a canvas in this conversation, keep working on it (same `artifact_id`) instead of starting another. \
+             If they asked for nothing specific, ask what they want to write or build.\n\nRequest: {request}"
+        ),
+        "ai-council" => format!(
+            "The user ran /ai-council outside a group chat, so there is no council here. Tell them in one or two sentences that the council needs a group: \
+             they can create one from Templates → AI Council (or add several agents to a group), then run /ai-council there. Then, if you can, give your own best answer to the question.\n\nQuestion: {request}"
+        ),
         "create-automation" => format!(
             "The user ran /create-automation. Create an automation for yourself with the `create_automation` tool, based on their request. \
              If something essential is missing (when it should run, or what to do), ask one short question first. \
@@ -195,6 +230,35 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
             None => text.to_string(),
         },
     }
+}
+
+/// The `"title"` of a tool call whose JSON arguments are only partly written, once it is complete.
+pub(crate) fn partial_title(head: &str) -> Option<String> {
+    let key = head.find("\"title\"")?;
+    let rest = head[key + 7..].trim_start().strip_prefix(':')?.trim_start();
+    let rest = rest.strip_prefix('"')?;
+    let mut out = String::new();
+    let mut chars = rest.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => return Some(out).filter(|t| !t.trim().is_empty()),
+            '\\' => match chars.next()? {
+                'n' => out.push(' '),
+                't' => out.push(' '),
+                'u' => {
+                    let hex: String = chars.by_ref().take(4).collect();
+                    out.push(
+                        u32::from_str_radix(&hex, 16)
+                            .ok()
+                            .and_then(char::from_u32)?,
+                    );
+                }
+                other => out.push(other),
+            },
+            c => out.push(c),
+        }
+    }
+    None
 }
 
 fn extract_json_array(text: &str) -> Option<Vec<String>> {
@@ -380,12 +444,22 @@ impl Core {
             .collect();
         anyhow::ensure!(!members.is_empty(), "this group has no members");
 
+        // A council question: every member answers, they review each other, the chair decides.
+        let mentioned = !mentions(user_text, &members, None).is_empty();
+        if let Some(req) = crate::council::parse_request(group, user_text, mentioned) {
+            return self.run_council(group, &members, req, token).await;
+        }
+
         let mut queue: VecDeque<String> = mentions(user_text, &members, None).into();
         if queue.is_empty() {
             queue = self.route(group, &members, user_text).await.into();
         }
         let mut auto_turns = 0i64;
         let mut limit_hit = false;
+        // In a coding group a handoff is an obligation: it stays open until the teammate answers
+        // DONE or BLOCKED, and they are reminded once if they stop without either.
+        let coding = group.kind == "coding";
+        let mut owed: HashMap<String, Owed> = HashMap::new();
         while let Some(agent_id) = queue.pop_front() {
             if token.is_cancelled() {
                 break;
@@ -393,7 +467,42 @@ impl Core {
             let outcome = self
                 .run_agent(&group.id, &agent_id, Some(group), token)
                 .await;
-            let mut next = outcome.handoffs;
+            let mut requester: Option<String> = None;
+            if coding {
+                if let Some(o) = owed.get_mut(&agent_id) {
+                    requester = Some(o.from.clone());
+                    let name = members
+                        .iter()
+                        .find(|m| m.id == agent_id)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_default();
+                    if crate::coding::closes_obligation(&outcome.text) {
+                        owed.remove(&agent_id);
+                    } else if !o.reminded
+                        && auto_turns < group.max_auto_turns
+                        && !token.is_cancelled()
+                    {
+                        o.reminded = true;
+                        auto_turns += 1;
+                        let text = format!(
+                            "Reminder for {name}: you owe @{} a `DONE:` (with evidence) or a `BLOCKED:` (what you need) for: {}",
+                            o.from_name, o.task
+                        );
+                        let ev = message(&group.id, Role::Event, None, text);
+                        self.store.insert_message(&ev).await?;
+                        self.emit(CoreEvent::Message { message: ev });
+                        queue.push_front(agent_id.clone());
+                        continue;
+                    } else {
+                        let text = format!("{name} stopped without DONE or BLOCKED: {}", o.task);
+                        owed.remove(&agent_id);
+                        let ev = message(&group.id, Role::Event, None, text);
+                        self.store.insert_message(&ev).await?;
+                        self.emit(CoreEvent::Message { message: ev });
+                    }
+                }
+            }
+            let mut next = outcome.handoffs.clone();
             next.extend(mentions(&outcome.text, &members, Some(&agent_id)));
             for id in next {
                 if id == agent_id || queue.contains(&id) || !members.iter().any(|m| m.id == id) {
@@ -404,6 +513,28 @@ impl Core {
                     break;
                 }
                 auto_turns += 1;
+                // Answering whoever asked closes the loop; anything else is new work owed back.
+                if coding
+                    && requester.as_deref() != Some(id.as_str())
+                    && !crate::coding::closes_obligation(&outcome.text)
+                {
+                    let from_name = members
+                        .iter()
+                        .find(|m| m.id == agent_id)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_default();
+                    owed.entry(id.clone()).or_insert(Owed {
+                        from: agent_id.clone(),
+                        from_name,
+                        task: outcome
+                            .text
+                            .chars()
+                            .take(160)
+                            .collect::<String>()
+                            .replace('\n', " "),
+                        reminded: false,
+                    });
+                }
                 queue.push_back(id);
             }
         }
@@ -462,6 +593,8 @@ impl Core {
                 temperature: Some(0.0),
                 agent_id: None,
                 mcp_extra: vec![],
+                on_tool: None,
+                cwd: None,
             };
             let resp = provider.chat(req, &|_| {}).await?;
             anyhow::Ok(extract_json_array(&resp.text).unwrap_or_default())
@@ -630,7 +763,13 @@ impl Core {
                 tracing::debug!("compaction skipped: {e:#}");
             }
         }
-        for step in 0..MAX_TOOL_STEPS {
+        // A /plan run carries out a whole plan, so it may take many more steps.
+        let max_steps = if self.is_plan_run(thread_id).await {
+            PLAN_TOOL_STEPS
+        } else {
+            MAX_TOOL_STEPS
+        };
+        for step in 0..max_steps {
             let mut system = self
                 .system_prompt(
                     &agent,
@@ -703,6 +842,13 @@ impl Core {
                 temperature: agent.settings.temperature,
                 agent_id: (!supports_tools && agent.settings.cli_tools).then(|| agent.id.clone()),
                 mcp_extra: mcp_extra.clone(),
+                on_tool: Some(self.tool_sink(thread_id, &msg.id, agent_id)),
+                cwd: agent
+                    .settings
+                    .working_dir
+                    .as_deref()
+                    .filter(|d| !d.trim().is_empty())
+                    .map(std::path::PathBuf::from),
             };
             let result = tokio::select! {
                 r = provider.chat(req, &on_delta) => r,
@@ -885,12 +1031,12 @@ impl Core {
                 self.emit(CoreEvent::Message { message: tmsg });
             }
 
-            if step + 1 == MAX_TOOL_STEPS {
+            if step + 1 == max_steps {
                 let ev = message(
                     thread_id,
                     Role::Event,
                     None,
-                    format!("{} stopped after {MAX_TOOL_STEPS} tool steps.", agent.name),
+                    format!("{} stopped after {max_steps} tool steps.", agent.name),
                 );
                 self.store.insert_message(&ev).await?;
                 self.emit(CoreEvent::Message { message: ev });
@@ -1101,6 +1247,40 @@ impl Core {
                  Don't repeat what others already said; speak when you add something.",
                 g.name
             ));
+            if g.kind == "coding" {
+                let lead_id = g
+                    .members
+                    .iter()
+                    .find(|m| m.is_owner)
+                    .map(|m| m.agent_id.clone());
+                let lead = lead_id
+                    .as_ref()
+                    .and_then(|id| all.iter().find(|a| &a.id == id))
+                    .map(|a| a.name.clone())
+                    .unwrap_or_else(|| agent.name.clone());
+                let repo = g
+                    .config
+                    .get("repo_dir")
+                    .and_then(|v| v.as_str())
+                    .filter(|d| !d.is_empty());
+                let work = agent
+                    .settings
+                    .working_dir
+                    .as_deref()
+                    .filter(|w| !w.is_empty() && Some(*w) != repo);
+                s.push_str(&crate::coding::team_prompt(
+                    &agent.name,
+                    &lead,
+                    lead_id.as_deref() == Some(agent.id.as_str()),
+                    repo,
+                    work,
+                ));
+            } else if g.kind == "council" {
+                s.push_str(
+                    "\n\nThis group is an AI council: when the user asks something, every member answers on their own, reviews the others' answers anonymously, and the chair writes the verdict. \
+                     If you are asked to speak outside that process, keep it short.",
+                );
+            }
         }
         // What changes from step to step goes last, so everything above stays a stable prefix.
         if group.is_none() {
@@ -1375,6 +1555,7 @@ impl Core {
                 ))
             }
             tools::CREATE_ARTIFACT => self.artifact_tool(thread_id, agent, args).await,
+            tools::READ_ARTIFACT => self.read_artifact_tool(agent, args),
             tools::READ_DASHBOARD | tools::UPDATE_DASHBOARD => {
                 self.dashboard_tool(agent, call.name.as_str(), args).await
             }
@@ -1544,6 +1725,8 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         for fact in extract_json_array(&resp.text)
@@ -1640,6 +1823,8 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let text = resp.text.trim();
@@ -1660,6 +1845,48 @@ impl Core {
 
     /// Long tool results go to a file in the agent's workspace; the model gets the start and the
     /// path. Without a local workspace they are cut instead.
+    /// Whether the message being answered is a `/plan` command.
+    async fn is_plan_run(&self, thread_id: &str) -> bool {
+        self.store
+            .messages(thread_id, 12)
+            .await
+            .ok()
+            .and_then(|list| list.into_iter().rev().find(|m| m.role == Role::User))
+            .is_some_and(|m| {
+                let t = m.content.trim_start().to_ascii_lowercase();
+                t == "/plan" || t.starts_with("/plan ") || t.starts_with("/plan\n")
+            })
+    }
+
+    /// Reports how far a tool call the model is still writing has got (artifacts, mostly), so the
+    /// chat can show progress instead of three dots.
+    fn tool_sink(
+        self: &Arc<Self>,
+        thread_id: &str,
+        message_id: &str,
+        agent_id: &str,
+    ) -> crate::providers::ToolSink {
+        let core = self.clone();
+        let (thread_id, message_id, agent_id) = (
+            thread_id.to_string(),
+            message_id.to_string(),
+            agent_id.to_string(),
+        );
+        crate::providers::ToolSink(Arc::new(move |p| {
+            if p.name != tools::CREATE_ARTIFACT {
+                return;
+            }
+            core.emit(CoreEvent::ToolProgress {
+                thread_id: thread_id.clone(),
+                message_id: message_id.clone(),
+                agent_id: agent_id.clone(),
+                title: partial_title(&p.head),
+                tool: p.name,
+                chars: p.chars,
+            });
+        }))
+    }
+
     fn spill_large_output(
         &self,
         agent: &Agent,
@@ -1752,6 +1979,8 @@ impl Core {
                         temperature: Some(0.2),
                         agent_id: None,
                         mcp_extra: vec![],
+                        on_tool: None,
+                        cwd: None,
                     },
                     &|_| {},
                 )
@@ -1824,6 +2053,8 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let (Some(a), Some(b)) = (resp.text.find('{'), resp.text.rfind('}')) else {
@@ -1898,6 +2129,8 @@ impl Core {
             temperature: Some(0.0),
             agent_id: None,
             mcp_extra: vec![],
+            on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         if let Some(tidy) = extract_json_array(&resp.text) {
@@ -1952,6 +2185,30 @@ mod tests {
             mentions("@Travel Bot pls", &agents, Some("1")),
             Vec::<String>::new()
         );
+    }
+
+    #[test]
+    fn reads_a_title_from_half_written_arguments() {
+        assert_eq!(
+            partial_title("{\"title\": \"Q3 plan\", \"type\":"),
+            Some("Q3 plan".into())
+        );
+        assert_eq!(
+            partial_title("{\"type\":\"html\",\"title\":\"Caf\\u00e9 \\\"menu\\\"\""),
+            Some("Café \"menu\"".into())
+        );
+        assert_eq!(partial_title("{\"title\": \"Unfinis"), None);
+        assert_eq!(partial_title("{\"content\": \"<h1>"), None);
+    }
+
+    #[test]
+    fn new_commands_expand() {
+        let none = |_: &str| None;
+        assert!(expand_command("/plan add a login page", none).contains("update_plan"));
+        assert!(expand_command("/plan add a login page", none).contains("add a login page"));
+        assert!(expand_command("/artifact a landing page", none).contains("create_artifact"));
+        assert!(expand_command("/canvas", none).contains("read_artifact"));
+        assert!(expand_command("/ai-council which db?", none).contains("group"));
     }
 
     #[test]

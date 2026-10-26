@@ -77,12 +77,74 @@ export interface GroupMember {
   is_owner: boolean;
 }
 
+export type GroupKind = "chat" | "council" | "coding";
+
 export interface Group {
   id: string;
   name: string;
   max_auto_turns: number;
   members: GroupMember[];
   created_at: string;
+  kind: GroupKind;
+  /** A coding group's `repo_dir` and `worktrees`. */
+  config: { repo_dir?: string; worktrees?: boolean; [key: string]: unknown };
+}
+
+export interface RepoStatus {
+  dir: string;
+  is_repo: boolean;
+  git_installed: boolean;
+  gh_installed: boolean;
+  gh_user: string | null;
+  slug: string | null;
+  branch: string | null;
+  default_branch: string | null;
+  ahead: number;
+  behind: number;
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  worktrees: { path: string; branch: string }[];
+  error: string | null;
+}
+
+export interface Checks {
+  total: number;
+  passed: number;
+  failed: number;
+  pending: number;
+  failing: string[];
+}
+
+export interface Pull {
+  number: number;
+  title: string;
+  branch: string;
+  base: string;
+  author: string;
+  draft: boolean;
+  review: string;
+  checks: Checks;
+  url: string;
+  updated_at: string;
+  additions: number;
+  deletions: number;
+  files: number;
+  mergeable: string;
+  auto_merge: boolean;
+}
+
+export interface FileChange {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface Changes {
+  files: FileChange[];
+  patch: string;
+  truncated: boolean;
 }
 
 export interface ToolCall {
@@ -125,6 +187,7 @@ export interface ArtifactRef {
   version: number;
   kind: ArtifactKind;
   title: string;
+  canvas?: boolean;
 }
 
 export interface ArtifactVersion {
@@ -133,6 +196,8 @@ export interface ArtifactVersion {
   created_at: string;
   /** The text the agent sent for this version. */
   source: string;
+  /** "user" when this version was edited by hand in the canvas. */
+  by?: string;
 }
 
 export interface Artifact {
@@ -142,6 +207,7 @@ export interface Artifact {
   title: string;
   kind: ArtifactKind;
   language: string | null;
+  canvas?: boolean;
   versions: ArtifactVersion[];
 }
 
@@ -313,8 +379,28 @@ export interface CatalogStatus {
   via_composio: boolean;
 }
 
+export interface TermInfo {
+  id: string;
+  tool: string;
+  label: string;
+  cwd: string;
+  created_at: string;
+  alive: boolean;
+}
+
+export interface TermTool {
+  key: string;
+  label: string;
+  installed: boolean;
+  install: string;
+}
+
 export type CoreEvent =
   | { type: "message"; message: Message }
+  | { type: "term_output"; id: string; data: string }
+  | { type: "term_exit"; id: string; code: number }
+  | { type: "tool_progress"; thread_id: string; message_id: string; agent_id: string; tool: string; title: string | null; chars: number }
+  | { type: "model_progress"; id: string; phase: string; done: number; total: number; error: string | null }
   | { type: "delta"; thread_id: string; message_id: string; agent_id: string; text: string }
   | { type: "busy"; thread_id: string; agent_id: string; busy: boolean }
   | { type: "approval_requested"; approval: ApprovalRequest }
@@ -421,9 +507,52 @@ export interface CommandResult {
 }
 
 export interface VoiceSettings {
+  /** Speech in and speech out both work (an ElevenLabs key, or local models). */
   configured: boolean;
+  has_key: boolean;
   voice_id: string;
   auto_speak: boolean;
+  /** "auto" | "elevenlabs" | "local" */
+  stt_engine: string;
+  tts_engine: string;
+  local_stt: string;
+  local_tts: string;
+  local_voice: string;
+}
+
+export interface SpeechAudio {
+  mime: string;
+  data: string;
+}
+
+export interface LocalModel {
+  id: string;
+  kind: "stt" | "tts" | "runtime";
+  label: string;
+  size: number;
+  license: string;
+  source: string;
+  languages: string[];
+  note: string;
+  ram_gb: number;
+  installed: boolean;
+  supported: boolean;
+}
+
+export interface PersonaStatus {
+  installed: boolean;
+  installing: boolean;
+  running: boolean;
+  ready: boolean;
+  has_token: boolean;
+  lan: boolean;
+  offload: boolean;
+  gpu: string | null;
+  python: string | null;
+  url: string | null;
+  lan_url: string | null;
+  qr_svg: string | null;
+  log: string;
 }
 
 export interface Voice {
@@ -488,4 +617,16 @@ export interface BrowserTab {
   url: string;
   title: string;
   active: boolean;
+}
+
+export interface SpaceStatus {
+  supported: boolean;
+  /** idle | checking | installing | ready | error */
+  state: string;
+  step: string;
+  checks: { id: string; ok: boolean; detail: string }[];
+  log: string;
+  dir: string;
+  managed: boolean;
+  api_up: boolean;
 }

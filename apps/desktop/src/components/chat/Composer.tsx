@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, AtSign, FileText, Loader2, ChevronRight, Mic, Paperclip, Plus, Slash, Sparkles, Square, Workflow, X } from "lucide-react";
+import { ArrowUp, AtSign, FileText, Loader2, ChevronRight, Mic, Paperclip, Plus, Sparkles, Square, X } from "lucide-react";
 import type { Agent, SkillSummary } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx, formatBytes } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
 import { useClickOutside } from "../ui";
 import { useStore } from "../../lib/store";
+import { systemSkills, SkillIcon } from "../../lib/skills";
 import { cancelRecording, markVoiceThread, startRecording, stopRecording } from "../../lib/voice";
 
 export function Composer({
@@ -108,10 +109,9 @@ export function Composer({
 
   // "/" at the start of the message opens the command list: built-ins first, then skills.
   const slashMatch = text.match(/^\/([\w-]*)$/);
-  const commands: { name: string; description: string; kind: "builtin" | "skill" }[] = [
-    { name: "create-automation", description: t("slash.createAutomation"), kind: "builtin" },
-    { name: "create-skill", description: t("slash.createSkill"), kind: "builtin" },
-    ...(dashboardAgent === threadId ? [{ name: "dashboard", description: t("slash.dashboard"), kind: "builtin" as const }] : []),
+  const system = systemSkills({ dashboard: dashboardAgent === threadId, group: !!members });
+  const commands: { name: string; description: string; kind: "builtin" | "skill"; icon?: string }[] = [
+    ...system.map((k) => ({ name: k.name, description: t(k.desc), kind: "builtin" as const, icon: k.icon })),
     ...skills.map((k) => ({ name: k.name, description: k.description, kind: "skill" as const })),
   ];
   const slashQuery = slashMatch?.[1].toLowerCase() ?? "";
@@ -200,7 +200,7 @@ export function Composer({
                 onMouseEnter={() => setSlashIndex(i)}
                 className={cx("flex w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-left", i === slashIndex ? "bg-hover" : "")}
               >
-                <span className="mt-0.5 text-muted">{c.kind === "skill" ? <Sparkles size={14} /> : c.name === "create-automation" ? <Workflow size={14} /> : <Slash size={14} />}</span>
+                <span className="mt-0.5 text-muted">{c.kind === "skill" ? <Sparkles size={14} /> : <SkillIcon name={c.icon ?? ""} />}</span>
                 <span className="min-w-0">
                   <span className="block text-[13px] font-medium">/{c.name}</span>
                   <span className="line-clamp-1 block text-[11.5px] text-muted">{c.description}</span>
@@ -270,7 +270,7 @@ export function Composer({
                 </button>
                 {([
                   { key: "agents" as const, label: t("chat.agents"), icon: <AtSign size={14} className="text-muted" />, count: pool?.length ?? 0 },
-                  { key: "skills" as const, label: t("chat.skills"), icon: <Sparkles size={14} className="text-muted" />, count: skills.length },
+                  { key: "skills" as const, label: t("chat.skills"), icon: <Sparkles size={14} className="text-muted" />, count: skills.length + system.length },
                 ]).filter((g) => g.count > 0).map((g) => (
                   <div key={g.key} className="relative" onMouseEnter={() => setSub(g.key)}>
                     <button onClick={() => setSub(sub === g.key ? null : g.key)} className={cx("flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-hover", sub === g.key && "bg-hover")}>
@@ -278,7 +278,7 @@ export function Composer({
                       <ChevronRight size={14} className="ml-auto text-faint" />
                     </button>
                     {sub === g.key && (
-                      <div className="animate-pop absolute bottom-0 left-full z-30 ml-1 max-h-72 w-56 overflow-y-auto rounded-xl border border-line bg-elevated p-1 shadow-pop">
+                      <div className="animate-pop absolute bottom-0 left-full z-30 ml-1 max-h-80 w-64 overflow-y-auto rounded-xl border border-line bg-elevated p-1 shadow-pop">
                         {g.key === "agents"
                           ? pool?.map((a) => (
                               <button
@@ -293,19 +293,44 @@ export function Composer({
                                 <span className="truncate">{a.name}</span>
                               </button>
                             ))
-                          : skills.map((k) => (
-                              <button
-                                key={k.name}
-                                onClick={() => {
-                                  setPlus(false);
-                                  insertSkill(k.name);
-                                }}
-                                className="flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left hover:bg-hover"
-                              >
-                                <span className="text-[13px] font-medium">/{k.name}</span>
-                                <span className="line-clamp-1 text-[11.5px] text-muted">{k.description}</span>
-                              </button>
-                            ))}
+                          : (
+                              <>
+                                <p className="px-2.5 pt-1 pb-0.5 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("chat.skillsSystem")}</p>
+                                {system.map((k) => (
+                                  <button
+                                    key={k.name}
+                                    onClick={() => {
+                                      setPlus(false);
+                                      insertSkill(k.name);
+                                    }}
+                                    className="flex w-full items-start gap-2 rounded-lg px-2.5 py-1.5 text-left hover:bg-hover"
+                                  >
+                                    <span className="mt-0.5 text-muted">
+                                      <SkillIcon name={k.icon} />
+                                    </span>
+                                    <span className="min-w-0">
+                                      <span className="block text-[13px] font-medium">/{k.name}</span>
+                                      <span className="line-clamp-1 block text-[11.5px] text-muted">{t(k.desc)}</span>
+                                    </span>
+                                  </button>
+                                ))}
+                                <p className="mt-1 border-t border-line px-2.5 pt-2 pb-0.5 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t("chat.skillsYours")}</p>
+                                {skills.length === 0 && <p className="px-2.5 py-1.5 text-[11.5px] text-faint">{t("chat.skillsNone")}</p>}
+                                {skills.map((k) => (
+                                  <button
+                                    key={k.name}
+                                    onClick={() => {
+                                      setPlus(false);
+                                      insertSkill(k.name);
+                                    }}
+                                    className="flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left hover:bg-hover"
+                                  >
+                                    <span className="text-[13px] font-medium">/{k.name}</span>
+                                    <span className="line-clamp-1 text-[11.5px] text-muted">{k.description}</span>
+                                  </button>
+                                ))}
+                              </>
+                            )}
                       </div>
                     )}
                   </div>

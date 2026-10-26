@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check } from "lucide-react";
 import { useStore } from "../../lib/store";
-import { api } from "../../lib/api";
+import { api, pickFolder } from "../../lib/api";
 import { greetNewAgent } from "../../lib/greet";
-import type { Avatar } from "../../lib/types";
+import type { Avatar, GroupKind } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
 import { AvatarPickerDialog, randomAvatar } from "../panel/AvatarPicker";
@@ -98,11 +98,15 @@ export function CreateGroupDialog() {
   const [name, setName] = useState("");
   const [picked, setPicked] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const [kind, setKind] = useState<GroupKind>("chat");
+  const [repo, setRepo] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
       setName("");
       setPicked([]);
+      setKind("chat");
+      setRepo(null);
     }
   }, [open]);
 
@@ -112,7 +116,8 @@ export function CreateGroupDialog() {
     if (!name.trim() || picked.length === 0) return;
     setBusy(true);
     try {
-      const g = await api.createGroup(name.trim(), picked);
+      const g = await api.createGroup(name.trim(), picked, kind);
+      if (kind === "coding" && repo) await api.codingSetRepo(g.id, repo, true).catch((e) => useStore.getState().showToast(String(e)));
       await useStore.getState().refresh();
       useStore.getState().select(g.id);
       close();
@@ -131,6 +136,23 @@ export function CreateGroupDialog() {
         <Field label={t("dialogs.groupName")}>
           <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("dialogs.groupNamePlaceholder")} />
         </Field>
+        <div>
+          <div className="mb-1.5 text-[12.5px] font-medium text-muted">{t("dialogs.groupKind")}</div>
+          <div className="grid grid-cols-3 gap-1.5" role="radiogroup">
+            {(["chat", "council", "coding"] as const).map((k) => (
+              <button key={k} role="radio" aria-checked={kind === k} onClick={() => setKind(k)} className={cx("rounded-xl border px-2.5 py-2 text-left", kind === k ? "border-accent bg-accent-soft" : "border-line hover:bg-hover")}>
+                <span className="block text-[13px] font-medium">{t(`dialogs.kind.${k}`)}</span>
+                <span className="block text-[11.5px] leading-snug text-muted">{t(`dialogs.kind.${k}Hint`)}</span>
+              </button>
+            ))}
+          </div>
+          {kind === "coding" && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="selectable min-w-0 flex-1 truncate rounded-lg bg-hover px-3 py-1.5 font-mono text-[12px]">{repo ?? t("coding.noRepo")}</span>
+              <Button onClick={() => void pickFolder().then((d) => d && setRepo(d))}>{t("coding.choose")}</Button>
+            </div>
+          )}
+        </div>
         <div>
           <div className="mb-1.5 text-[12.5px] font-medium text-muted">{t("dialogs.pickMembers")}</div>
           {list.length === 0 ? (

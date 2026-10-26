@@ -195,6 +195,8 @@ impl LlmProvider for OpenAiProvider {
         let mut out = ChatResponse::default();
         let mut calls: BTreeMap<u64, PartialCall> = BTreeMap::new();
         let mut think = super::ThinkStream::default();
+        let mut watch = super::ToolWatch::default();
+        let req_on_tool = req.on_tool.clone();
         let mut stream = resp.bytes_stream().eventsource();
         while let Some(event) = stream.next().await {
             let event = event?;
@@ -255,9 +257,18 @@ impl LlmProvider for OpenAiProvider {
                     if let Some(id) = tc.get("id").and_then(Value::as_str) {
                         entry.id = id.to_string();
                     }
-                    if let Some(name) = tc.pointer("/function/name").and_then(Value::as_str) {
+                    let new_name = tc.pointer("/function/name").and_then(Value::as_str);
+                    if let Some(name) = new_name {
                         entry.name.push_str(name);
                     }
+                    watch.feed(
+                        &req_on_tool,
+                        index,
+                        new_name.unwrap_or(""),
+                        tc.pointer("/function/arguments")
+                            .and_then(Value::as_str)
+                            .unwrap_or(""),
+                    );
                     if let Some(args) = tc.pointer("/function/arguments") {
                         match args {
                             Value::String(s) => entry.arguments.push_str(s),

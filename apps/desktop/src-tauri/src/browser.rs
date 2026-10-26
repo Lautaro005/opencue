@@ -77,6 +77,16 @@ pub struct TauriBrowser {
     bounds: Mutex<Bounds>,
     /// The agent whose page is on screen right now.
     shown: Mutex<Option<String>>,
+    /// The window the page is shown in: the main one, or a floating Computer window.
+    win: Mutex<String>,
+    /// How far the system's own placement was off from what the UI asked for, measured once the page
+    /// is on screen (logical pixels, positive moves it down).
+    correction: Mutex<f64>,
+    /// Bumped on every placement, so only the last one is measured.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    placed: AtomicU64,
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    me: std::sync::Weak<TauriBrowser>,
     pages: Mutex<HashMap<String, Arc<Page>>>,
     tabs: Mutex<HashMap<String, Tabs>>,
 }
@@ -113,11 +123,15 @@ fn store_id(agent_id: &str) -> [u8; 16] {
 
 impl TauriBrowser {
     pub fn new(app: AppHandle, data_dir: std::path::PathBuf) -> Arc<Self> {
-        Arc::new(Self {
+        Arc::new_cyclic(|me| Self {
+            me: me.clone(),
             app,
             data_dir,
             bounds: Mutex::new(Bounds::default()),
             shown: Mutex::new(None),
+            win: Mutex::new("main".into()),
+            correction: Mutex::new(0.0),
+            placed: AtomicU64::new(0),
             pages: Mutex::new(HashMap::new()),
             tabs: Mutex::new(HashMap::new()),
         })
@@ -155,7 +169,11 @@ impl TauriBrowser {
     fn origin_shift(&self) -> f64 {
         #[cfg(target_os = "macos")]
         {
-            if let Some(window) = self.app.get_window("main") {
+            let label = self.win.lock().unwrap().clone();
+            if let Some(window) = self.app.get_window(&label) {
+                if window.is_fullscreen().unwrap_or(false) {
+                    return 0.0;
+                }
                 if let (Ok(outer), Ok(inner), Ok(scale)) = (
                     window.outer_size(),
                     window.inner_size(),
@@ -171,12 +189,19 @@ impl TauriBrowser {
         0.0
     }
 
+    /// The vertical shift to add to what the UI asked for: the title-bar guess plus what was measured.
+    fn shift(&self) -> f64 {
+        self.origin_shift() + *self.correction.lock().unwrap()
+    }
+
     /// A new tab (and its webview), born out of sight: it only appears when the UI has placed it,
     /// so it never flashes over the app while the panel opens. It becomes the active tab.
     fn open_tab(&self, agent_id: &str, url: &str) -> anyhow::Result<(u32, Webview)> {
+        let win_label = self.win.lock().unwrap().clone();
         let window = self
             .app
-            .get_window("main")
+            .get_window(&win_label)
+            .or_else(|| self.app.get_window("main"))
             .ok_or_else(|| anyhow::anyhow!("the app window is not open"))?;
         let url: url::Url = url.parse()?;
         let tab = {
@@ -219,7 +244,7 @@ impl TauriBrowser {
         let b = *self.bounds.lock().unwrap();
         let on_screen = b.known && self.is_shown(agent_id);
         let (x, y, w, h) = if on_screen {
-            (b.x, b.y + self.origin_shift(), b.w, b.h)
+            (b.x, b.y + self.shift(), b.w, b.h)
         } else {
             (-10000.0, -10000.0, 900.0, 600.0)
         };
@@ -255,8 +280,9 @@ impl TauriBrowser {
         Ok(self.open_tab(agent_id, url)?.1)
     }
 
-    /// Show this agent's active tab at these window coordinates (and hide everything else).
-    pub fn place(&self, agent_id: &str, x: f64, y: f64, w: f64, h: f64) {
+    /// Show this agent's active tab at these coordinates of `win` (the window the UI is in), and
+    /// hide everything else. A page shown in another window moves over to this one.
+    pub fn place(&self, win: &str, agent_id: &str, x: f64, y: f64, w: f64, h: f64) {
         *self.bounds.lock().unwrap() = Bounds {
             x,
             y,
@@ -265,6 +291,7 @@ impl TauriBrowser {
             known: true,
         };
         *self.shown.lock().unwrap() = Some(agent_id.to_string());
+        *self.win.lock().unwrap() = win.to_string();
         let mine = self
             .active(agent_id)
             .map(|t| label(agent_id, t))
@@ -275,13 +302,84 @@ impl TauriBrowser {
             }
         }
         if let Some(v) = self.webview(agent_id) {
-            let _ = v.set_position(LogicalPosition::new(x, y + self.origin_shift()));
-            let _ = v.set_size(LogicalSize::new(w.max(1.0), h.max(1.0)));
+            if v.window().label() != win {
+                if let Some(target) = self.app.get_window(win) {
+                    let _ = v.reparent(&target);
+                }
+            }
+            self.apply(&v, x, y, w, h);
             let _ = v.show();
+            self.measure_later(agent_id.to_string(), y);
         }
     }
 
-    pub fn hide(&self) {
+    fn apply(&self, v: &Webview, x: f64, y: f64, w: f64, h: f64) {
+        let _ = v.set_position(LogicalPosition::new(x, y + self.shift()));
+        let _ = v.set_size(LogicalSize::new(w.max(1.0), h.max(1.0)));
+    }
+
+    /// Once the page has settled where it was put, check where it really is next to the app's own
+    /// page and nudge it by the difference, so it never sits over the toolbar above it (or leaves a
+    /// gap) however the system counts the title bar.
+    fn measure_later(&self, agent_id: String, target_y: f64) {
+        #[cfg(target_os = "macos")]
+        {
+            let gen = self.placed.fetch_add(1, Ordering::SeqCst) + 1;
+            let Some(this) = self.me.upgrade() else {
+                return;
+            };
+            tauri::async_runtime::spawn(async move {
+                tokio::time::sleep(Duration::from_millis(160)).await;
+                if this.placed.load(Ordering::SeqCst) != gen {
+                    return;
+                }
+                for _ in 0..2 {
+                    let Some(view) = this.webview(&agent_id) else {
+                        return;
+                    };
+                    let win = this.win.lock().unwrap().clone();
+                    let Some(ui) = this.app.get_webview(&win) else {
+                        return;
+                    };
+                    let measured = tauri::async_runtime::spawn_blocking(move || {
+                        Some((macos::top_in_window(&view)?, macos::top_in_window(&ui)?))
+                    })
+                    .await
+                    .ok()
+                    .flatten();
+                    let Some((child_top, ui_top)) = measured else {
+                        return;
+                    };
+                    // Where the page should be: the UI's top edge plus what the UI asked for.
+                    let err = (ui_top + target_y) - child_top;
+                    if err.abs() < 1.0 {
+                        return;
+                    }
+                    let corr = *this.correction.lock().unwrap() + err;
+                    if corr.abs() > 160.0 || this.placed.load(Ordering::SeqCst) != gen {
+                        return;
+                    }
+                    *this.correction.lock().unwrap() = corr;
+                    let b = *this.bounds.lock().unwrap();
+                    if let Some(v) = this.webview(&agent_id) {
+                        this.apply(&v, b.x, b.y, b.w, b.h);
+                    }
+                    tokio::time::sleep(Duration::from_millis(80)).await;
+                }
+            });
+        }
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = (agent_id, target_y);
+        }
+    }
+
+    /// Hide the page when `win` is the window showing it (another window's panel closing must not
+    /// take it away).
+    pub fn hide(&self, win: &str) {
+        if *self.win.lock().unwrap() != win {
+            return;
+        }
         *self.shown.lock().unwrap() = None;
         for (l, v) in self.app.webviews() {
             if l.starts_with(LABEL) {
@@ -346,7 +444,8 @@ impl TauriBrowser {
         }
         let b = *self.bounds.lock().unwrap();
         if b.known && self.is_shown(agent_id) {
-            self.place(agent_id, b.x, b.y, b.w, b.h);
+            let win = self.win.lock().unwrap().clone();
+            self.place(&win, agent_id, b.x, b.y, b.w, b.h);
         }
     }
 
@@ -559,5 +658,45 @@ impl BrowserHost for TauriBrowser {
             }
             _ => anyhow::bail!("unknown browser action {action}"),
         }
+    }
+}
+
+#[cfg(target_os = "macos")]
+mod macos {
+    use objc2::msg_send;
+    use objc2::runtime::AnyObject;
+    use objc2_foundation::NSRect;
+    use std::time::Duration;
+    use tauri::Webview;
+
+    /// How far the top edge of a webview is below the top of its window (points, the same unit as
+    /// CSS pixels), read from the native view. Blocks until the main thread answers: call it off
+    /// the main thread.
+    pub fn top_in_window(view: &Webview) -> Option<f64> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        view.with_webview(move |wv| {
+            let ptr = wv.inner() as *mut AnyObject;
+            if ptr.is_null() {
+                return;
+            }
+            // SAFETY: the pointer is the live WKWebView the runtime handed us, used on the main
+            // thread inside this callback.
+            let top = unsafe {
+                let v: &AnyObject = &*ptr;
+                let bounds: NSRect = msg_send![v, bounds];
+                let in_window: NSRect =
+                    msg_send![v, convertRect: bounds, toView: None::<&AnyObject>];
+                let window: *mut AnyObject = msg_send![v, window];
+                if window.is_null() {
+                    return;
+                }
+                let frame: NSRect = msg_send![&*window, frame];
+                // Window coordinates count up from the bottom edge.
+                frame.size.height - (in_window.origin.y + in_window.size.height)
+            };
+            let _ = tx.send(top);
+        })
+        .ok()?;
+        rx.recv_timeout(Duration::from_millis(400)).ok()
     }
 }

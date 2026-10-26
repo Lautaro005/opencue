@@ -360,7 +360,71 @@ pub struct ToolSpec {
     pub parameters: serde_json::Value,
 }
 
+/// What a model has written so far of one tool call, while it is still being generated.
 #[derive(Debug, Clone)]
+pub struct ToolProgress {
+    pub name: String,
+    /// Characters of arguments received so far.
+    pub chars: usize,
+    /// The first part of the arguments (enough to read a title from).
+    pub head: String,
+}
+
+/// Receives [`ToolProgress`] as a streamed tool call grows.
+#[derive(Clone)]
+pub struct ToolSink(pub Arc<dyn Fn(ToolProgress) + Send + Sync>);
+
+impl std::fmt::Debug for ToolSink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ToolSink")
+    }
+}
+
+/// Throttles the progress of streamed tool calls: one report when a call starts, then one for
+/// every few KB, so a 200 KB page doesn't send thousands of events.
+#[derive(Default)]
+pub struct ToolWatch {
+    calls: std::collections::HashMap<u64, WatchedCall>,
+}
+
+#[derive(Default)]
+struct WatchedCall {
+    name: String,
+    args: String,
+    reported: usize,
+    size: usize,
+    started: bool,
+}
+
+const WATCH_HEAD: usize = 600;
+const WATCH_STEP: usize = 2_048;
+
+impl ToolWatch {
+    pub fn feed(&mut self, sink: &Option<ToolSink>, index: u64, name: &str, args: &str) {
+        let Some(sink) = sink else { return };
+        let c = self.calls.entry(index).or_default();
+        c.name.push_str(name);
+        c.size += args.len();
+        if c.args.len() < WATCH_HEAD {
+            let room = WATCH_HEAD - c.args.len();
+            c.args.extend(args.chars().take(room));
+        }
+        if c.name.is_empty() {
+            return;
+        }
+        if !c.started || c.size >= c.reported + WATCH_STEP {
+            c.started = true;
+            c.reported = c.size;
+            (sink.0)(ToolProgress {
+                name: c.name.clone(),
+                chars: c.size,
+                head: c.args.clone(),
+            });
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct ChatRequest {
     pub model: String,
     pub system: String,
@@ -371,6 +435,10 @@ pub struct ChatRequest {
     pub agent_id: Option<String>,
     /// MCP servers (VMPal machines) a CLI provider should also hand to its CLI.
     pub mcp_extra: Vec<ExtraMcp>,
+    /// Told how far a tool call has got while the model is still writing it (the UI shows it).
+    pub on_tool: Option<ToolSink>,
+    /// The folder a CLI provider runs in (a coding group's repository or worktree).
+    pub cwd: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone)]

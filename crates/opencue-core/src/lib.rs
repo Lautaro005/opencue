@@ -5,13 +5,17 @@ pub mod automations;
 pub mod bridge;
 pub mod browser;
 pub mod catalog;
+pub mod coding;
 pub mod computer;
+pub mod council;
 pub mod dashboard;
 pub mod db;
 pub mod email;
 pub mod events;
 pub mod files;
+pub mod github;
 pub mod limits;
+pub mod local_models;
 pub mod mcp;
 pub mod mcp_server;
 pub mod memory;
@@ -19,11 +23,14 @@ pub mod messenger;
 pub mod models;
 pub mod office;
 pub mod paths;
+pub mod personaplex;
 pub mod providers;
 pub mod secrets;
 pub mod skills;
+pub mod space_setup;
 pub mod store;
 pub mod templates;
+pub mod terminal;
 pub mod tools;
 pub mod vmpal;
 pub mod voice;
@@ -82,6 +89,14 @@ pub struct Core {
     skills: skills::Skills,
     /// Recent terminal output per agent for the Computer view.
     computer_logs: Mutex<HashMap<String, String>>,
+    /// Model downloads in progress (Settings → Models → Local).
+    pub(crate) downloads: local_models::Downloads,
+    /// The PersonaPlex server (real-time voice) this app started, if any.
+    pub(crate) persona: personaplex::Runtime,
+    /// Terminal sessions (Claude Code, Codex… in a pseudo-terminal) that are running.
+    pub(crate) terms: terminal::Terminals,
+    /// The SPACE installation OpenCue runs for the user (Settings → Computers → SPACE).
+    pub(crate) space: space_setup::Setup,
 }
 
 impl Core {
@@ -134,6 +149,10 @@ impl Core {
             mention_hints: Mutex::new(HashMap::new()),
             skills: skills::Skills::new(paths.skills_dir()),
             computer_logs: Mutex::new(HashMap::new()),
+            downloads: Default::default(),
+            persona: Default::default(),
+            terms: Default::default(),
+            space: Default::default(),
         }))
     }
 
@@ -231,6 +250,37 @@ impl Core {
         let g = self.store.create_group(name, agent_ids).await?;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(g)
+    }
+
+    pub async fn create_group_kind(
+        &self,
+        name: &str,
+        agent_ids: &[String],
+        kind: &str,
+        config: serde_json::Value,
+    ) -> anyhow::Result<Group> {
+        let g = self
+            .store
+            .create_group_kind(name, agent_ids, kind, config)
+            .await?;
+        self.emit(CoreEvent::ThreadsChanged);
+        Ok(g)
+    }
+
+    pub async fn set_group_kind(&self, id: &str, kind: &str) -> anyhow::Result<()> {
+        self.store.set_group_kind(id, kind).await?;
+        self.emit(CoreEvent::ThreadsChanged);
+        Ok(())
+    }
+
+    pub async fn set_group_config(
+        &self,
+        id: &str,
+        config: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        self.store.set_group_config(id, &config).await?;
+        self.emit(CoreEvent::ThreadsChanged);
+        Ok(())
     }
 
     pub async fn delete_group(&self, id: &str) -> anyhow::Result<()> {

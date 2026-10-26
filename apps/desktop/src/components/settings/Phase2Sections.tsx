@@ -6,6 +6,7 @@ import { useStore } from "../../lib/store";
 import type { ComputerSettings, DockerSetup, Skill, SkillSummary, Voice, VoiceSettings, VmPalInfo } from "../../lib/types";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Select, Spinner, Textarea, Toggle } from "../ui";
 import { Card, CardRow, PageTitle } from "./SettingsModal";
+import { SpaceSetup } from "./SpaceSetup";
 
 export const SPACE_REPO = "https://github.com/perplexityai/SPACE";
 
@@ -208,10 +209,11 @@ export function ComputersSection() {
           </span>
         }
       >
-        <div className="flex items-start gap-3 px-4 pt-3.5 text-[12.5px] text-muted">
+        <div className="flex items-start gap-3 px-4 pt-3.5 pb-3 text-[12.5px] text-muted">
           <Server size={16} className="mt-0.5 shrink-0" />
           <span>{s.os === "linux" ? t("settings.computers.spaceHint") : t("settings.computers.spaceRemote")}</span>
         </div>
+        <SpaceSetup onChanged={() => void api.computerSettings().then(setS)} />
         <div className="grid grid-cols-2 gap-2 px-4 py-3">
           <Field label={t("settings.computers.spaceUrl")}>
             <Input value={s.space_url} placeholder="http://localhost:8080/v1" onChange={(e) => setS({ ...s, space_url: e.target.value })} onBlur={() => void save(s)} />
@@ -552,7 +554,7 @@ export function VoiceSection() {
   useEffect(() => {
     void api.voiceSettings().then((v) => {
       setS(v);
-      if (v.configured) void loadVoices();
+      if (v.has_key) void loadVoices();
     });
   }, []);
   if (!s) return null;
@@ -568,6 +570,30 @@ export function VoiceSection() {
     <>
       <PageTitle title={t("settings.voice.title")} hint={t("settings.voice.hint")} />
       <Card
+        title={t("settings.voice.engines")}
+        action={
+          <button onClick={() => useStore.getState().openSettings("models")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
+            {t("settings.voice.localModels")}
+          </button>
+        }
+      >
+        {(["stt_engine", "tts_engine"] as const).map((k) => (
+          <CardRow key={k} label={t(`settings.voice.${k}`)} hint={t(`settings.voice.${k}Hint`)}>
+            <Select
+              className="w-56"
+              value={s[k]}
+              onChange={(v) => void save({ ...s, [k]: v })}
+              options={[
+                { value: "auto", label: t("settings.voice.engineAuto") },
+                { value: "elevenlabs", label: "ElevenLabs" },
+                { value: "local", label: t("settings.voice.engineLocal") },
+              ]}
+            />
+          </CardRow>
+        ))}
+        <div className="px-4 py-2.5 text-[12px] text-muted">{s.configured ? t("settings.voice.ready") : t("settings.voice.notReady")}</div>
+      </Card>
+      <Card
         title="ElevenLabs"
         action={
           <button onClick={() => void openUrl("https://elevenlabs.io/app/settings/api-keys")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
@@ -575,9 +601,9 @@ export function VoiceSection() {
           </button>
         }
       >
-        <CardRow label={t("settings.voice.key")} hint={s.configured ? t("settings.voice.keySaved") : t("settings.voice.keyHint")}>
+        <CardRow label={t("settings.voice.key")} hint={s.has_key ? t("settings.voice.keySaved") : t("settings.voice.keyHint")}>
           <div className="flex gap-1.5">
-            <Input type="password" className="w-56" value={key} placeholder={s.configured ? "••••••••" : "sk_…"} onChange={(e) => setKey(e.target.value)} />
+            <Input type="password" className="w-56" value={key} placeholder={s.has_key ? "••••••••" : "sk_…"} onChange={(e) => setKey(e.target.value)} />
             <Button disabled={!key} onClick={() => void save(s, key).then(() => setKey(""))}>
               {t("common.save")}
             </Button>
@@ -589,7 +615,7 @@ export function VoiceSection() {
             value={s.voice_id}
             onChange={(v) => void save({ ...s, voice_id: v })}
             options={[{ value: "", label: "Rachel (default)" }, ...voices.map((v) => ({ value: v.id, label: v.name }))]}
-            disabled={!s.configured}
+            disabled={!s.has_key}
           />
         </CardRow>
         <CardRow label={t("settings.voice.autoSpeak")} hint={t("settings.voice.autoSpeakHint")}>

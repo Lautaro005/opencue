@@ -54,8 +54,20 @@ const agents: Agent[] = [
   agent("a6", "Research Assistant", "heart", "dots", "#f04848"),
 ];
 
+const terms: { id: string; tool: string; label: string; cwd: string; created_at: string; alive: boolean }[] = [{ id: "t1", tool: "claude", label: "Claude Code", cwd: "/Users/you/code/opencue", created_at: ago(30), alive: true }];
+const repoStatus = { dir: "/Users/you/code/opencue", is_repo: true, git_installed: true, gh_installed: true, gh_user: "Lautaro005", slug: "Lautaro005/opencue", branch: "feat/council", default_branch: "main", ahead: 2, behind: 0, changed_files: 3, additions: 48, deletions: 6, worktrees: [{ path: "/Users/you/code/opencue", branch: "feat/council" }, { path: "/Users/you/code/opencue/.opencue/worktrees/builder", branch: "agent/builder/work" }], error: null };
+const pulls = [
+  { number: 12, title: "Add the AI council", branch: "feat/council", base: "main", author: "Lautaro005", draft: false, review: "REVIEW_REQUIRED", checks: { total: 5, passed: 3, failed: 1, pending: 1, failing: ["test (windows-latest)"] }, url: "https://github.com/Lautaro005/opencue/pull/12", updated_at: new Date().toISOString(), additions: 420, deletions: 12, files: 9, mergeable: "MERGEABLE", auto_merge: false },
+  { number: 11, title: "Floating panels", branch: "feat/float", base: "main", author: "Lautaro005", draft: true, review: "", checks: { total: 5, passed: 5, failed: 0, pending: 0, failing: [] }, url: "https://github.com/Lautaro005/opencue/pull/11", updated_at: new Date().toISOString(), additions: 80, deletions: 4, files: 3, mergeable: "MERGEABLE", auto_merge: true },
+];
+const changes = {
+  files: [{ path: "src/council.rs", status: "A", additions: 40, deletions: 0 }, { path: "src/lib.rs", status: "M", additions: 6, deletions: 2 }, { path: "notes.md", status: "?", additions: 0, deletions: 0 }],
+  patch: "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub mod artifacts;\n+pub mod council;\n pub mod browser;\n-pub mod old;\n",
+  truncated: false,
+};
 const groups: Group[] = [
-  { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
+  { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), kind: "chat", config: {}, members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
+  { id: "g2", name: "Coding team", max_auto_turns: 8, created_at: ago(900), kind: "coding", config: { repo_dir: "/Users/you/code/opencue", worktrees: true }, members: [{ agent_id: "a3", is_owner: true }, { agent_id: "a4", is_owner: false }] },
 ];
 
 const souls: Record<string, string> = { a1: "Calm, precise and a little dry. Never pads an answer." };
@@ -228,11 +240,19 @@ const computer = { docker_desktop: true, desktop_image: "lscr.io/linuxserver/web
 const dockerState = { installed: true, running: true, image_ready: false, vm: "none" as const };
 let vmpalToml = "";
 const vmpalMachines = () => [...vmpalToml.matchAll(/^\[mcp_servers\.([^\]\s]+)\]/gm)].map((m) => ({ name: m[1], command: "/Applications/VMPal.app/Contents/Helpers/VMPalMachine.app/Contents/MacOS/VMPalMachine", args: ["--mcp", "E7D-preview"], env: {} }));
-const voice = { configured: false, voice_id: "", auto_speak: true };
+const MB = 1_000_000;
+const localModels = [
+  { id: "parakeet-v3", kind: "stt", label: "Parakeet TDT 0.6B v3 (8-bit)", size: 465 * MB, license: "CC-BY-4.0", source: "nvidia/parakeet-tdt-0.6b-v3", languages: ["en", "es", "fr", "de", "it", "pt"], note: "Fast on any CPU. 25 European languages.", ram_gb: 1.5, installed: false, supported: true },
+  { id: "whisper-small", kind: "stt", label: "Whisper small", size: 610 * MB, license: "MIT", source: "openai/whisper-small", languages: ["en", "es", "ja"], note: "99 languages, a good balance.", ram_gb: 1, installed: false, supported: true },
+  { id: "kokoro-v1", kind: "tts", label: "Kokoro 82M v1.0 (multilingual)", size: 330 * MB, license: "Apache-2.0", source: "hexgrad/Kokoro-82M", languages: ["en", "es", "fr"], note: "Natural voices in 8 languages.", ram_gb: 1, installed: false, supported: true },
+  { id: "sherpa-runtime", kind: "runtime", label: "sherpa-onnx runtime (v2.0.0)", size: 27 * MB, license: "Apache-2.0", source: "github.com/k2-fsa/sherpa-onnx", languages: [], note: "Runs the models.", ram_gb: 0, installed: false, supported: true },
+];
+const persona = { installed: false, installing: false, running: false, ready: false, has_token: false, lan: false, offload: false, gpu: null as string | null, python: "3.12", url: null as string | null, lan_url: null as string | null, qr_svg: null as string | null, log: "" };
+const voice = { configured: false, has_key: false, voice_id: "", auto_speak: true, stt_engine: "auto", tts_engine: "auto", local_stt: "", local_tts: "", local_voice: "" };
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.4.2-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.5.0-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -273,10 +293,23 @@ const handlers: Record<string, (a: Args) => unknown> = {
   delete_memory: ({ scope, agentId, id }) => void memory[scope === "global" ? "global" : agentId]?.splice(id - 1, 1),
   get_memory_raw: ({ scope, agentId }) => "# Memory\n\n" + (memory[scope === "global" ? "global" : agentId] ?? []).map((t) => `- ${t}`).join("\n"),
   set_memory_raw: ({ scope, agentId, text }) => void (memory[scope === "global" ? "global" : agentId] = String(text).split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2))),
+  coding_set_repo: ({ groupId, dir, worktrees }) => {
+    const g = groups.find((x) => x.id === groupId)!;
+    g.config = { ...g.config, repo_dir: String(dir), worktrees: !!worktrees };
+    return repoStatus;
+  },
+  github_status: () => repoStatus,
+  github_pulls: () => pulls,
+  github_changes: () => changes,
+  github_create_pr: () => "https://github.com/Lautaro005/opencue/pull/12",
+  github_merge_pr: ({ number, auto }) => (auto ? `Auto-merge is on for #${number}.` : `Merged #${number}.`),
+  github_comment: () => undefined,
+  coding_fix_ci: () => undefined,
+  set_group_kind: ({ id: gid, kind }) => { groups.find((g) => g.id === gid)!.kind = kind as Group["kind"]; emit({ type: "threads_changed" }); },
   list_groups: () => groups,
   get_group: ({ id }) => groups.find((g) => g.id === id) ?? null,
-  create_group: ({ name, agentIds }) => {
-    const g: Group = { id: id(), name, max_auto_turns: 6, created_at: ago(0), members: agentIds.map((a: string, i: number) => ({ agent_id: a, is_owner: i === 0 })) };
+  create_group: ({ name, agentIds, kind, config }) => {
+    const g: Group = { id: id(), name, max_auto_turns: 6, created_at: ago(0), kind: (kind as Group["kind"]) ?? "chat", config: (config as Group["config"]) ?? {}, members: agentIds.map((a: string, i: number) => ({ agent_id: a, is_owner: i === 0 })) };
     groups.push(g);
     emit({ type: "threads_changed" });
     return g;
@@ -514,9 +547,56 @@ const handlers: Record<string, (a: Args) => unknown> = {
   save_voice_settings: ({ settings, apiKey }) => Object.assign(voice, settings, { configured: voice.configured || !!apiKey }),
   list_voices: () => [{ id: "21m00Tcm4TlvDq8ikWAM", name: "Rachel" }, { id: "pNInz6obpgDQGcFmaJgB", name: "Adam" }],
   transcribe: () => "Hola, ¿qué tengo en la agenda hoy?",
-  speak: () => "",
+  space_status: () => ({ supported: false, state: "idle", step: "", checks: [], log: "", dir: "", managed: false, api_up: false }),
+  space_install: () => undefined,
+  space_start: () => undefined,
+  space_stop: () => undefined,
+  space_cancel: () => undefined,
+  term_tools: () => [{ key: "claude", label: "Claude Code", installed: true, install: "npm install -g @anthropic-ai/claude-code" }, { key: "codex", label: "Codex", installed: true, install: "npm install -g @openai/codex" }, { key: "grok", label: "Grok Build", installed: false, install: "see x.ai/cli" }, { key: "shell", label: "Terminal", installed: true, install: "" }],
+  term_list: () => terms,
+  term_create: ({ tool, cwd }) => {
+    const t = { id: id(), tool: String(tool), label: String(tool) === "codex" ? "Codex" : String(tool) === "shell" ? "Terminal" : "Claude Code", cwd: String(cwd), created_at: ago(0), alive: true };
+    terms.push(t);
+    emit({ type: "threads_changed" });
+    return t;
+  },
+  term_restart: () => undefined,
+  term_write: () => undefined,
+  term_resize: () => undefined,
+  term_snapshot: () => btoa("\x1b[1;38;5;208m* Claude Code\x1b[0m (browser preview: terminals run in the desktop app)\r\n\r\n> "),
+  term_kill: () => undefined,
+  term_close: ({ id: tid }) => { terms.splice(terms.findIndex((t) => t.id === tid), 1); emit({ type: "threads_changed" }); },
+  term_rename: () => undefined,
+  home_dir: () => "/Users/you",
+  save_canvas: ({ id }) => { throw new Error("canvas editing works in the desktop app (" + id + ")"); },
+  speak: () => ({ mime: "audio/wav", data: "" }),
+  models_status: () => localModels,
+  model_install: ({ id }) => {
+    const m = localModels.find((x) => x.id === id);
+    if (!m) return;
+    let done = 0;
+    const timer = setInterval(() => {
+      done += m.size / 8;
+      if (done >= m.size) {
+        clearInterval(timer);
+        m.installed = true;
+        if (id !== "sherpa-runtime") localModels.find((x) => x.id === "sherpa-runtime")!.installed = true;
+        emit({ type: "model_progress", id: String(id), phase: "ready", done: 0, total: 0, error: null });
+      } else emit({ type: "model_progress", id: String(id), phase: "downloading", done, total: m.size, error: null });
+    }, 350);
+  },
+  model_cancel: () => undefined,
+  model_delete: ({ id }) => void (localModels.find((x) => x.id === id)!.installed = false),
+  personaplex_status: () => persona,
+  personaplex_configure: ({ lan, offload }) => void Object.assign(persona, { lan, offload }),
+  personaplex_install: () => void Object.assign(persona, { installed: true }),
+  personaplex_start: () => void Object.assign(persona, { running: true, ready: true, url: "https://localhost:8998" }),
+  personaplex_stop: () => void Object.assign(persona, { running: false, ready: false, url: null }),
   usage: () => agents.map((a, i) => ({ agent_id: a.id, agent_name: a.name, messages: 12 - i * 3, input_tokens: 48210 - i * 9000, output_tokens: 9120 - i * 2000 })),
 };
+
+// Lets the browser preview be driven from a test or the console.
+(window as unknown as { __emit: typeof emit }).__emit = emit;
 
 export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
   const h = handlers[cmd];

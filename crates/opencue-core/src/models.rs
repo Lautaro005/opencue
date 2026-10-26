@@ -128,7 +128,20 @@ pub struct Group {
     pub max_auto_turns: i64,
     pub members: Vec<GroupMember>,
     pub created_at: String,
+    /// `chat` (the default), `council` (every question goes through the AI council) or `coding`
+    /// (a team working on a repository, with its pull requests and changes beside the chat).
+    #[serde(default = "default_kind")]
+    pub kind: String,
+    /// What the kind needs: the repository folder and worktree choice of a coding group, the chair of a council.
+    #[serde(default)]
+    pub config: serde_json::Value,
 }
+
+fn default_kind() -> String {
+    "chat".into()
+}
+
+pub const GROUP_KINDS: [&str; 3] = ["chat", "council", "coding"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ToolCall {
@@ -204,6 +217,9 @@ pub struct ArtifactRef {
     pub version: u32,
     pub kind: String,
     pub title: String,
+    /// A canvas: opens in the editable canvas panel.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub canvas: bool,
 }
 
 impl Attachment {

@@ -106,14 +106,16 @@ export function ArtifactCard({ a }: { a: Attachment }) {
   const { t } = useTranslation();
   const openArtifact = useStore((s) => s.openArtifact);
   const art = a.artifact!;
-  const open = () => openArtifact(art.id, art.version);
+  const open = () => openArtifact(art.id, art.version, art.canvas);
   return (
     <div
       role="button"
       tabIndex={0}
       onClick={open}
       onKeyDown={(e) => e.key === "Enter" && open()}
-      className="group/file flex w-[300px] max-w-full cursor-pointer items-center gap-3 rounded-2xl border border-line bg-bg px-3 py-3 text-left transition-colors hover:bg-hover"
+      data-busy="false"
+      data-tip={t("artifact.open")}
+      className="art-card group/file flex w-[300px] max-w-full cursor-pointer items-center gap-3 px-3 py-3 text-left transition-colors hover:bg-hover"
     >
       <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
         <ArtifactIcon kind={art.kind} />
@@ -121,7 +123,7 @@ export function ArtifactCard({ a }: { a: Attachment }) {
       <span className="min-w-0 flex-1">
         <span className="block truncate text-[13.5px] font-medium">{art.title}</span>
         <span className="block truncate text-[11.5px] text-muted">
-          {KIND_LABEL[art.kind]} · {t("artifact.version", { n: art.version })} · {formatBytes(a.size)}
+          {art.canvas ? t("artifact.canvas") : KIND_LABEL[art.kind]} · {t("artifact.version", { n: art.version })} · {formatBytes(a.size)}
         </span>
       </span>
       <FileActions a={a} />
