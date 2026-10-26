@@ -1186,6 +1186,27 @@ pub async fn github_pulls(
 }
 
 #[tauri::command]
+pub async fn unqueue_message(
+    state: State<'_, AppState>,
+    thread_id: String,
+    message_id: String,
+) -> R<()> {
+    state
+        .core
+        .unqueue_message(&thread_id, &message_id)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn coding_activity(
+    state: State<'_, AppState>,
+    group_id: String,
+) -> R<Vec<opencue_core::coding::Lane>> {
+    state.core.coding_activity(&group_id).await.map_err(e)
+}
+
+#[tauri::command]
 pub async fn github_changes(
     state: State<'_, AppState>,
     group_id: String,

@@ -1,4 +1,4 @@
-import { api, pickFolder } from "./api";
+import { api } from "./api";
 import { greetNewAgent } from "./greet";
 import { isConfigured } from "./models";
 import { AGENT_TEMPLATES, templateAvatar, type AgentTemplate, type GroupTemplate } from "./templates";
@@ -89,8 +89,8 @@ export async function createAgentFromTemplate(t: AgentTemplate, opts: { greet?: 
   return agent;
 }
 
-/** Create a group's agents (the ones the user doesn't have yet) and the group itself. */
-export async function createGroupFromTemplate(g: GroupTemplate): Promise<string> {
+/** Create a group's agents (the ones the user doesn't have yet) and the group itself. A coding team gets its project folder from `opts.dir` (made a git repository if it isn't one). */
+export async function createGroupFromTemplate(g: GroupTemplate, opts: { name?: string; dir?: string } = {}): Promise<string> {
   const existing = Object.values(useStore.getState().agents);
   const ids: string[] = [];
   for (const key of g.members) {
@@ -99,12 +99,8 @@ export async function createGroupFromTemplate(g: GroupTemplate): Promise<string>
     const have = existing.find((a) => a.name.toLowerCase() === t.name.toLowerCase());
     ids.push(have ? have.id : (await createAgentFromTemplate(t, { greet: false })).id);
   }
-  const group = await api.createGroup(g.name, ids, g.kind ?? "chat");
-  // A coding team needs its repository: ask for the folder right away (it can also be done later).
-  if (g.kind === "coding") {
-    const dir = await pickFolder();
-    if (dir) await api.codingSetRepo(group.id, dir, true).catch((e) => useStore.getState().showToast(String(e)));
-  }
+  const group = await api.createGroup(opts.name?.trim() || g.name, ids, g.kind ?? "chat");
+  if (g.kind === "coding" && opts.dir) await api.codingSetRepo(group.id, opts.dir, true);
   return group.id;
 }
 

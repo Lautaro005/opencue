@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check } from "lucide-react";
+import { Check, FolderOpen } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, pickFolder } from "../../lib/api";
 import { greetNewAgent } from "../../lib/greet";
-import type { Avatar, GroupKind } from "../../lib/types";
+import type { Avatar, GroupKind, TermTool } from "../../lib/types";
+import { CLI_AGENT_TOOLS, createCliAgent } from "../../lib/coding";
+import { createGroupFromTemplate } from "../../lib/templateActions";
+import { TermIcon } from "../terminal/TermIcon";
 import { cx } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
 import { AvatarPickerDialog, randomAvatar } from "../panel/AvatarPicker";
 import { ModelPicker } from "../ModelPicker";
 import { isConfigured } from "../../lib/models";
-import { Button, DialogHeader, Field, Input, Modal, Textarea } from "../ui";
+import { Button, DialogHeader, Field, Input, Modal, Spinner, Textarea } from "../ui";
 
 export function CreateAgentDialog() {
   const { t } = useTranslation();
@@ -181,6 +184,135 @@ export function CreateGroupDialog() {
             {t("common.create")}
           </Button>
         </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** A coding team from a template: the name of the app and its project folder, in a floating window. */
+export function CreateCodingDialog() {
+  const { t } = useTranslation();
+  const open = useStore((s) => s.dialog === "create-coding");
+  const template = useStore((s) => s.codingTemplate);
+  const close = () => useStore.getState().setDialog(null);
+  const [name, setName] = useState("");
+  const [dir, setDir] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setName("");
+      setDir("");
+    }
+  }, [open]);
+
+  const browse = async () => {
+    const d = await pickFolder();
+    if (!d) return;
+    setDir(d);
+    // The folder's own name is a fair name for the app.
+    if (!name.trim()) setName(d.split(/[\\/]/).filter(Boolean).slice(-1)[0] ?? "");
+  };
+
+  const submit = async () => {
+    if (!template || !name.trim() || !dir.trim()) return;
+    setBusy(true);
+    try {
+      const id = await createGroupFromTemplate(template, { name, dir: dir.trim() });
+      await useStore.getState().refresh();
+      useStore.getState().select(id);
+      close();
+    } catch (e) {
+      useStore.getState().showToast(String(e));
+      await useStore.getState().refresh();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open={open && !!template} onClose={close} className="w-[480px]" label={t("coding.newTitle")}>
+      <DialogHeader title={t("coding.newTitle")} subtitle={t("coding.newHint")} onClose={close} />
+      <div className="space-y-4 px-6 pt-3 pb-5">
+        <Field label={t("coding.appName")}>
+          <Input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={t("coding.appNamePlaceholder")} onKeyDown={(e) => e.key === "Enter" && void submit()} />
+        </Field>
+        <Field label={t("coding.projectFolder")}>
+          <div className="flex items-center gap-2">
+            <Input value={dir} onChange={(e) => setDir(e.target.value)} placeholder="/Users/you/projects/my-app" className="font-mono text-[12.5px]" />
+            <Button onClick={() => void browse()}>
+              <FolderOpen size={14} /> {t("coding.choose")}
+            </Button>
+          </div>
+          <p className="mt-1.5 text-[12px] leading-snug text-muted">{t("coding.gitAuto")}</p>
+        </Field>
+        <div className="flex justify-end gap-2 pt-1">
+          <Button onClick={close}>{t("common.cancel")}</Button>
+          <Button variant="primary" onClick={() => void submit()} disabled={!name.trim() || !dir.trim() || busy}>
+            {busy && <Spinner size={13} />} {t("common.create")}
+          </Button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+/** Agents that run on a coding CLI (Claude Code, Codex…), grouped in one floating window. */
+export function CliAgentsDialog() {
+  const { t } = useTranslation();
+  const open = useStore((s) => s.dialog === "cli-agents");
+  const close = () => useStore.getState().setDialog(null);
+  const [tools, setTools] = useState<TermTool[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setTools(null);
+    void api.termTools().then(setTools).catch(() => setTools([]));
+  }, [open]);
+
+  const create = async (c: (typeof CLI_AGENT_TOOLS)[number]) => {
+    setBusy(c.tool);
+    try {
+      const agent = await createCliAgent(c.kind, c.label);
+      await useStore.getState().refresh();
+      useStore.getState().select(agent.id);
+      close();
+    } catch (e) {
+      useStore.getState().showToast(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Modal open={open} onClose={close} className="w-[460px]" label={t("cli.title")}>
+      <DialogHeader title={t("cli.title")} subtitle={t("cli.hint")} onClose={close} />
+      <div className="space-y-1.5 px-6 pt-3 pb-5">
+        {tools === null ? (
+          <div className="flex justify-center py-8">
+            <Spinner />
+          </div>
+        ) : (
+          CLI_AGENT_TOOLS.map((c) => {
+            const info = tools.find((x) => x.key === c.tool);
+            const installed = !!info?.installed;
+            return (
+              <button
+                key={c.tool}
+                onClick={() => (installed ? void create(c) : useStore.getState().showToast(t("terminal.notInstalled", { name: c.label, how: info?.install || "—" })))}
+                disabled={busy !== null}
+                className={cx("flex w-full items-center gap-3 rounded-xl border border-line px-3.5 py-2.5 text-left transition-colors", installed ? "hover:border-accent hover:bg-hover" : "opacity-55")}
+              >
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#17171a] shadow-sm">{busy === c.tool ? <Spinner size={15} /> : <TermIcon tool={c.tool} size={18} />}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[14px] font-medium">{c.label}</span>
+                  <span className="block truncate text-[12px] text-muted">{installed ? t("cli.ready") : t("cli.notInstalled", { how: info?.install || "—" })}</span>
+                </span>
+              </button>
+            );
+          })
+        )}
       </div>
     </Modal>
   );

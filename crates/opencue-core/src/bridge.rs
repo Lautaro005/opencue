@@ -31,7 +31,15 @@ pub struct Question {
     pub title: String,
     pub body: String,
     #[serde(default)]
-    pub options: Vec<String>,
+    pub options: Vec<QOption>,
+}
+
+/// One answer an agent offers: a short title and a line explaining what choosing it means.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct QOption {
+    pub title: String,
+    #[serde(default)]
+    pub description: String,
 }
 
 pub const APPROVED: &str = "approved";
@@ -71,8 +79,23 @@ fn row_to_question(id: &str, agent_id: &str, thread_id: &str, payload: &str) -> 
             .and_then(Value::as_array)
             .map(|a| {
                 a.iter()
-                    .filter_map(|o| o.as_str().map(str::to_string))
-                    .filter(|o| !o.trim().is_empty())
+                    .filter_map(|o| match o {
+                        Value::String(t) => Some(QOption {
+                            title: t.clone(),
+                            description: String::new(),
+                        }),
+                        Value::Object(_) => Some(QOption {
+                            title: o.get("title")?.as_str()?.to_string(),
+                            description: o
+                                .get("description")
+                                .and_then(Value::as_str)
+                                .unwrap_or_default()
+                                .to_string(),
+                        }),
+                        _ => None,
+                    })
+                    .filter(|o| !o.title.trim().is_empty())
+                    .take(4)
                     .collect()
             })
             .unwrap_or_default(),
@@ -89,6 +112,14 @@ impl Core {
         token: Option<&CancellationToken>,
     ) -> anyhow::Result<String> {
         // A WhatsApp turn has no chat the owner is watching: its cards go to the agent's own chat.
+        // A CLI agent's own tools ask without knowing the chat: put the card where it is working,
+        // so a permission in a group shows up in the group.
+        let working_in = if thread_id.is_empty() {
+            self.active_threads.lock().unwrap().get(&agent.id).cloned()
+        } else {
+            None
+        };
+        let thread_id = working_in.as_deref().unwrap_or(thread_id);
         let thread_id = if crate::messenger::is_wa_thread(thread_id) {
             agent.id.as_str()
         } else {

@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Send, ShieldAlert, X } from "lucide-react";
+import { Check, CircleHelp, Pencil, Send, ShieldAlert, X } from "lucide-react";
 import { AvatarView } from "../AvatarView";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 
+type Option = { title: string; description: string };
+
 /**
- * What an agent shows when it is waiting for the user: a yellow, animated frame with a title, the
- * request underneath, and either Accept / Reject or a field to answer in (plus any options).
+ * What an agent shows when it is waiting for the user. A permission is a yellow, animated frame with
+ * Accept / Reject. A question is a card: the question, a line under it, up to three answers (a title
+ * and what choosing it means) and an "Other" field to write your own.
  */
 export function AskCard({
   title,
@@ -21,25 +24,26 @@ export function AskCard({
   title: string;
   body: string;
   permission: boolean;
-  options?: string[];
+  options?: Option[];
   onAccept?: () => void;
   onReject?: () => void;
   onAnswer?: (text: string) => void;
 }) {
   const { t } = useTranslation();
   const [text, setText] = useState("");
+  const [other, setOther] = useState(options.length === 0);
   const submit = (v: string) => {
     const a = v.trim();
     if (a) onAnswer?.(a);
   };
-  return (
-    <div role="alertdialog" aria-label={title} className="ask-card animate-pop w-full max-w-[520px] px-4 py-3.5 text-[13.5px]">
-      <div className="flex items-center gap-2 font-semibold text-ink">
-        <ShieldAlert size={16} className="shrink-0 text-warning" />
-        <span className="min-w-0 truncate">{title}</span>
-      </div>
-      <p className="selectable mt-1.5 whitespace-pre-wrap break-words leading-relaxed text-ink/90">{body}</p>
-      {permission ? (
+  if (permission) {
+    return (
+      <div role="alertdialog" aria-label={title} className="ask-card animate-pop w-full max-w-[520px] px-4 py-3.5 text-[13.5px]">
+        <div className="flex items-center gap-2 font-semibold text-ink">
+          <ShieldAlert size={16} className="shrink-0 text-warning" />
+          <span className="min-w-0 truncate">{title}</span>
+        </div>
+        <p className="selectable mt-1.5 whitespace-pre-wrap break-words leading-relaxed text-ink/90">{body}</p>
         <div className="mt-3 flex gap-2">
           <button onClick={onAccept} className="inline-flex items-center gap-1 rounded-lg bg-accent px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
             <Check size={14} /> {t("ask.accept")}
@@ -48,22 +52,34 @@ export function AskCard({
             <X size={14} /> {t("ask.reject")}
           </button>
         </div>
-      ) : (
-        <div className="mt-3 space-y-2">
-          {options.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {options.map((o) => (
-                <button key={o} onClick={() => submit(o)} className="rounded-full border border-warning/60 bg-elevated px-3 py-1 text-[12.5px] font-medium hover:bg-hover">
-                  {o}
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="flex items-end gap-2">
+      </div>
+    );
+  }
+  return (
+    <div role="alertdialog" aria-label={title} className="ask-card animate-pop w-full max-w-[560px] px-4 py-4 text-[13.5px]">
+      <div className="flex items-start gap-2.5">
+        <CircleHelp size={18} className="mt-0.5 shrink-0 text-warning" />
+        <div className="min-w-0">
+          <p className="selectable text-[15px] leading-snug font-semibold text-ink">{title}</p>
+          {body && <p className="selectable mt-1 whitespace-pre-wrap break-words text-[13px] leading-relaxed text-muted">{body}</p>}
+        </div>
+      </div>
+      <div className="mt-3.5 space-y-1.5">
+        {options.slice(0, 3).map((o, i) => (
+          <button key={o.title} onClick={() => submit(o.title)} className="group/opt flex w-full items-start gap-3 rounded-xl border border-line bg-elevated px-3.5 py-2.5 text-left transition-colors hover:border-warning/70 hover:bg-hover">
+            <span className="mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-hover text-[11px] font-semibold text-muted group-hover/opt:bg-warning/20 group-hover/opt:text-ink">{i + 1}</span>
+            <span className="min-w-0">
+              <span className="block text-[13.5px] font-medium text-ink">{o.title}</span>
+              {o.description && <span className="mt-0.5 block text-[12.5px] leading-snug text-muted">{o.description}</span>}
+            </span>
+          </button>
+        ))}
+        {other ? (
+          <div className="flex items-end gap-2 pt-0.5">
             <textarea
               value={text}
               rows={1}
-              autoFocus
+              autoFocus={options.length > 0}
               onChange={(e) => setText(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -71,19 +87,19 @@ export function AskCard({
                   submit(text);
                 }
               }}
-              placeholder={t("ask.placeholder")}
+              placeholder={t("ask.other")}
               className="min-h-9 flex-1 resize-none rounded-lg border border-line bg-elevated px-3 py-2 text-[13.5px] outline-none focus:border-warning"
             />
-            <button
-              onClick={() => submit(text)}
-              disabled={!text.trim()}
-              className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent px-3 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-            >
+            <button onClick={() => submit(text)} disabled={!text.trim()} className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent px-3 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40">
               <Send size={14} /> {t("ask.send")}
             </button>
           </div>
-        </div>
-      )}
+        ) : (
+          <button onClick={() => setOther(true)} className="flex w-full items-center gap-3 rounded-xl border border-dashed border-line-strong px-3.5 py-2.5 text-left text-[13.5px] text-muted hover:bg-hover hover:text-ink">
+            <Pencil size={14} className="shrink-0" /> {t("ask.other")}
+          </button>
+        )}
+      </div>
     </div>
   );
 }

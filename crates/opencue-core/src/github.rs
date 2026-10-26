@@ -133,6 +133,26 @@ pub fn parse_numstat(numstat: &str) -> (usize, u64, u64) {
     (files, add, del)
 }
 
+/// `git init` with a first (empty) commit on `main`, so branches and worktrees can be made.
+pub async fn init_repo(dir: &Path) -> anyhow::Result<()> {
+    git(dir, &["init", "-b", "main"]).await?;
+    git(
+        dir,
+        &[
+            "-c",
+            "user.name=OpenCue",
+            "-c",
+            "user.email=opencue@localhost",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "Start the project",
+        ],
+    )
+    .await?;
+    Ok(())
+}
+
 pub async fn status(dir: &Path) -> RepoStatus {
     let mut s = RepoStatus {
         dir: dir.display().to_string(),
@@ -412,6 +432,39 @@ pub async fn changes(dir: &Path) -> anyhow::Result<Changes> {
         patch,
         truncated,
     })
+}
+
+/// The changed files of a working tree with their line counts, without the patch.
+pub async fn changed_files(dir: &Path) -> Vec<FileChange> {
+    let numstat = git(dir, &["diff", "HEAD", "--numstat"])
+        .await
+        .unwrap_or_default();
+    let Ok(porcelain) = git(dir, &["status", "--porcelain"]).await else {
+        return vec![];
+    };
+    let mut counts = std::collections::HashMap::new();
+    for l in numstat.lines() {
+        let mut p = l.split('\t');
+        if let (Some(a), Some(d), Some(path)) = (p.next(), p.next(), p.next()) {
+            counts.insert(
+                path.to_string(),
+                (a.parse::<u64>().unwrap_or(0), d.parse::<u64>().unwrap_or(0)),
+            );
+        }
+    }
+    porcelain
+        .lines()
+        .filter_map(porcelain_entry)
+        .map(|(status, path)| {
+            let (additions, deletions) = counts.get(&path).copied().unwrap_or((0, 0));
+            FileChange {
+                path,
+                status,
+                additions,
+                deletions,
+            }
+        })
+        .collect()
 }
 
 /// A new pull request from the current branch (it is pushed first). Returns its address.

@@ -58,8 +58,18 @@ export const CODING_CLIS: { kind: ProviderKind; label: string }[] = [
   { kind: "muse_cli", label: "Muse Code" },
 ];
 
-/** A new agent backed by a command-line coding tool, added to a coding group. */
-export async function addCodingAgent(group: Group, kind: ProviderKind, label: string): Promise<Agent> {
+/** The command-line coding tools an agent can run on (their terminal tool key → provider). */
+export const CLI_AGENT_TOOLS: { tool: string; kind: ProviderKind; label: string }[] = [
+  { tool: "claude", kind: "claude_cli", label: "Claude Code" },
+  { tool: "codex", kind: "codex_cli", label: "Codex" },
+  { tool: "grok", kind: "grok_cli", label: "Grok Build" },
+  { tool: "agy", kind: "antigravity_cli", label: "Gemini (Antigravity)" },
+  { tool: "vibe", kind: "vibe_cli", label: "Mistral Vibe" },
+  { tool: "muse", kind: "muse_cli", label: "Muse Code" },
+];
+
+/** A new agent that runs on a command-line coding tool (it keeps that tool's own harness). */
+export async function createCliAgent(kind: ProviderKind, label: string, instructions?: string): Promise<Agent> {
   const st = useStore.getState();
   let provider = st.providers.find((p) => p.kind === kind);
   if (!provider) {
@@ -69,14 +79,23 @@ export async function addCodingAgent(group: Group, kind: ProviderKind, label: st
   const taken = new Set(Object.values(useStore.getState().agents).map((a) => a.name.toLowerCase()));
   let name = label;
   for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${label} ${n}`;
-  const agent = await api.createAgent({
+  return api.createAgent({
     name,
     avatar: randomAvatar(),
     provider_id: provider.id,
     model: provider.default_model || "default",
-    instructions: `You are ${label}, a coding agent on a team that works on one repository. Make real changes in your working folder with your tools, run the project's checks before you report, and follow the team protocol (ACK / STATUS / BLOCKED / DONE) from your system prompt. Work on a branch of your own and propose changes as a pull request; never push to the default branch.`,
+    instructions: instructions ?? `You are ${label}, a coding agent. Make real changes in your working folder with your tools, run the project's checks before you report, and say plainly what you did and what you did not verify.`,
   });
+}
+
+/** A new agent backed by a command-line coding tool, added to a coding group. */
+export async function addCodingAgent(group: Group, kind: ProviderKind, label: string): Promise<Agent> {
+  const agent = await createCliAgent(
+    kind,
+    label,
+    `You are ${label}, a coding agent on a team that works on one repository. Make real changes in your working folder with your tools, run the project's checks before you report, and follow the team protocol (ACK / STATUS / BLOCKED / DONE) from your system prompt. Work on a branch of your own and propose changes as a pull request; never push to the default branch.`,
+  );
   await api.addGroupMember(group.id, agent.id);
-  await st.refresh();
+  await useStore.getState().refresh();
   return agent;
 }

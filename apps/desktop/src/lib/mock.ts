@@ -152,9 +152,9 @@ async function simulateReply(threadId: string, text: string) {
         thread_id: threadId,
         agent_id: threadId,
         kind: permission ? "permission" : "question",
-        title: "",
-        body: permission ? "Run COMPOSIO_SEARCH_TOOLS on Trello to find the cards in the brain column of cue-agents." : "Which Trello board should I read, cue-agents or personal?",
-        options: permission ? [] : ["cue-agents", "personal"],
+        title: permission ? "" : "Which Trello board should I read?",
+        body: permission ? "Run COMPOSIO_SEARCH_TOOLS on Trello to find the cards in the brain column of cue-agents." : "There are two boards with a brain column.",
+        options: permission ? [] : [{ title: "cue-agents", description: "The team board, where the brain column is used the most." }, { title: "personal", description: "Your own board, with fewer cards." }],
       },
     });
     return;
@@ -301,6 +301,11 @@ const handlers: Record<string, (a: Args) => unknown> = {
   github_status: () => repoStatus,
   github_pulls: () => pulls,
   github_changes: () => changes,
+  unqueue_message: ({ threadId, messageId }) => { const i = messages.findIndex((x) => x.id === messageId); if (i >= 0) messages.splice(i, 1); emit({ type: "messages_removed", thread_id: String(threadId), ids: [String(messageId)] }); },
+  coding_activity: ({ groupId }) => {
+    const g = groups.find((x) => x.id === groupId);
+    return (g?.members ?? []).slice(0, 2).map((mm, i) => ({ agent_ids: [mm.agent_id], dir: `/work/${i}`, branch: `agent/${i}`, files: changes.files.slice(0, 3) }));
+  },
   github_create_pr: () => "https://github.com/Lautaro005/opencue/pull/12",
   github_merge_pr: ({ number, auto }) => (auto ? `Auto-merge is on for #${number}.` : `Merged #${number}.`),
   github_comment: () => undefined,

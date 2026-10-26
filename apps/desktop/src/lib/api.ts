@@ -45,7 +45,7 @@ import type {
   GroupKind,
   RepoStatus,
   Pull,
-  Changes,
+  Changes, Lane,
   PersonaStatus,
   SpeechAudio,
 } from "./types";
@@ -107,6 +107,8 @@ export const api = {
   githubStatus: (groupId: string) => invokeImpl<RepoStatus>("github_status", { groupId }),
   githubPulls: (groupId: string, prState = "open") => invokeImpl<Pull[]>("github_pulls", { groupId, prState }),
   githubChanges: (groupId: string) => invokeImpl<Changes>("github_changes", { groupId }),
+  unqueueMessage: (threadId: string, messageId: string) => invokeImpl<void>("unqueue_message", { threadId, messageId }),
+  codingActivity: (groupId: string) => invokeImpl<Lane[]>("coding_activity", { groupId }),
   githubCreatePr: (groupId: string, title: string, body: string, draft: boolean, base?: string) => invokeImpl<string>("github_create_pr", { groupId, title, body, base, draft }),
   githubMergePr: (groupId: string, number: number, method: string, auto: boolean) => invokeImpl<string>("github_merge_pr", { groupId, number, method, auto }),
   githubComment: (groupId: string, number: number, body: string) => invokeImpl<void>("github_comment", { groupId, number, body }),

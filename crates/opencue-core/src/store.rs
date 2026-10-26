@@ -508,6 +508,27 @@ impl Store {
         Ok(())
     }
 
+    /// Messages the user wrote while the agents were busy; they wait here until an agent reads them.
+    pub async fn queued_messages(&self, thread_id: &str) -> anyhow::Result<Vec<Message>> {
+        let rows = sqlx::query(
+            "SELECT *, rowid AS seq FROM messages WHERE thread_id = ? AND role = 'user' AND status = 'queued' ORDER BY created_at, rowid",
+        )
+        .bind(thread_id)
+        .fetch_all(&self.db)
+        .await?;
+        Ok(rows.iter().map(message_from_row).collect())
+    }
+
+    /// A queued message was read: it joins the conversation now, at the end.
+    pub async fn deliver_message(&self, id: &str, created_at: &str) -> anyhow::Result<()> {
+        sqlx::query("UPDATE messages SET status = 'done', created_at = ? WHERE id = ? AND status = 'queued'")
+            .bind(created_at)
+            .bind(id)
+            .execute(&self.db)
+            .await?;
+        Ok(())
+    }
+
     pub async fn delete_messages(&self, ids: &[String]) -> anyhow::Result<()> {
         for id in ids {
             sqlx::query("DELETE FROM messages WHERE id = ?")

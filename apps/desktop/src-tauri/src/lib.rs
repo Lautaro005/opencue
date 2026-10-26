@@ -326,6 +326,8 @@ pub fn run() {
             commands::github_status,
             commands::github_pulls,
             commands::github_changes,
+            commands::coding_activity,
+            commands::unqueue_message,
             commands::github_create_pr,
             commands::github_merge_pr,
             commands::github_comment,
