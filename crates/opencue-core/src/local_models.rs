@@ -818,7 +818,6 @@ impl Core {
             .kill_on_drop(true);
         #[cfg(windows)]
         {
-            use std::os::windows::process::CommandExt;
             cmd.creation_flags(0x08000000);
         }
         let out = tokio::time::timeout(Duration::from_secs(180), cmd.output())

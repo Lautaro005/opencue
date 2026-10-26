@@ -30,6 +30,7 @@ const LOG_LINES: usize = 500;
 /// A token is renewed after this long (SPACE sessions are not documented to live forever).
 const TOKEN_MAX_AGE_SECS: i64 = 6 * 3600;
 const REPO: &str = "https://github.com/perplexityai/SPACE.git";
+#[cfg(unix)]
 const TOOLS: [&str; 6] = ["git", "curl", "tar", "openssl", "python3", "ssh-keygen"];
 
 #[derive(Default)]
@@ -132,6 +133,7 @@ pub fn blockers(checks: &[Check]) -> Vec<&Check> {
     checks.iter().filter(|c| !c.ok).collect()
 }
 
+#[cfg(unix)]
 async fn ok(program: &str, args: &[&str]) -> bool {
     let mut cmd = Command::new(program);
     cmd.args(args)
@@ -147,6 +149,7 @@ async fn ok(program: &str, args: &[&str]) -> bool {
 }
 
 pub async fn gather_facts() -> Facts {
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut f = Facts {
         os: std::env::consts::OS.into(),
         arch: std::env::consts::ARCH.into(),
