@@ -595,6 +595,9 @@ const handlers: Record<string, (a: Args) => unknown> = {
   usage: () => agents.map((a, i) => ({ agent_id: a.id, agent_name: a.name, messages: 12 - i * 3, input_tokens: 48210 - i * 9000, output_tokens: 9120 - i * 2000 })),
 };
 
+// Lets the browser preview be driven from a test or the console.
+(window as unknown as { __emit: typeof emit }).__emit = emit;
+
 export async function invoke<T>(cmd: string, args: Args = {}): Promise<T> {
   const h = handlers[cmd];
   if (!h) throw new Error(`mock: unknown command ${cmd}`);
