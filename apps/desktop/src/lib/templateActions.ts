@@ -1,4 +1,4 @@
-import { api } from "./api";
+import { api, pickFolder } from "./api";
 import { greetNewAgent } from "./greet";
 import { isConfigured } from "./models";
 import { AGENT_TEMPLATES, templateAvatar, type AgentTemplate, type GroupTemplate } from "./templates";
@@ -99,7 +99,12 @@ export async function createGroupFromTemplate(g: GroupTemplate): Promise<string>
     const have = existing.find((a) => a.name.toLowerCase() === t.name.toLowerCase());
     ids.push(have ? have.id : (await createAgentFromTemplate(t, { greet: false })).id);
   }
-  const group = await api.createGroup(g.name, ids);
+  const group = await api.createGroup(g.name, ids, g.kind ?? "chat");
+  // A coding team needs its repository: ask for the folder right away (it can also be done later).
+  if (g.kind === "coding") {
+    const dir = await pickFolder();
+    if (dir) await api.codingSetRepo(group.id, dir, true).catch((e) => useStore.getState().showToast(String(e)));
+  }
   return group.id;
 }
 

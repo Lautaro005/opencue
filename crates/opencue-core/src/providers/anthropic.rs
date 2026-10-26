@@ -290,6 +290,7 @@ mod tests {
             agent_id: None,
             mcp_extra: vec![],
             on_tool: None,
+            cwd: None,
         };
         let msgs = to_anthropic_messages(&req);
         assert_eq!(msgs.len(), 3);

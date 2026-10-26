@@ -77,12 +77,74 @@ export interface GroupMember {
   is_owner: boolean;
 }
 
+export type GroupKind = "chat" | "council" | "coding";
+
 export interface Group {
   id: string;
   name: string;
   max_auto_turns: number;
   members: GroupMember[];
   created_at: string;
+  kind: GroupKind;
+  /** A coding group's `repo_dir` and `worktrees`. */
+  config: { repo_dir?: string; worktrees?: boolean; [key: string]: unknown };
+}
+
+export interface RepoStatus {
+  dir: string;
+  is_repo: boolean;
+  git_installed: boolean;
+  gh_installed: boolean;
+  gh_user: string | null;
+  slug: string | null;
+  branch: string | null;
+  default_branch: string | null;
+  ahead: number;
+  behind: number;
+  changed_files: number;
+  additions: number;
+  deletions: number;
+  worktrees: { path: string; branch: string }[];
+  error: string | null;
+}
+
+export interface Checks {
+  total: number;
+  passed: number;
+  failed: number;
+  pending: number;
+  failing: string[];
+}
+
+export interface Pull {
+  number: number;
+  title: string;
+  branch: string;
+  base: string;
+  author: string;
+  draft: boolean;
+  review: string;
+  checks: Checks;
+  url: string;
+  updated_at: string;
+  additions: number;
+  deletions: number;
+  files: number;
+  mergeable: string;
+  auto_merge: boolean;
+}
+
+export interface FileChange {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface Changes {
+  files: FileChange[];
+  patch: string;
+  truncated: boolean;
 }
 
 export interface ToolCall {

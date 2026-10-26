@@ -279,9 +279,15 @@ impl LlmProvider for CliProvider {
         on_delta: DeltaSink<'_>,
     ) -> anyhow::Result<ChatResponse> {
         let bin = self.locate()?;
-        let workdir = std::env::temp_dir().join("opencue-cli");
-        std::fs::create_dir_all(&workdir)?;
-        let last_message_file = workdir.join(format!("codex-{}.txt", crate::db::new_id()));
+        let scratch = std::env::temp_dir().join("opencue-cli");
+        std::fs::create_dir_all(&scratch)?;
+        // In a coding group the CLI works inside the repository; otherwise in a scratch folder.
+        let workdir = req
+            .cwd
+            .clone()
+            .filter(|p| p.is_dir())
+            .unwrap_or_else(|| scratch.clone());
+        let last_message_file = scratch.join(format!("codex-{}.txt", crate::db::new_id()));
 
         let mut prompt_file: Option<std::path::PathBuf> = None;
         let mut cmd = Command::new(&bin);
@@ -372,7 +378,7 @@ impl LlmProvider for CliProvider {
             CliKind::Muse => {
                 // Headless: one prompt from a file, plain text out. Approvals stay off but the
                 // sandbox stays on, and the prompt asks for text only.
-                let file = workdir.join(format!("muse-{}.txt", crate::db::new_id()));
+                let file = scratch.join(format!("muse-{}.txt", crate::db::new_id()));
                 let mut p = String::from(
                     "Answer in plain text only, without using tools or touching files.\n\n",
                 );

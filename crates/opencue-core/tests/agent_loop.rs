@@ -749,3 +749,134 @@ async fn regenerating_drops_the_old_answer_and_edits_the_question() {
     assert_eq!(msgs[0].content, "edited question");
     assert_eq!(msgs[1].content, "Noted, you like green tea.");
 }
+
+#[tokio::test]
+async fn the_council_answers_reviews_and_the_chair_decides() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let agents = agents_on(&core, NOTED_REPLY, &["Ada", "Bo", "Cy"]).await;
+    let ids: Vec<String> = agents.iter().map(|a| a.id.clone()).collect();
+    let group = core
+        .create_group_kind("Council", &ids, "council", serde_json::json!({}))
+        .await
+        .unwrap();
+    let mut events = core.subscribe();
+    // A plain message in a council group is a council question.
+    core.send_message(&group.id, "Postgres or SQLite?").await.unwrap();
+    finish(&core, &mut events, &group.id).await;
+    let msgs = core.store.messages(&group.id, 100).await.unwrap();
+    let said = |who: &str| {
+        msgs.iter()
+            .filter(|m| m.role == Role::Assistant && m.agent_id.as_deref() == Some(who))
+            .count()
+    };
+    // Opinion and review from everyone, and the chair (the first member) also writes the verdict.
+    assert_eq!(said(&agents[0].id), 3);
+    assert_eq!(said(&agents[1].id), 2);
+    assert_eq!(said(&agents[2].id), 2);
+    assert!(msgs.iter().any(|m| m.role == Role::Event && m.content.contains("Council convened")));
+    assert!(msgs.iter().any(|m| m.role == Role::Event && m.content.starts_with("Verdict")));
+    assert!(msgs.iter().filter(|m| m.role == Role::Assistant).all(|m| m.status == "done"));
+
+    // The command skips the review round.
+    core.send_message(&group.id, "/ai-council --quick again?").await.unwrap();
+    finish(&core, &mut events, &group.id).await;
+    let msgs = core.store.messages(&group.id, 100).await.unwrap();
+    assert_eq!(msgs.iter().filter(|m| m.role == Role::Assistant).count(), 7 + 4);
+}
+
+#[tokio::test]
+async fn a_canvas_keeps_what_the_user_edits_and_the_agent_reads_it_back() {
+    use serde_json::json;
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path()).unwrap()).await.unwrap();
+    let agent = quiet_agent(&core, None).await;
+    let made = core
+        .call_external_tool(
+            &agent.id,
+            "create_artifact",
+            json!({ "title": "Essay", "type": "markdown", "content": "# Draft", "canvas": true }),
+        )
+        .await
+        .unwrap();
+    assert!(made.contains("canvas"));
+    let id = made.split("artifact_id \"").nth(1).unwrap().split('"').next().unwrap().to_string();
+    let edited = core.save_canvas(&id, "# Draft\n\nmy own paragraph").unwrap();
+    assert_eq!(edited.versions.len(), 2);
+    assert_eq!(edited.versions[1].by.as_deref(), Some("user"));
+    // Saving the same text again is not a new version.
+    assert_eq!(core.save_canvas(&id, "# Draft\n\nmy own paragraph").unwrap().versions.len(), 2);
+    let read = core
+        .call_external_tool(&agent.id, "read_artifact", json!({ "artifact_id": id }))
+        .await
+        .unwrap();
+    assert!(read.contains("edited by the user") && read.contains("my own paragraph"));
+    // A plain artifact cannot be edited this way.
+    let plain = core
+        .call_external_tool(&agent.id, "create_artifact", json!({ "title": "P", "type": "text", "content": "x" }))
+        .await
+        .unwrap();
+    let pid = plain.split("artifact_id \"").nth(1).unwrap().split('"').next().unwrap();
+    assert!(core.save_canvas(pid, "y").is_err());
+}
+
+#[tokio::test]
+async fn coding_agents_get_the_repository_and_a_worktree_each() {
+    let dir = tempfile::tempdir().unwrap();
+    let core = Core::open(Paths::at(dir.path().join("data")).unwrap()).await.unwrap();
+    let repo = dir.path().join("repo");
+    std::fs::create_dir_all(&repo).unwrap();
+    let git = |args: &[&str]| {
+        let ok = std::process::Command::new("git").args(args).current_dir(&repo).status();
+        ok.map(|s| s.success()).unwrap_or(false)
+    };
+    if !git(&["init", "-q", "-b", "main"]) {
+        return; // no git here
+    }
+    git(&["config", "user.email", "t@t"]);
+    git(&["config", "user.name", "t"]);
+    std::fs::write(repo.join("a.txt"), "x").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "-q", "-m", "init"]);
+
+    let agents = quiet_pair(&core).await;
+    let ids: Vec<String> = agents.iter().map(|a| a.id.clone()).collect();
+    let group = core
+        .create_group_kind("Team", &ids, "coding", serde_json::json!({}))
+        .await
+        .unwrap();
+    let status = core
+        .coding_set_repo(&group.id, repo.to_str().unwrap(), true)
+        .await
+        .unwrap();
+    assert!(status.is_repo && status.branch.as_deref() == Some("main"));
+    let lead = core.store.get_agent(&agents[0].id).await.unwrap();
+    let mate = core.store.get_agent(&agents[1].id).await.unwrap();
+    // The lead works in the repository itself, teammates each in a worktree, all with a computer.
+    assert_eq!(lead.settings.working_dir.as_deref(), repo.to_str());
+    assert!(mate.settings.working_dir.as_deref().unwrap().contains("worktrees"));
+    assert_eq!(mate.settings.computer, opencue_core::computer::ComputerBackend::Host);
+    // A later member is prepared too.
+    let third = core
+        .create_agent(NewAgent { name: "Dee".into(), ..Default::default() })
+        .await
+        .unwrap();
+    core.add_group_member(&group.id, &third.id).await.unwrap();
+    let third = core.store.get_agent(&third.id).await.unwrap();
+    assert!(third.settings.working_dir.as_deref().unwrap().ends_with("dee"));
+    // Not a repository: refused with a reason.
+    assert!(core.coding_set_repo(&group.id, dir.path().to_str().unwrap(), true).await.is_err());
+    assert!(core.github_status(&group.id).await.unwrap().is_repo);
+}
+
+async fn quiet_pair(core: &Arc<Core>) -> Vec<opencue_core::models::Agent> {
+    let mut out = vec![];
+    for n in ["Lead", "Mate"] {
+        out.push(
+            core.create_agent(NewAgent { name: n.into(), ..Default::default() })
+                .await
+                .unwrap(),
+        );
+    }
+    out
+}

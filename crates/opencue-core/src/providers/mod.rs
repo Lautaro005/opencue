@@ -437,6 +437,8 @@ pub struct ChatRequest {
     pub mcp_extra: Vec<ExtraMcp>,
     /// Told how far a tool call has got while the model is still writing it (the UI shows it).
     pub on_tool: Option<ToolSink>,
+    /// The folder a CLI provider runs in (a coding group's repository or worktree).
+    pub cwd: Option<std::path::PathBuf>,
 }
 
 #[derive(Debug, Clone)]

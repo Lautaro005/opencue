@@ -154,7 +154,9 @@ export const useStore = create<State>((set, get) => ({
     const isGroup = !!(id && groups[id]);
     // Keep the right panel open but switch it to the matching kind.
     const nextPanel: Panel = panel && panel !== "artifact" && panel !== "canvas" ? (isGroup ? "group" : panel === "computer" ? "computer" : "profile") : null;
-    set({ selected: id, panel: nextPanel, dm: null });
+    // A coding group's panel (sessions, changes, pull requests) is part of working in it.
+    const coding = isGroup && groups[id!]?.kind === "coding";
+    set({ selected: id, panel: coding && nextPanel === null ? "group" : nextPanel, dm: null });
     try {
       if (id) localStorage.setItem("opencue.selected", id);
     } catch {}

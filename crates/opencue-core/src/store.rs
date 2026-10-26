@@ -280,6 +280,8 @@ impl Store {
                 name: r.get("name"),
                 max_auto_turns: r.get("max_auto_turns"),
                 created_at: r.get("created_at"),
+                kind: r.get("kind"),
+                config: parse_config(r.get("config")),
             });
         }
         Ok(out)
@@ -299,6 +301,8 @@ impl Store {
             max_auto_turns: r.get("max_auto_turns"),
             members: self.group_members(id).await?,
             created_at: r.get("created_at"),
+            kind: r.get("kind"),
+            config: parse_config(r.get("config")),
         }))
     }
 
@@ -319,17 +323,33 @@ impl Store {
     }
 
     pub async fn create_group(&self, name: &str, agent_ids: &[String]) -> anyhow::Result<Group> {
+        self.create_group_kind(name, agent_ids, "chat", serde_json::json!({}))
+            .await
+    }
+
+    pub async fn create_group_kind(
+        &self,
+        name: &str,
+        agent_ids: &[String],
+        kind: &str,
+        config: serde_json::Value,
+    ) -> anyhow::Result<Group> {
         anyhow::ensure!(!name.trim().is_empty(), "group name is required");
         anyhow::ensure!(!agent_ids.is_empty(), "a group needs at least one agent");
+        anyhow::ensure!(GROUP_KINDS.contains(&kind), "unknown group kind `{kind}`");
         let id = new_id();
         let ts = now();
-        sqlx::query("INSERT INTO groups (id, name, created_at, updated_at) VALUES (?, ?, ?, ?)")
-            .bind(&id)
-            .bind(name.trim())
-            .bind(&ts)
-            .bind(&ts)
-            .execute(&self.db)
-            .await?;
+        sqlx::query(
+            "INSERT INTO groups (id, name, created_at, updated_at, kind, config) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(&id)
+        .bind(name.trim())
+        .bind(&ts)
+        .bind(&ts)
+        .bind(kind)
+        .bind(config.to_string())
+        .execute(&self.db)
+        .await?;
         for (i, agent_id) in agent_ids.iter().enumerate() {
             self.add_group_member_at(&id, agent_id, i == 0, i as i64)
                 .await?;
@@ -396,6 +416,16 @@ impl Store {
                 .execute(&self.db)
                 .await?;
         }
+        Ok(())
+    }
+
+    pub async fn set_group_config(&self, id: &str, config: &serde_json::Value) -> anyhow::Result<()> {
+        sqlx::query("UPDATE groups SET config = ?, updated_at = ? WHERE id = ?")
+            .bind(config.to_string())
+            .bind(now())
+            .bind(id)
+            .execute(&self.db)
+            .await?;
         Ok(())
     }
 
@@ -1072,4 +1102,8 @@ mod search_tests {
             .unwrap()
             .is_empty());
     }
+}
+
+fn parse_config(raw: String) -> serde_json::Value {
+    serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
 }

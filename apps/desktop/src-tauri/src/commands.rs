@@ -185,8 +185,19 @@ pub async fn create_group(
     state: State<'_, AppState>,
     name: String,
     agent_ids: Vec<String>,
+    kind: Option<String>,
+    config: Option<serde_json::Value>,
 ) -> R<Group> {
-    state.core.create_group(&name, &agent_ids).await.map_err(e)
+    state
+        .core
+        .create_group_kind(
+            &name,
+            &agent_ids,
+            kind.as_deref().unwrap_or("chat"),
+            config.unwrap_or_else(|| serde_json::json!({})),
+        )
+        .await
+        .map_err(e)
 }
 
 #[tauri::command]
@@ -219,7 +230,6 @@ pub async fn add_group_member(
 ) -> R<()> {
     state
         .core
-        .store
         .add_group_member(&group_id, &agent_id)
         .await
         .map_err(e)
@@ -1136,4 +1146,99 @@ pub fn float_pin(window: tauri::WebviewWindow, on: bool) -> R<()> {
 #[tauri::command]
 pub fn close_float(window: tauri::WebviewWindow) -> R<()> {
     window.close().map_err(|err| err.to_string())
+}
+
+// ---------- coding groups: git and GitHub ----------
+
+#[tauri::command]
+pub async fn coding_set_repo(
+    state: State<'_, AppState>,
+    group_id: String,
+    dir: String,
+    worktrees: bool,
+) -> R<opencue_core::github::RepoStatus> {
+    state
+        .core
+        .coding_set_repo(&group_id, &dir, worktrees)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_status(
+    state: State<'_, AppState>,
+    group_id: String,
+) -> R<opencue_core::github::RepoStatus> {
+    state.core.github_status(&group_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_pulls(
+    state: State<'_, AppState>,
+    group_id: String,
+    pr_state: Option<String>,
+) -> R<Vec<opencue_core::github::Pull>> {
+    state
+        .core
+        .github_pulls(&group_id, pr_state.as_deref().unwrap_or("open"))
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_changes(
+    state: State<'_, AppState>,
+    group_id: String,
+) -> R<opencue_core::github::Changes> {
+    state.core.github_changes(&group_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_create_pr(
+    state: State<'_, AppState>,
+    group_id: String,
+    title: String,
+    body: String,
+    base: Option<String>,
+    draft: bool,
+) -> R<String> {
+    state
+        .core
+        .github_create_pr(&group_id, &title, &body, base.as_deref(), draft)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_merge_pr(
+    state: State<'_, AppState>,
+    group_id: String,
+    number: u64,
+    method: String,
+    auto: bool,
+) -> R<String> {
+    state
+        .core
+        .github_merge_pr(&group_id, number, &method, auto)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_comment(
+    state: State<'_, AppState>,
+    group_id: String,
+    number: u64,
+    body: String,
+) -> R<()> {
+    state
+        .core
+        .github_comment(&group_id, number, &body)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn coding_fix_ci(state: State<'_, AppState>, group_id: String, number: u64) -> R<()> {
+    state.core.coding_fix_ci(&group_id, number).await.map_err(e)
 }

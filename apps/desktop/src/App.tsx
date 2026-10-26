@@ -5,6 +5,7 @@ import { Sidebar } from "./components/Sidebar";
 import { ChatView } from "./components/chat/ChatView";
 import { AgentProfile } from "./components/panel/AgentProfile";
 import { GroupDetails } from "./components/panel/GroupDetails";
+import { CodingPanel } from "./components/panel/CodingPanel";
 import { ComputerPanel } from "./components/panel/ComputerPanel";
 import { ArtifactPanel } from "./components/panel/ArtifactPanel";
 import { CreateAgentDialog, CreateGroupDialog } from "./components/dialogs/CreateDialogs";
@@ -102,7 +103,7 @@ export default function App() {
       <Sidebar />
       <ChatView />
       {panel === "profile" && agent && <AgentProfile key={selected} agent={agent} />}
-      {panel === "group" && group && <GroupDetails key={selected} group={group} />}
+      {panel === "group" && group && (group.kind === "coding" ? <CodingPanel key={selected} group={group} /> : <GroupDetails key={selected} group={group} />)}
       {panel === "computer" && agent && <ComputerPanel key={selected} agent={agent} />}
       {(panel === "artifact" || panel === "canvas") && selected && <ArtifactPanel />}
       <CreateAgentDialog />

@@ -5,12 +5,15 @@ pub mod automations;
 pub mod bridge;
 pub mod browser;
 pub mod catalog;
+pub mod coding;
 pub mod computer;
+pub mod council;
 pub mod dashboard;
 pub mod db;
 pub mod email;
 pub mod events;
 pub mod files;
+pub mod github;
 pub mod limits;
 pub mod local_models;
 pub mod mcp;
@@ -239,6 +242,27 @@ impl Core {
         let g = self.store.create_group(name, agent_ids).await?;
         self.emit(CoreEvent::ThreadsChanged);
         Ok(g)
+    }
+
+    pub async fn create_group_kind(
+        &self,
+        name: &str,
+        agent_ids: &[String],
+        kind: &str,
+        config: serde_json::Value,
+    ) -> anyhow::Result<Group> {
+        let g = self
+            .store
+            .create_group_kind(name, agent_ids, kind, config)
+            .await?;
+        self.emit(CoreEvent::ThreadsChanged);
+        Ok(g)
+    }
+
+    pub async fn set_group_config(&self, id: &str, config: serde_json::Value) -> anyhow::Result<()> {
+        self.store.set_group_config(id, &config).await?;
+        self.emit(CoreEvent::ThreadsChanged);
+        Ok(())
     }
 
     pub async fn delete_group(&self, id: &str) -> anyhow::Result<()> {

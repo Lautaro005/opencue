@@ -36,6 +36,14 @@ const SPILL_HEAD: usize = 3_000;
 const COMPACT_CHARS: usize = 90_000;
 const HELPER_STEPS: usize = 8;
 
+/// Work a teammate was handed in a coding group and has not yet reported back on.
+struct Owed {
+    from: String,
+    from_name: String,
+    task: String,
+    reminded: bool,
+}
+
 #[derive(Default)]
 pub(crate) struct AgentOutcome {
     pub(crate) text: String,
@@ -432,12 +440,22 @@ impl Core {
             .collect();
         anyhow::ensure!(!members.is_empty(), "this group has no members");
 
+        // A council question: every member answers, they review each other, the chair decides.
+        let mentioned = !mentions(user_text, &members, None).is_empty();
+        if let Some(req) = crate::council::parse_request(group, user_text, mentioned) {
+            return self.run_council(group, &members, req, token).await;
+        }
+
         let mut queue: VecDeque<String> = mentions(user_text, &members, None).into();
         if queue.is_empty() {
             queue = self.route(group, &members, user_text).await.into();
         }
         let mut auto_turns = 0i64;
         let mut limit_hit = false;
+        // In a coding group a handoff is an obligation: it stays open until the teammate answers
+        // DONE or BLOCKED, and they are reminded once if they stop without either.
+        let coding = group.kind == "coding";
+        let mut owed: HashMap<String, Owed> = HashMap::new();
         while let Some(agent_id) = queue.pop_front() {
             if token.is_cancelled() {
                 break;
@@ -445,7 +463,39 @@ impl Core {
             let outcome = self
                 .run_agent(&group.id, &agent_id, Some(group), token)
                 .await;
-            let mut next = outcome.handoffs;
+            let mut requester: Option<String> = None;
+            if coding {
+                if let Some(o) = owed.get_mut(&agent_id) {
+                    requester = Some(o.from.clone());
+                    let name = members
+                        .iter()
+                        .find(|m| m.id == agent_id)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_default();
+                    if crate::coding::closes_obligation(&outcome.text) {
+                        owed.remove(&agent_id);
+                    } else if !o.reminded && auto_turns < group.max_auto_turns && !token.is_cancelled() {
+                        o.reminded = true;
+                        auto_turns += 1;
+                        let text = format!(
+                            "Reminder for {name}: you owe @{} a `DONE:` (with evidence) or a `BLOCKED:` (what you need) for: {}",
+                            o.from_name, o.task
+                        );
+                        let ev = message(&group.id, Role::Event, None, text);
+                        self.store.insert_message(&ev).await?;
+                        self.emit(CoreEvent::Message { message: ev });
+                        queue.push_front(agent_id.clone());
+                        continue;
+                    } else {
+                        let text = format!("{name} stopped without DONE or BLOCKED: {}", o.task);
+                        owed.remove(&agent_id);
+                        let ev = message(&group.id, Role::Event, None, text);
+                        self.store.insert_message(&ev).await?;
+                        self.emit(CoreEvent::Message { message: ev });
+                    }
+                }
+            }
+            let mut next = outcome.handoffs.clone();
             next.extend(mentions(&outcome.text, &members, Some(&agent_id)));
             for id in next {
                 if id == agent_id || queue.contains(&id) || !members.iter().any(|m| m.id == id) {
@@ -456,6 +506,23 @@ impl Core {
                     break;
                 }
                 auto_turns += 1;
+                // Answering whoever asked closes the loop; anything else is new work owed back.
+                if coding
+                    && requester.as_deref() != Some(id.as_str())
+                    && !crate::coding::closes_obligation(&outcome.text)
+                {
+                    let from_name = members
+                        .iter()
+                        .find(|m| m.id == agent_id)
+                        .map(|m| m.name.clone())
+                        .unwrap_or_default();
+                    owed.entry(id.clone()).or_insert(Owed {
+                        from: agent_id.clone(),
+                        from_name,
+                        task: outcome.text.chars().take(160).collect::<String>().replace('\n', " "),
+                        reminded: false,
+                    });
+                }
                 queue.push_back(id);
             }
         }
@@ -515,6 +582,7 @@ impl Core {
                 agent_id: None,
                 mcp_extra: vec![],
                 on_tool: None,
+                cwd: None,
             };
             let resp = provider.chat(req, &|_| {}).await?;
             anyhow::Ok(extract_json_array(&resp.text).unwrap_or_default())
@@ -763,6 +831,12 @@ impl Core {
                 agent_id: (!supports_tools && agent.settings.cli_tools).then(|| agent.id.clone()),
                 mcp_extra: mcp_extra.clone(),
                 on_tool: Some(self.tool_sink(thread_id, &msg.id, agent_id)),
+                cwd: agent
+                    .settings
+                    .working_dir
+                    .as_deref()
+                    .filter(|d| !d.trim().is_empty())
+                    .map(std::path::PathBuf::from),
             };
             let result = tokio::select! {
                 r = provider.chat(req, &on_delta) => r,
@@ -1161,6 +1235,32 @@ impl Core {
                  Don't repeat what others already said; speak when you add something.",
                 g.name
             ));
+            if g.kind == "coding" {
+                let lead_id = g.members.iter().find(|m| m.is_owner).map(|m| m.agent_id.clone());
+                let lead = lead_id
+                    .as_ref()
+                    .and_then(|id| all.iter().find(|a| &a.id == id))
+                    .map(|a| a.name.clone())
+                    .unwrap_or_else(|| agent.name.clone());
+                let repo = g.config.get("repo_dir").and_then(|v| v.as_str()).filter(|d| !d.is_empty());
+                let work = agent
+                    .settings
+                    .working_dir
+                    .as_deref()
+                    .filter(|w| !w.is_empty() && Some(*w) != repo);
+                s.push_str(&crate::coding::team_prompt(
+                    &agent.name,
+                    &lead,
+                    lead_id.as_deref() == Some(agent.id.as_str()),
+                    repo,
+                    work,
+                ));
+            } else if g.kind == "council" {
+                s.push_str(
+                    "\n\nThis group is an AI council: when the user asks something, every member answers on their own, reviews the others' answers anonymously, and the chair writes the verdict. \
+                     If you are asked to speak outside that process, keep it short.",
+                );
+            }
         }
         // What changes from step to step goes last, so everything above stays a stable prefix.
         if group.is_none() {
@@ -1606,6 +1706,7 @@ impl Core {
             agent_id: None,
             mcp_extra: vec![],
             on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         for fact in extract_json_array(&resp.text)
@@ -1703,6 +1804,7 @@ impl Core {
             agent_id: None,
             mcp_extra: vec![],
             on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let text = resp.text.trim();
@@ -1858,6 +1960,7 @@ impl Core {
                         agent_id: None,
                         mcp_extra: vec![],
                         on_tool: None,
+                        cwd: None,
                     },
                     &|_| {},
                 )
@@ -1931,6 +2034,7 @@ impl Core {
             agent_id: None,
             mcp_extra: vec![],
             on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let (Some(a), Some(b)) = (resp.text.find('{'), resp.text.rfind('}')) else {
@@ -2006,6 +2110,7 @@ impl Core {
             agent_id: None,
             mcp_extra: vec![],
             on_tool: None,
+            cwd: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         if let Some(tidy) = extract_json_array(&resp.text) {

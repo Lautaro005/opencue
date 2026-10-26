@@ -54,8 +54,19 @@ const agents: Agent[] = [
   agent("a6", "Research Assistant", "heart", "dots", "#f04848"),
 ];
 
+const repoStatus = { dir: "/Users/you/code/opencue", is_repo: true, git_installed: true, gh_installed: true, gh_user: "Lautaro005", slug: "Lautaro005/opencue", branch: "feat/council", default_branch: "main", ahead: 2, behind: 0, changed_files: 3, additions: 48, deletions: 6, worktrees: [{ path: "/Users/you/code/opencue", branch: "feat/council" }, { path: "/Users/you/code/opencue/.opencue/worktrees/builder", branch: "agent/builder/work" }], error: null };
+const pulls = [
+  { number: 12, title: "Add the AI council", branch: "feat/council", base: "main", author: "Lautaro005", draft: false, review: "REVIEW_REQUIRED", checks: { total: 5, passed: 3, failed: 1, pending: 1, failing: ["test (windows-latest)"] }, url: "https://github.com/Lautaro005/opencue/pull/12", updated_at: new Date().toISOString(), additions: 420, deletions: 12, files: 9, mergeable: "MERGEABLE", auto_merge: false },
+  { number: 11, title: "Floating panels", branch: "feat/float", base: "main", author: "Lautaro005", draft: true, review: "", checks: { total: 5, passed: 5, failed: 0, pending: 0, failing: [] }, url: "https://github.com/Lautaro005/opencue/pull/11", updated_at: new Date().toISOString(), additions: 80, deletions: 4, files: 3, mergeable: "MERGEABLE", auto_merge: true },
+];
+const changes = {
+  files: [{ path: "src/council.rs", status: "A", additions: 40, deletions: 0 }, { path: "src/lib.rs", status: "M", additions: 6, deletions: 2 }, { path: "notes.md", status: "?", additions: 0, deletions: 0 }],
+  patch: "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub mod artifacts;\n+pub mod council;\n pub mod browser;\n-pub mod old;\n",
+  truncated: false,
+};
 const groups: Group[] = [
-  { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
+  { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), kind: "chat", config: {}, members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
+  { id: "g2", name: "Coding team", max_auto_turns: 8, created_at: ago(900), kind: "coding", config: { repo_dir: "/Users/you/code/opencue", worktrees: true }, members: [{ agent_id: "a3", is_owner: true }, { agent_id: "a4", is_owner: false }] },
 ];
 
 const souls: Record<string, string> = { a1: "Calm, precise and a little dry. Never pads an answer." };
@@ -281,10 +292,22 @@ const handlers: Record<string, (a: Args) => unknown> = {
   delete_memory: ({ scope, agentId, id }) => void memory[scope === "global" ? "global" : agentId]?.splice(id - 1, 1),
   get_memory_raw: ({ scope, agentId }) => "# Memory\n\n" + (memory[scope === "global" ? "global" : agentId] ?? []).map((t) => `- ${t}`).join("\n"),
   set_memory_raw: ({ scope, agentId, text }) => void (memory[scope === "global" ? "global" : agentId] = String(text).split("\n").filter((l) => l.startsWith("- ")).map((l) => l.slice(2))),
+  coding_set_repo: ({ groupId, dir, worktrees }) => {
+    const g = groups.find((x) => x.id === groupId)!;
+    g.config = { ...g.config, repo_dir: String(dir), worktrees: !!worktrees };
+    return repoStatus;
+  },
+  github_status: () => repoStatus,
+  github_pulls: () => pulls,
+  github_changes: () => changes,
+  github_create_pr: () => "https://github.com/Lautaro005/opencue/pull/12",
+  github_merge_pr: ({ number, auto }) => (auto ? `Auto-merge is on for #${number}.` : `Merged #${number}.`),
+  github_comment: () => undefined,
+  coding_fix_ci: () => undefined,
   list_groups: () => groups,
   get_group: ({ id }) => groups.find((g) => g.id === id) ?? null,
-  create_group: ({ name, agentIds }) => {
-    const g: Group = { id: id(), name, max_auto_turns: 6, created_at: ago(0), members: agentIds.map((a: string, i: number) => ({ agent_id: a, is_owner: i === 0 })) };
+  create_group: ({ name, agentIds, kind, config }) => {
+    const g: Group = { id: id(), name, max_auto_turns: 6, created_at: ago(0), kind: (kind as Group["kind"]) ?? "chat", config: (config as Group["config"]) ?? {}, members: agentIds.map((a: string, i: number) => ({ agent_id: a, is_owner: i === 0 })) };
     groups.push(g);
     emit({ type: "threads_changed" });
     return g;
