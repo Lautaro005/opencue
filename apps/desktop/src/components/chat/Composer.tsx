@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, AtSign, FileText, Loader2, ChevronRight, Mic, Paperclip, Plus, Sparkles, Square, X } from "lucide-react";
-import type { Agent, SkillSummary } from "../../lib/types";
+import { ArrowUp, AtSign, FileText, Loader2, ChevronRight, Mic, Paperclip, Plus, Reply, Sparkles, Square, X } from "lucide-react";
+import type { Agent, CliSkill, SkillSummary } from "../../lib/types";
 import { api } from "../../lib/api";
 import { cx, formatBytes } from "../../lib/format";
 import { AvatarView } from "../AvatarView";
-import { useClickOutside } from "../ui";
+import { IconButton, useClickOutside } from "../ui";
 import { useStore } from "../../lib/store";
 import { systemSkills, SkillIcon } from "../../lib/skills";
 import { cancelRecording, markVoiceThread, startRecording, stopRecording } from "../../lib/voice";
@@ -36,6 +36,8 @@ export function Composer({
   const [slashIndex, setSlashIndex] = useState(0);
   const dashboardAgent = useStore((s) => s.settings.dashboard_agent);
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  // Skills the installed coding CLIs already have (Claude Code, Codex…), listed apart.
+  const [cliSkills, setCliSkills] = useState<CliSkill[]>([]);
   const ref = useRef<HTMLTextAreaElement>(null);
   const plusRef = useRef<HTMLDivElement>(null);
   useClickOutside(plusRef, () => { setPlus(false); setSub(null); }, plus);
@@ -46,6 +48,7 @@ export function Composer({
 
   useEffect(() => () => cancelRecording(), [threadId]);
   useEffect(() => void api.listSkills().then(setSkills).catch(() => {}), [threadId]);
+  useEffect(() => void api.listCliSkills().then(setCliSkills).catch(() => {}), [threadId]);
   useEffect(() => setFiles([]), [threadId]);
 
   const addFiles = (list: FileList | File[] | null) => {
@@ -110,9 +113,11 @@ export function Composer({
   // "/" at the start of the message opens the command list: built-ins first, then skills.
   const slashMatch = text.match(/^\/([\w-]*)$/);
   const system = systemSkills({ dashboard: dashboardAgent === threadId, group: !!members });
-  const commands: { name: string; description: string; kind: "builtin" | "skill"; icon?: string }[] = [
+  const commands: { name: string; description: string; kind: "builtin" | "skill" | "cli"; icon?: string; source?: string }[] = [
     ...system.map((k) => ({ name: k.name, description: t(k.desc), kind: "builtin" as const, icon: k.icon })),
     ...skills.map((k) => ({ name: k.name, description: k.description, kind: "skill" as const })),
+    // A name OpenCue already has wins over the CLI's.
+    ...cliSkills.filter((k) => !skills.some((o) => o.name === k.name) && !system.some((o) => o.name === k.name)).map((k) => ({ name: k.name, description: k.description, kind: "cli" as const, source: k.source })),
   ];
   const slashQuery = slashMatch?.[1].toLowerCase() ?? "";
   const slashItems = slashMatch
@@ -139,9 +144,23 @@ export function Composer({
   const pool = members ?? mentionable ?? null;
   const candidates = pool && mention ? pool.filter((m) => m.name.toLowerCase().includes(mention.query.toLowerCase())) : [];
 
+  const reply = useStore((s) => s.replyTo[threadId]);
+  const setReplyTo = useStore((s) => s.setReplyTo);
+  useEffect(() => {
+    const focus = () => ref.current?.focus();
+    window.addEventListener("opencue:focus-composer", focus);
+    return () => window.removeEventListener("opencue:focus-composer", focus);
+  }, []);
+
   const submit = () => {
-    const v = text.trim();
+    let v = text.trim();
     if (!v && files.length === 0) return;
+    if (reply && v) {
+      // The quote travels with the message; in a group the agent being answered is addressed.
+      const mention = members && reply.name && !v.toLowerCase().includes(`@${reply.name.toLowerCase()}`) ? `@${reply.name} ` : "";
+      v = `> **${reply.name || "…"}**: ${reply.text}\n\n${mention}${v}`;
+    }
+    if (reply) setReplyTo(threadId, null);
     onSend(v, files);
     setText("");
     setFiles([]);
@@ -200,9 +219,12 @@ export function Composer({
                 onMouseEnter={() => setSlashIndex(i)}
                 className={cx("flex w-full items-start gap-2.5 rounded-lg px-2.5 py-1.5 text-left", i === slashIndex ? "bg-hover" : "")}
               >
-                <span className="mt-0.5 text-muted">{c.kind === "skill" ? <Sparkles size={14} /> : <SkillIcon name={c.icon ?? ""} />}</span>
+                <span className="mt-0.5 text-muted">{c.kind === "builtin" ? <SkillIcon name={c.icon ?? ""} /> : <Sparkles size={14} />}</span>
                 <span className="min-w-0">
-                  <span className="block text-[13px] font-medium">/{c.name}</span>
+                  <span className="flex items-center gap-1.5 text-[13px] font-medium">
+                    /{c.name}
+                    {c.source && <span className="rounded-full bg-hover px-1.5 py-px text-[10px] font-normal text-muted">{t(`chat.cliSource.${c.source}`)}</span>}
+                  </span>
                   <span className="line-clamp-1 block text-[11.5px] text-muted">{c.description}</span>
                 </span>
               </button>
@@ -270,7 +292,7 @@ export function Composer({
                 </button>
                 {([
                   { key: "agents" as const, label: t("chat.agents"), icon: <AtSign size={14} className="text-muted" />, count: pool?.length ?? 0 },
-                  { key: "skills" as const, label: t("chat.skills"), icon: <Sparkles size={14} className="text-muted" />, count: skills.length + system.length },
+                  { key: "skills" as const, label: t("chat.skills"), icon: <Sparkles size={14} className="text-muted" />, count: skills.length + system.length + cliSkills.length },
                 ]).filter((g) => g.count > 0).map((g) => (
                   <div key={g.key} className="relative" onMouseEnter={() => setSub(g.key)}>
                     <button onClick={() => setSub(sub === g.key ? null : g.key)} className={cx("flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-[13px] hover:bg-hover", sub === g.key && "bg-hover")}>
@@ -329,6 +351,28 @@ export function Composer({
                                     <span className="line-clamp-1 text-[11.5px] text-muted">{k.description}</span>
                                   </button>
                                 ))}
+                                {Object.entries(
+                                  cliSkills
+                                    .filter((k) => !skills.some((o) => o.name === k.name))
+                                    .reduce<Record<string, CliSkill[]>>((acc, k) => ((acc[k.source] ??= []).push(k), acc), {}),
+                                ).map(([source, list]) => (
+                                  <div key={source}>
+                                    <p className="mt-1 border-t border-line px-2.5 pt-2 pb-0.5 text-[10.5px] font-semibold tracking-wide text-faint uppercase">{t(`chat.cliSource.${source}`)}</p>
+                                    {list.map((k) => (
+                                      <button
+                                        key={k.name}
+                                        onClick={() => {
+                                          setPlus(false);
+                                          insertSkill(k.name);
+                                        }}
+                                        className="flex w-full flex-col rounded-lg px-2.5 py-1.5 text-left hover:bg-hover"
+                                      >
+                                        <span className="text-[13px] font-medium">/{k.name}</span>
+                                        <span className="line-clamp-1 text-[11.5px] text-muted">{k.description}</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                ))}
                               </>
                             )}
                       </div>
@@ -339,6 +383,18 @@ export function Composer({
             )}
           </div>
 
+          {reply && (
+            <div className="mx-1 mb-1.5 flex items-start gap-2 rounded-xl bg-hover px-3 py-2 text-[12.5px]">
+              <Reply size={14} className="mt-0.5 shrink-0 text-muted" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-medium">{t("chat.replyingTo", { name: reply.name || t("chat.reply") })}</span>
+                <span className="line-clamp-2 block text-muted">{reply.text}</span>
+              </span>
+              <IconButton label={t("common.cancel")} onClick={() => setReplyTo(threadId, null)} className="size-6">
+                <X size={13} />
+              </IconButton>
+            </div>
+          )}
           <textarea
             ref={ref}
             rows={1}

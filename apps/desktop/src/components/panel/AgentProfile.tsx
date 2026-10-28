@@ -99,7 +99,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
               <NavRow icon={<Ghost size={17} />} label={t("profile.soul")} onClick={() => setPage("soul")} />
               <NavRow icon={<Brain size={17} />} label={t("profile.memory")} onClick={() => setPage("memory")} />
               <NavRow icon={<AudioLines size={17} />} label={t("profile.voice")} onClick={() => setPage("voice")} />
-              <NavRow icon={<Shield size={17} />} label={t("profile.permissions")} value={agent.settings.approval_mode === "ask" ? t("profile.askShort") : t("profile.autonomousShort")} onClick={() => setPage("permissions")} />
+              <NavRow icon={<Shield size={17} />} label={t("profile.permissions")} value={t(`profile.mode.${agent.settings.approval_mode}.short`)} onClick={() => setPage("permissions")} />
             </Group>
 
             <AutomationsSection agent={agent} />
@@ -138,7 +138,7 @@ export function AgentProfile({ agent }: { agent: Agent }) {
         {page === "permissions" && (
           <Page>
             <div className="space-y-1.5">
-              {(["ask", "autonomous"] as const).map((mode) => (
+              {(["read_only", "ask", "critical", "autonomous"] as const).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => patchSettings({ approval_mode: mode })}
@@ -151,12 +151,13 @@ export function AgentProfile({ agent }: { agent: Agent }) {
                     {agent.settings.approval_mode === mode && <span className="size-1.5 rounded-full bg-accent" />}
                   </span>
                   <span>
-                    <span className="block text-[13px] font-medium">{mode === "ask" ? t("profile.askFirst") : t("profile.autonomous")}</span>
-                    <span className="block text-[11.5px] text-muted">{mode === "ask" ? t("profile.askFirstHint") : t("profile.autonomousHint")}</span>
+                    <span className="block text-[13px] font-medium">{t(`profile.mode.${mode}.title`)}</span>
+                    <span className="block text-[11.5px] text-muted">{t(`profile.mode.${mode}.hint`)}</span>
                   </span>
                 </button>
               ))}
             </div>
+            <p className="mt-3 text-[11.5px] text-faint">{t("profile.mode.note")}</p>
           </Page>
         )}
       </div>

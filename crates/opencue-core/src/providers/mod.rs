@@ -439,6 +439,8 @@ pub struct ChatRequest {
     pub on_tool: Option<ToolSink>,
     /// The folder a CLI provider runs in (a coding group's repository or worktree).
     pub cwd: Option<std::path::PathBuf>,
+    /// The agent's permission mode: CLI providers translate it into the CLI's own sandbox flags.
+    pub permission: Option<crate::models::ApprovalMode>,
 }
 
 #[derive(Debug, Clone)]

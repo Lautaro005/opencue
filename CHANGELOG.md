@@ -2,6 +2,35 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.5.3 — 2026-10-28
+
+### New
+
+- **Four permission modes**, in each agent's profile and for a whole group at once: **Nothing runs** (reads and answers, never
+  executes), **Ask before every action**, **Ask only for the critical** (sending email, deleting, destructive commands such as
+  `rm`, `git push` or `sudo`, anything that will run later by itself) and **Allow all**. They behave the same in chats and
+  groups, and the coding CLIs get the matching sandbox: Codex used to run read-only and fail with "no permission"; now it runs
+  in a workspace-write sandbox (or without one on *Allow all*, or read-only on *Nothing runs*), and Claude Code's own tools
+  are allowed or refused by the mode.
+- **Reply.** A button under an agent's answer quotes it in the box below; your message goes out with the quote (the agents see
+  it) and, in a group, addressed to the agent you are answering.
+- **Diffs and GitHub in coding teams.** Changes lists every new file (not just its folder) with its lines and diff, a
+  **Commits** list shows what the agents committed (local or pushed) with each file's diff, and every pull request has a
+  **Files changed on GitHub** view with the diffs.
+- **brain, Lumina & WorkStudio.** Settings → **Family** finds them on this computer, shows version and state, starts them,
+  and gives your agents their tools with one switch (brain's memory, Lumina's meetings). Connect WorkStudio instead and one
+  server covers both, with the direct ones paused so no tool shows twice. If an app is missing you get its install command.
+- **CLI updates.** In Settings → Providers, a configured Claude Code, Codex or Mistral Vibe shows under its card when a newer
+  version is out, with an **Update** button.
+- **Skills of your CLIs.** The skills already installed for Claude Code, Codex and others (and Claude's commands) appear in
+  the composer's + → Skills under a title per tool, and as `/name` in the list.
+
+### Fixed
+
+- The button that expands the collapsed sidebar sits under the logo instead of beside it.
+- The coding-agent logos are legible in both themes (white logos had a white tile).
+- No dark ring around faces in the notch.
+
 ## 0.5.2 — 2026-10-26
 
 ### New

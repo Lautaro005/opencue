@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.5.x`, currently `0.5.2`) | ✅ |
+| Latest release (`0.5.x`, currently `0.5.3`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -78,6 +78,10 @@ In scope:
 - **Coding groups** — `git` / `gh` run outside the repository folder the user picked, a pull request created, merged or
   commented on without the user pressing the button (or an agent's own approved action), or an agent (all of them now work in the group's folder, or in an opt-in worktree)
   reaching files outside that folder
+- **Permission modes** — an agent running something its mode says it must not (a command or a file write in *Nothing runs*,
+  a critical action without asking in *Ask only for the critical*), or a CLI agent getting more sandbox than its mode allows
+- **Family apps and CLI updates** — the commands OpenCue starts for brain, Lumina and WorkStudio (and for updating a CLI) doing
+  more than the fixed commands in the code, or an MCP entry for them pointing somewhere else
 - **Floating windows** — a floating window being given more commands or access than the main window
 - **Supply chain** — compromised dependencies, release artifacts, update signatures or the website produced by our
   GitHub Actions workflows

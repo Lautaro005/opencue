@@ -144,6 +144,25 @@ impl Core {
         github::pulls(&dir, state).await
     }
 
+    pub async fn github_commits(&self, group_id: &str) -> anyhow::Result<Vec<github::Commit>> {
+        let (_, dir) = self.coding_dir(group_id).await?;
+        github::commits(&dir, 25).await
+    }
+
+    pub async fn github_commit_patch(&self, group_id: &str, sha: &str) -> anyhow::Result<Changes> {
+        let (_, dir) = self.coding_dir(group_id).await?;
+        github::commit_patch(&dir, sha).await
+    }
+
+    pub async fn github_pull_changes(
+        &self,
+        group_id: &str,
+        number: u64,
+    ) -> anyhow::Result<Changes> {
+        let (_, dir) = self.coding_dir(group_id).await?;
+        github::pull_changes(&dir, number).await
+    }
+
     pub async fn github_changes(&self, group_id: &str) -> anyhow::Result<Changes> {
         let (_, dir) = self.coding_dir(group_id).await?;
         github::changes(&dir).await

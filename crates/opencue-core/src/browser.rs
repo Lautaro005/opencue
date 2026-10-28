@@ -101,6 +101,7 @@ impl Core {
             let key = format!("{}|{host}", agent.id);
             let known = self.browser_allowed.lock().unwrap().contains(&key);
             if !known && agent.settings.approval_mode == ApprovalMode::Ask {
+                // opening a site only asks in "ask" mode
                 let ok = self
                     .ask_permission(
                         "",

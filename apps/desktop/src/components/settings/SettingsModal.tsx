@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Bell, AppWindow, ArrowUpRight, AudioLines, BarChart3, Cpu, Globe, KeyRound, Info, LifeBuoy, MessageCircle, Monitor, Settings2, Sparkles, User, X } from "lucide-react";
+import { Bell, AppWindow, ArrowUpRight, AudioLines, BarChart3, Cpu, Globe, KeyRound, Info, LifeBuoy, MessageCircle, Monitor, Network, Settings2, Sparkles, User, X } from "lucide-react";
 import { useStore, type SettingsSection } from "../../lib/store";
 import { cx } from "../../lib/format";
 import { IconButton, Modal } from "../ui";
@@ -9,6 +9,7 @@ import { openUrl } from "../../lib/api";
 import { ModelsSection } from "./ModelsSection";
 import { ProvidersSection } from "./ProvidersSection";
 import { AppsSection } from "./AppsSection";
+import { FamilySection } from "./FamilySection";
 import { MessengerSection } from "./MessengerSection";
 import { NotificationsSection } from "./NotificationsSection";
 
@@ -21,6 +22,7 @@ const NAV: ({ id: SettingsSection; icon: React.ReactNode } | "divider")[] = [
   { id: "models", icon: <Cpu size={16} /> },
   "divider",
   { id: "apps", icon: <AppWindow size={16} /> },
+  { id: "family", icon: <Network size={16} /> },
   { id: "messenger", icon: <MessageCircle size={16} /> },
   { id: "skills", icon: <Sparkles size={16} /> },
   "divider",
@@ -76,6 +78,7 @@ export function SettingsModal() {
           {section === "providers" && <ProvidersSection />}
           {section === "models" && <ModelsSection />}
           {section === "apps" && <AppsSection />}
+          {section === "family" && <FamilySection />}
           {section === "messenger" && <MessengerSection />}
           {section === "skills" && <SkillsSection />}
           {section === "computers" && <ComputersSection />}

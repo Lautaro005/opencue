@@ -6,7 +6,7 @@ import { confirmDialog } from "../../lib/confirm";
 import { cx, shortTime } from "../../lib/format";
 import { useStore } from "../../lib/store";
 import { addCodingAgent, CODING_CLIS, sessionsOf, type Session, type SessionState } from "../../lib/coding";
-import type { Changes, Group, Lane, Pull, RepoStatus } from "../../lib/types";
+import type { Changes, Commit, Group, Lane, Pull, RepoStatus } from "../../lib/types";
 import { AvatarView } from "../AvatarView";
 import { Badge, Button, DialogHeader, Field, IconButton, Input, Modal, Spinner, Textarea, Toggle, useClickOutside } from "../ui";
 import { useResizable } from "../ui/Resizer";
@@ -343,6 +343,81 @@ function parsePatch(patch: string): Record<string, string[]> {
   return out;
 }
 
+/** A patch split per file and drawn with its added and removed lines. */
+function PatchView({ lines, empty }: { lines: string[]; empty: string }) {
+  return (
+    <pre className="selectable mx-1 mb-1 max-h-72 overflow-auto rounded-lg bg-hover/60 py-1.5 font-mono text-[11px] leading-[1.5]">
+      {lines.length === 0 ? (
+        <span className="px-3 text-muted">{empty}</span>
+      ) : (
+        lines.map((l, i) => (
+          <span key={i} className={cx("block px-3 whitespace-pre", l.startsWith("+") && !l.startsWith("+++") && "bg-success/10 text-success", l.startsWith("-") && !l.startsWith("---") && "bg-danger/10 text-danger", l.startsWith("@@") && "text-accent")}>
+            {l || " "}
+          </span>
+        ))
+      )}
+    </pre>
+  );
+}
+
+/** The latest commits, local and pushed, each with its files and diffs. */
+function CommitsList({ group }: { group: Group }) {
+  const { t } = useTranslation();
+  const [commits, setCommits] = useState<Commit[] | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [patches, setPatches] = useState<Record<string, Record<string, string[]>>>({});
+  const [file, setFile] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    const load = () => void api.githubCommits(group.id).then((c) => live && setCommits(c)).catch(() => live && setCommits([]));
+    load();
+    const timer = window.setInterval(load, 10000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [group.id]);
+  if (!commits || commits.length === 0) return null;
+  const toggle = (sha: string) => {
+    setOpen(open === sha ? null : sha);
+    setFile(null);
+    if (!patches[sha]) void api.githubCommitPatch(group.id, sha).then((c) => setPatches((p) => ({ ...p, [sha]: parsePatch(c.patch) }))).catch(() => {});
+  };
+  return (
+    <section className="mt-4" aria-label={t("coding.commits")}>
+      <h3 className="mb-1 px-2 text-[11px] font-semibold tracking-wide text-faint uppercase">{t("coding.commits")}</h3>
+      <ul className="space-y-0.5">
+        {commits.map((c) => (
+          <li key={c.sha}>
+            <button onClick={() => toggle(c.sha)} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-hover">
+              <span className="font-mono text-[11px] text-accent">{c.sha.slice(0, 7)}</span>
+              <span className="min-w-0 flex-1 truncate text-[12.5px]">{c.subject}</span>
+              <span className={cx("shrink-0 rounded-full px-1.5 text-[10px]", c.pushed ? "bg-success/15 text-success" : "bg-warning-soft text-warning")}>{c.pushed ? t("coding.pushed") : t("coding.local")}</span>
+              <ChevronDown size={13} className={cx("text-faint transition-transform", open === c.sha && "rotate-180")} />
+            </button>
+            {open === c.sha && (
+              <div className="mb-1 ml-2">
+                <p className="px-2 pb-1 text-[11px] text-faint">{c.author} · {c.when}</p>
+                {c.files.length === 0 && <p className="px-2 py-1 text-[11.5px] text-muted">{t("coding.noFilesInCommit")}</p>}
+                {c.files.map((f) => (
+                  <div key={f.path}>
+                    <button onClick={() => setFile(file === f.path ? null : f.path)} className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-hover">
+                      <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{f.path}</span>
+                      <span className="font-mono text-[10.5px] text-success">+{f.additions}</span>
+                      <span className="font-mono text-[10.5px] text-danger">−{f.deletions}</span>
+                    </button>
+                    {file === f.path && <PatchView lines={patches[c.sha]?.[f.path] ?? []} empty={t("coding.noDiff")} />}
+                  </div>
+                ))}
+              </div>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
 function ChangesTab({ group, status, onChanged }: { group: Group; status: RepoStatus | null; onChanged: () => void }) {
   const { t } = useTranslation();
   const [changes, setChanges] = useState<Changes | null>(null);
@@ -368,8 +443,8 @@ function ChangesTab({ group, status, onChanged }: { group: Group; status: RepoSt
     <div className="px-3 py-3">
       <div className="mb-2 flex items-center gap-2 px-2">
         <span className="text-[13px] font-medium">{t("coding.filesChanged", { count: changes.files.length })}</span>
-        <span className="font-mono text-[12px] text-success">+{status?.additions ?? 0}</span>
-        <span className="font-mono text-[12px] text-danger">−{status?.deletions ?? 0}</span>
+        <span className="font-mono text-[12px] text-success">+{changes.files.reduce((n, f) => n + f.additions, 0)}</span>
+        <span className="font-mono text-[12px] text-danger">−{changes.files.reduce((n, f) => n + f.deletions, 0)}</span>
         <div className="ml-auto flex items-center">
           <IconButton label={t("computer.reload")} onClick={load} className="size-7">
             <RefreshCw size={13} />
@@ -406,6 +481,7 @@ function ChangesTab({ group, status, onChanged }: { group: Group; status: RepoSt
         </ul>
       )}
       {changes.truncated && <p className="px-2 pt-2 text-[11.5px] text-faint">{t("coding.truncated")}</p>}
+      <CommitsList group={group} />
       {pr && <CreatePrDialog group={group} status={status} onClose={() => setPr(false)} onCreated={onChanged} />}
     </div>
   );
@@ -461,6 +537,48 @@ function CreatePrDialog({ group, status, onClose, onCreated }: { group: Group; s
 }
 
 // ---------- pull requests ----------
+
+/** The files a pull request changes on GitHub, with their diffs, opened on demand. */
+function PullFiles({ group, number }: { group: Group; number: number }) {
+  const { t } = useTranslation();
+  const [show, setShow] = useState(false);
+  const [data, setData] = useState<Changes | null>(null);
+  const [error, setError] = useState("");
+  const [file, setFile] = useState<string | null>(null);
+  const patch = useMemo(() => parsePatch(data?.patch ?? ""), [data?.patch]);
+  useEffect(() => {
+    if (!show || data) return;
+    void api.githubPullChanges(group.id, number).then(setData).catch((e) => setError(String(e)));
+  }, [show, data, group.id, number]);
+  return (
+    <div className="mt-2">
+      <button onClick={() => setShow((v) => !v)} className="inline-flex items-center gap-1 text-[12px] font-medium text-accent hover:underline">
+        <ChevronDown size={12} className={cx("transition-transform", show && "rotate-180")} /> {t("coding.prFiles")}
+      </button>
+      {show && (
+        <div className="mt-1">
+          {error ? (
+            <p className="selectable text-[12px] whitespace-pre-wrap text-danger">{error}</p>
+          ) : !data ? (
+            <Spinner size={13} />
+          ) : (
+            data.files.map((f) => (
+              <div key={f.path}>
+                <button onClick={() => setFile(file === f.path ? null : f.path)} className="flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-hover">
+                  <span className={cx("w-3.5 text-center font-mono text-[10.5px] font-bold", f.status === "A" ? "text-success" : f.status === "D" ? "text-danger" : "text-warning")}>{f.status}</span>
+                  <span className="min-w-0 flex-1 truncate font-mono text-[11.5px]">{f.path}</span>
+                  <span className="font-mono text-[10.5px] text-success">+{f.additions}</span>
+                  <span className="font-mono text-[10.5px] text-danger">−{f.deletions}</span>
+                </button>
+                {file === f.path && <PatchView lines={patch[f.path] ?? []} empty={t("coding.noDiff")} />}
+              </div>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CheckDots({ p }: { p: Pull }) {
   const { t } = useTranslation();
@@ -572,6 +690,7 @@ function PullsTab({ group, status }: { group: Group; status: RepoStatus | null }
                 {p.auto_merge && <Badge tone="accent">{t("coding.autoMerge")}</Badge>}
                 <span className="ml-auto font-mono text-[11px]"><span className="text-success">+{p.additions}</span> <span className="text-danger">−{p.deletions}</span></span>
               </div>
+              <PullFiles group={group} number={p.number} />
               {filter === "open" && (
                 <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
                   {p.checks.failed > 0 && (

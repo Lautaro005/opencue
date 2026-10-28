@@ -134,7 +134,7 @@ export function Sidebar() {
     <aside style={{ width: collapsed ? 64 : width }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar transition-[width] duration-150">
       {!collapsed && handle}
       <div className={cx("flex items-center", collapsed ? "flex-col gap-1 pt-2.5 pb-1" : "h-13 justify-between pl-4 pr-2.5")} data-tauri-drag-region>
-        <div className="flex min-w-0 items-center gap-0.5">
+        <div className={cx("flex min-w-0 items-center gap-0.5", collapsed && "flex-col gap-1")}>
           {/* The logo is the way home: it opens the dashboard. */}
           <a
             href="#dashboard"

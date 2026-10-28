@@ -126,9 +126,9 @@ function WorkPill({ workers, strip }: { workers: Agent[]; strip: number }) {
   const gap = strip > 0 ? 200 : 0;
   return (
     <div className="flex items-center justify-between gap-4 px-5" style={{ height: Math.max(strip, 34), minWidth: gap + 150 }}>
-      <span className="flex items-center -space-x-1.5">
+      <span className="flex items-center gap-1">
         {shown.map((a, i) => (
-          <span key={a.id} className="notch-hop flex rounded-full ring-2 ring-black" style={{ animationDelay: `${i * 130}ms` }}>
+          <span key={a.id} className="notch-hop flex rounded-full" style={{ animationDelay: `${i * 130}ms` }}>
             <AvatarView avatar={a.avatar} name={a.name} size={20} />
           </span>
         ))}

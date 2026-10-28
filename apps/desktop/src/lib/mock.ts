@@ -65,6 +65,11 @@ const changes = {
   patch: "diff --git a/src/lib.rs b/src/lib.rs\n--- a/src/lib.rs\n+++ b/src/lib.rs\n@@ -1,3 +1,4 @@\n pub mod artifacts;\n+pub mod council;\n pub mod browser;\n-pub mod old;\n",
   truncated: false,
 };
+const familyApps = [
+  { id: "brain", name: "brain", installed: true, running: true, version: "0.03.3.4", home: "~/.brain", url: "http://127.0.0.1:8765", mcp: "off", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/brain/main/install.sh | bash", repo_url: "https://github.com/Lautaro005/brain", can_start: true },
+  { id: "lumina", name: "Lumina", installed: true, running: false, version: "0.1.6", home: "~/.lumina", url: "http://127.0.0.1:47770", mcp: "on", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/lumina/main/install.sh | sh", repo_url: "https://github.com/Lautaro005/lumina", can_start: true },
+  { id: "workstudio", name: "AI WorkStudio", installed: false, running: null, version: null, home: null, url: null, mcp: "off", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/workstudio/main/install.sh | sh -s -- --all", repo_url: "https://github.com/Lautaro005/workstudio", can_start: false },
+];
 const groups: Group[] = [
   { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), kind: "chat", config: {}, members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
   { id: "g2", name: "Coding team", max_auto_turns: 8, created_at: ago(900), kind: "coding", config: { repo_dir: "/Users/you/code/opencue", isolate: false }, members: [{ agent_id: "a3", is_owner: true }, { agent_id: "a4", is_owner: false }] },
@@ -252,7 +257,7 @@ const voice = { configured: false, has_key: false, voice_id: "", auto_speak: tru
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.5.2-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.5.3-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -301,6 +306,22 @@ const handlers: Record<string, (a: Args) => unknown> = {
   github_status: () => repoStatus,
   github_pulls: () => pulls,
   github_changes: () => changes,
+  family_status: () => familyApps,
+  family_set_mcp: ({ id, enabled }) => { const a = familyApps.find((x) => x.id === id)!; a.mcp = enabled ? "on" : "off"; if (id === "workstudio") for (const o of familyApps) if (o.id !== "workstudio" && o.mcp === "on" && enabled) o.mcp = "via_workstudio"; return familyApps; },
+  family_start: () => undefined,
+  list_cli_skills: () => [
+    { name: "frontend-design", description: "Build distinctive, production-grade interfaces", path: "~/.claude/skills/frontend-design/SKILL.md", source: "claude" },
+    { name: "review", description: "Review the diff carefully", path: "~/.claude/commands/review.md", source: "claude" },
+    { name: "imagegen", description: "Generate or edit images", path: "~/.codex/skills/imagegen/SKILL.md", source: "codex" },
+  ],
+  cli_versions: () => [{ kind: "claude_cli", installed: "2.1.0", latest: "2.2.1", outdated: true }, { kind: "codex_cli", installed: "0.46.0", latest: "0.46.0", outdated: false }],
+  cli_update: () => "Updated",
+  github_commits: () => [
+    { sha: "a1b2c3d4e5f6", subject: "Add the council runner", author: "Ada", when: "12 minutes ago", pushed: false, files: [{ path: "src/council.rs", status: "M", additions: 40, deletions: 0 }, { path: "src/lib.rs", status: "M", additions: 6, deletions: 2 }] },
+    { sha: "0f9e8d7c6b5a", subject: "Initial commit", author: "OpenCue", when: "2 hours ago", pushed: true, files: [] },
+  ],
+  github_commit_patch: () => changes,
+  github_pull_changes: () => changes,
   notch_info: () => ({ macos: true, notch_height: 32 }),
   notch_place: () => undefined,
   notch_hide: () => undefined,

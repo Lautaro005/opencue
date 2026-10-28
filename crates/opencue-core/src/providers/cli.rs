@@ -323,6 +323,19 @@ impl LlmProvider for CliProvider {
                     allowed.push("mcp__opencue".into());
                     // The CLI's own tools (Bash, Read…) ask the app instead of failing in a headless run.
                     permission_tool = true;
+                } else if req.permission == Some(crate::models::ApprovalMode::Autonomous) {
+                    // Nobody to ask in this run: only "allow all" can use the CLI's own tools.
+                    cmd.arg("--dangerously-skip-permissions");
+                }
+                if req.permission == Some(crate::models::ApprovalMode::ReadOnly) {
+                    cmd.args([
+                        "--disallowedTools",
+                        "Bash",
+                        "Write",
+                        "Edit",
+                        "MultiEdit",
+                        "NotebookEdit",
+                    ]);
                 }
                 extra_claude(&mut servers, &mut allowed, &req.mcp_extra);
                 if !servers.is_empty() {
@@ -349,6 +362,19 @@ impl LlmProvider for CliProvider {
                     "--output-last-message",
                 ])
                 .arg(&last_message_file);
+                // Codex can't ask mid-run, so the permission mode picks its sandbox: it used to run
+                // read-only and every edit or command failed with "no permission".
+                match req.permission {
+                    Some(crate::models::ApprovalMode::Autonomous) => {
+                        cmd.arg("--dangerously-bypass-approvals-and-sandbox");
+                    }
+                    Some(crate::models::ApprovalMode::ReadOnly) => {
+                        cmd.args(["--sandbox", "read-only"]);
+                    }
+                    _ => {
+                        cmd.args(["--sandbox", "workspace-write"]);
+                    }
+                }
                 if !req.model.is_empty() && req.model != "default" {
                     cmd.arg("-m").arg(&req.model);
                 }

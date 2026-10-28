@@ -1259,6 +1259,74 @@ pub async fn github_changes(
 }
 
 #[tauri::command]
+pub fn list_cli_skills() -> Vec<opencue_core::cli_skills::CliSkill> {
+    opencue_core::cli_skills::list()
+}
+
+#[tauri::command]
+pub async fn family_status(state: State<'_, AppState>) -> R<Vec<opencue_core::family::FamilyApp>> {
+    Ok(state.core.family_status().await)
+}
+
+#[tauri::command]
+pub async fn family_set_mcp(
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> R<Vec<opencue_core::family::FamilyApp>> {
+    state.core.family_set_mcp(&id, enabled).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn family_start(state: State<'_, AppState>, id: String) -> R<()> {
+    state.core.family_start(&id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn cli_versions() -> Vec<opencue_core::cli_update::CliVersion> {
+    opencue_core::cli_update::versions().await
+}
+
+#[tauri::command]
+pub async fn cli_update(kind: String) -> R<String> {
+    opencue_core::cli_update::update(&kind).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_commits(
+    state: State<'_, AppState>,
+    group_id: String,
+) -> R<Vec<opencue_core::github::Commit>> {
+    state.core.github_commits(&group_id).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_commit_patch(
+    state: State<'_, AppState>,
+    group_id: String,
+    sha: String,
+) -> R<opencue_core::github::Changes> {
+    state
+        .core
+        .github_commit_patch(&group_id, &sha)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
+pub async fn github_pull_changes(
+    state: State<'_, AppState>,
+    group_id: String,
+    number: u64,
+) -> R<opencue_core::github::Changes> {
+    state
+        .core
+        .github_pull_changes(&group_id, number)
+        .await
+        .map_err(e)
+}
+
+#[tauri::command]
 pub async fn github_create_pr(
     state: State<'_, AppState>,
     group_id: String,
