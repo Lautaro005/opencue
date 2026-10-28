@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Plus, Trash2 } from "lucide-react";
+import { Check, Download, Plus, Trash2 } from "lucide-react";
 import { ProviderLogo } from "../ProviderLogo";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
 import { isConfigured } from "../../lib/models";
-import type { ProviderConfig, ProviderInfo } from "../../lib/types";
+import type { CliVersion, ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Spinner, Toggle } from "../ui";
 import { PageTitle } from "./SettingsModal";
@@ -21,6 +21,40 @@ function groupOf(info: ProviderInfo): Group {
   return LOCAL_KINDS.includes(info.kind) ? "local" : "cloud";
 }
 
+/** Under a configured CLI: a newer version is out, with the button that installs it. */
+function CliUpdateRow({ kind, versions, onDone }: { kind: string; versions: CliVersion[]; onDone: () => void }) {
+  const { t } = useTranslation();
+  const showToast = useStore((st) => st.showToast);
+  const [busy, setBusy] = useState(false);
+  const v = versions.find((x) => x.kind === kind);
+  if (!v || !v.outdated) return null;
+  return (
+    <div className="flex items-center gap-2 border-t border-line px-3.5 py-2 text-[12px]">
+      <span className="min-w-0 flex-1 truncate text-muted">
+        {t("settings.providers.newVersion", { from: v.installed, to: v.latest })}
+      </span>
+      <Button
+        size="sm"
+        variant="primary"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void api
+            .cliUpdate(kind)
+            .then(() => showToast(t("settings.providers.updated")))
+            .catch((e) => showToast(String(e)))
+            .finally(() => {
+              setBusy(false);
+              onDone();
+            });
+        }}
+      >
+        {busy ? <Spinner size={12} /> : <Download size={12} />} {t("settings.providers.update")}
+      </Button>
+    </div>
+  );
+}
+
 /** One container per provider the app supports; click one to set it up. */
 export function ProvidersSection() {
   const { t } = useTranslation();
@@ -29,6 +63,9 @@ export function ProvidersSection() {
   const [editing, setEditing] = useState<{ provider: ProviderConfig | null; info: ProviderInfo } | null>(null);
 
   useEffect(() => void api.providerCatalog().then(setCatalog), []);
+  const [versions, setVersions] = useState<CliVersion[]>([]);
+  const loadVersions = useCallback(() => void api.cliVersions().then(setVersions).catch(() => {}), []);
+  useEffect(loadVersions, [loadVersions]);
 
   // Ordered so the page reads top to bottom: what is connected first, then the rest by kind
   // (cloud APIs, models on this computer, command-line tools), each A–Z.
@@ -54,13 +91,10 @@ export function ProvidersSection() {
             </h3>
             <div className="grid grid-cols-2 gap-2.5">
               {items.map(({ info, provider, key, ready }) => (
+                <div key={key} className={cx("flex flex-col rounded-xl border transition-colors", ready ? "border-line-strong" : "border-line")}>
                 <button
-                  key={key}
                   onClick={() => setEditing({ provider, info })}
-                  className={cx(
-                    "flex min-h-[92px] flex-col items-start gap-2 rounded-xl border p-3.5 text-left transition-colors hover:bg-hover",
-                    ready ? "border-line-strong" : "border-line",
-                  )}
+                  className="flex min-h-[92px] flex-1 flex-col items-start gap-2 rounded-xl p-3.5 text-left transition-colors hover:bg-hover"
                 >
                   <span className="flex w-full items-center gap-2.5">
                     <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", ready ? "bg-accent-soft" : "bg-hover")}>
@@ -85,6 +119,8 @@ export function ProvidersSection() {
                   </span>
                   <span className="line-clamp-2 text-[12px] text-muted">{info.note}</span>
                 </button>
+                {ready && info.api === "cli" && <CliUpdateRow kind={info.kind} versions={versions} onDone={loadVersions} />}
+                </div>
               ))}
             </div>
           </section>

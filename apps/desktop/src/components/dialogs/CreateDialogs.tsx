@@ -304,7 +304,7 @@ export function CliAgentsDialog() {
                 disabled={busy !== null}
                 className={cx("flex w-full items-center gap-3 rounded-xl border border-line px-3.5 py-2.5 text-left transition-colors", installed ? "hover:border-accent hover:bg-hover" : "opacity-55")}
               >
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#17171a] shadow-sm">{busy === c.tool ? <Spinner size={15} /> : <TermIcon tool={c.tool} size={18} />}</span>
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white text-[#17171a] shadow-sm ring-1 ring-black/5 dark:bg-[#17171a] dark:text-white dark:ring-white/10">{busy === c.tool ? <Spinner size={15} /> : <TermIcon tool={c.tool} size={18} />}</span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[14px] font-medium">{c.label}</span>
                   <span className="block truncate text-[12px] text-muted">{installed ? t("cli.ready") : t("cli.notInstalled", { how: info?.install || "—" })}</span>

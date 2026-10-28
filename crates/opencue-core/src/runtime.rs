@@ -787,6 +787,7 @@ impl Core {
                 mcp_extra: vec![],
                 on_tool: None,
                 cwd: None,
+                permission: None,
             };
             let resp = provider.chat(req, &|_| {}).await?;
             anyhow::Ok(extract_json_array(&resp.text).unwrap_or_default())
@@ -1044,6 +1045,7 @@ impl Core {
                     .as_deref()
                     .filter(|d| !d.trim().is_empty())
                     .map(std::path::PathBuf::from),
+                permission: Some(agent.settings.approval_mode.clone()),
             };
             let result = tokio::select! {
                 r = provider.chat(req, &on_delta) => r,
@@ -1113,9 +1115,17 @@ impl Core {
                 tmsg.tool_name = Some(call.name.clone());
                 tmsg.status = "running".into();
 
-                let reason = toolbox
-                    .approval_reason(&call)
-                    .filter(|_| agent.settings.approval_mode == ApprovalMode::Ask);
+                let (verdict, why) = toolbox.check(&call, &agent.settings.approval_mode);
+                if verdict == crate::models::Verdict::Block {
+                    tmsg.status = "denied".into();
+                    tmsg.content = format!(
+                        "Blocked: {why}. This agent's permissions don't allow running or changing anything (Profile → Permissions). Answer without it, or tell the user what you would have done."
+                    );
+                    self.store.insert_message(&tmsg).await?;
+                    self.emit(CoreEvent::Message { message: tmsg });
+                    continue;
+                }
+                let reason = (verdict == crate::models::Verdict::Ask).then_some(why);
                 if let Some(reason) = reason {
                     if crate::messenger::is_wa_thread(thread_id) {
                         // The owner isn't looking at this chat: ask on the card in the agent's own chat.
@@ -1549,7 +1559,9 @@ impl Core {
             match m.role {
                 Role::User if m.status == "queued" => {}
                 Role::User => {
-                    let content = expand_command(&m.content, |n| self.skills.get(n));
+                    let content = expand_command(&m.content, |n| {
+                        self.skills.get(n).or_else(|| crate::cli_skills::get(n))
+                    });
                     out.push(ChatMessage::user_with_images(content, images));
                 }
                 Role::Event => out.push(ChatMessage::user(format!("[event] {}", m.content))),
@@ -1848,8 +1860,12 @@ impl Core {
             name: name.to_string(),
             arguments,
         };
-        if agent.settings.approval_mode == ApprovalMode::Ask {
-            if let Some(reason) = toolbox.approval_reason(&call) {
+        let (verdict, reason) = toolbox.check(&call, &agent.settings.approval_mode);
+        match verdict {
+            crate::models::Verdict::Block => anyhow::bail!(
+                "Blocked: {reason}. This agent's permissions don't allow running or changing anything; answer without it or tell the user what you would have done."
+            ),
+            crate::models::Verdict::Ask => {
                 // The card is shown by the app; this process waits for the answer.
                 let ok = self.ask_permission("", &agent, "", &reason, None).await?;
                 anyhow::ensure!(
@@ -1857,6 +1873,7 @@ impl Core {
                     "The user rejected this action. Don't do it; adapt or tell them what you can do instead."
                 );
             }
+            crate::models::Verdict::Allow => {}
         }
         let text = self
             .execute_tool(
@@ -1888,8 +1905,29 @@ impl Core {
         let input = arguments.get("input").cloned().unwrap_or(json!({}));
         let allow =
             |input: &Value| json!({ "behavior": "allow", "updatedInput": input }).to_string();
-        if agent.settings.approval_mode != ApprovalMode::Ask || tool == "TodoWrite" {
+        let mode = &agent.settings.approval_mode;
+        let read_only_tool = matches!(
+            tool,
+            "Read" | "Glob" | "Grep" | "LS" | "TodoWrite" | "WebSearch" | "WebFetch" | "Task"
+        );
+        if read_only_tool || *mode == ApprovalMode::Autonomous {
             return Ok(allow(&input));
+        }
+        let shell = input
+            .get("command")
+            .and_then(Value::as_str)
+            .unwrap_or_default();
+        let critical = tool == "Bash" && crate::models::dangerous_command(shell);
+        match mode.verdict(critical, true) {
+            crate::models::Verdict::Allow => return Ok(allow(&input)),
+            crate::models::Verdict::Block => {
+                return Ok(json!({
+                    "behavior": "deny",
+                    "message": "This agent's permissions don't allow running or changing anything. Answer without it, or tell the user what you would have done."
+                })
+                .to_string())
+            }
+            crate::models::Verdict::Ask => {}
         }
         let detail = ["command", "file_path", "path", "pattern", "url", "query"]
             .iter()
@@ -1951,6 +1989,7 @@ impl Core {
             mcp_extra: vec![],
             on_tool: None,
             cwd: None,
+            permission: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         for fact in extract_json_array(&resp.text)
@@ -2049,6 +2088,7 @@ impl Core {
             mcp_extra: vec![],
             on_tool: None,
             cwd: None,
+            permission: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let text = resp.text.trim();
@@ -2205,6 +2245,7 @@ impl Core {
                         mcp_extra: vec![],
                         on_tool: None,
                         cwd: None,
+                        permission: None,
                     },
                     &|_| {},
                 )
@@ -2279,6 +2320,7 @@ impl Core {
             mcp_extra: vec![],
             on_tool: None,
             cwd: None,
+            permission: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         let (Some(a), Some(b)) = (resp.text.find('{'), resp.text.rfind('}')) else {
@@ -2355,6 +2397,7 @@ impl Core {
             mcp_extra: vec![],
             on_tool: None,
             cwd: None,
+            permission: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
         if let Some(tidy) = extract_json_array(&resp.text) {

@@ -291,6 +291,7 @@ mod tests {
             mcp_extra: vec![],
             on_tool: None,
             cwd: None,
+            permission: None,
         };
         let msgs = to_anthropic_messages(&req);
         assert_eq!(msgs.len(), 3);

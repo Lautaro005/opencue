@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { AlertCircle, Check, ChevronRight, Clock, Copy, MessageCircle, Pencil, RefreshCw, Sparkles, Zap } from "lucide-react";
+import { AlertCircle, Check, ChevronRight, Clock, Copy, MessageCircle, Pencil, RefreshCw, Reply, Sparkles, Zap } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import type { Agent, Message, ToolCall } from "../../lib/types";
@@ -202,10 +202,30 @@ function AssistantText({ m }: { m: Message }) {
       )}
       {text && m.status !== "streaming" && (
         <div className="ml-1 flex h-6 items-center opacity-0 transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100">
+          <ReplyButton m={m} text={text} />
           <CopyButton text={text} />
         </div>
       )}
     </div>
+  );
+}
+
+/** Quotes this reply in the box below, so the next message answers it. */
+function ReplyButton({ m, text }: { m: Message; text: string }) {
+  const { t } = useTranslation();
+  const setReplyTo = useStore((s) => s.setReplyTo);
+  const name = useStore((s) => (m.agent_id ? s.agents[m.agent_id]?.name : undefined)) ?? "";
+  return (
+    <IconButton
+      label={t("chat.reply")}
+      onClick={() => {
+        setReplyTo(m.thread_id, { agentId: m.agent_id ?? null, name, text: text.replace(/\s+/g, " ").trim().slice(0, 280) });
+        window.dispatchEvent(new CustomEvent("opencue:focus-composer"));
+      }}
+      className="size-6"
+    >
+      <Reply size={13} />
+    </IconButton>
   );
 }
 
@@ -232,6 +252,21 @@ function CopyButton({ text }: { text: string }) {
     <IconButton label={done ? t("chat.copied") : t("chat.copyReply")} onClick={() => void copy()} className="size-6">
       {done ? <Check size={13} className="text-success" /> : <Copy size={13} />}
     </IconButton>
+  );
+}
+
+/** A message to the agents; a leading "> quote" (from Reply) shows as a small quote above the text. */
+function UserText({ content, queued }: { content: string; queued: boolean }) {
+  const lines = content.split("\n");
+  let i = 0;
+  while (i < lines.length && lines[i].startsWith(">")) i++;
+  const quote = lines.slice(0, i).map((l) => l.replace(/^>\s?/, "")).join(" ").trim();
+  const body = quote ? lines.slice(i).join("\n").trim() : content;
+  return (
+    <div className={cx("selectable break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink", queued && "opacity-70")}>
+      {quote && <div className="mb-1.5 line-clamp-3 border-l-2 border-me-ink/40 pl-2.5 text-[12.5px] opacity-80">{quote.replace(/\*\*/g, "")}</div>}
+      <div className="whitespace-pre-wrap">{body}</div>
+    </div>
   );
 }
 
@@ -280,7 +315,7 @@ function UserBubble({ m, firstOfRun, isLast }: { m: Message; firstOfRun: boolean
             </div>
           </div>
         ) : (
-          m.content && <div className={cx("selectable whitespace-pre-wrap break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink", m.status === "queued" && "opacity-70")}>{m.content}</div>
+          m.content && <UserText content={m.content} queued={m.status === "queued"} />
         )}
         {m.status === "queued" && (
           <div className="flex items-center gap-2 text-[11.5px] text-muted">

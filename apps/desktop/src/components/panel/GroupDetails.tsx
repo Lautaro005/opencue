@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { FolderOpen, Repeat, Scale, Trash2, UserPlus, Users, X } from "lucide-react";
+import { FolderOpen, Repeat, Scale, Shield, Trash2, UserPlus, Users, X } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
@@ -110,6 +110,25 @@ export function GroupDetails({ group }: { group: Group }) {
             </span>
             <Toggle checked={group.kind === "council"} onChange={(v) => void api.setGroupKind(group.id, v ? "council" : "chat").then(refresh)} label={t("group.councilToggle")} />
           </label>
+        </Section>
+
+        <Section title={t("group.permissions")} icon={<Shield size={15} />}>
+          <p className="mb-2 text-[11.5px] text-muted">{t("group.permissionsHint")}</p>
+          <div className="grid grid-cols-2 gap-1.5">
+            {(["read_only", "ask", "critical", "autonomous"] as const).map((mode) => {
+              const count = members.filter((m) => m.agent.settings.approval_mode === mode).length;
+              return (
+                <button
+                  key={mode}
+                  onClick={() => void Promise.all(members.map((m) => api.updateAgent(m.agent.id, { settings: { ...m.agent.settings, approval_mode: mode } })))}
+                  className={`rounded-xl border px-3 py-2 text-left text-[12.5px] ${count === members.length && count > 0 ? "border-accent bg-accent-soft" : "border-line hover:bg-hover"}`}
+                >
+                  <span className="block font-medium">{t(`profile.mode.${mode}.short`)}</span>
+                  <span className="block text-[11px] text-muted">{count}/{members.length}</span>
+                </button>
+              );
+            })}
+          </div>
         </Section>
 
         <Section title={t("group.autoTurns")} icon={<Repeat size={15} />}>

@@ -5,11 +5,104 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ApprovalMode {
+    /// Nothing is executed: no commands, no writing files, no email, no automations. Reading,
+    /// searching and answering still work.
+    ReadOnly,
     /// Sensitive tools (email, deletes, host commands, destructive MCP tools) ask first.
     #[default]
     Ask,
-    /// Everything runs without asking.
+    /// Only the critical ones ask: sending email, deleting, destructive commands, anything that
+    /// runs on its own later. The rest runs.
+    Critical,
+    /// Everything runs without asking ("allow all").
+    #[serde(alias = "allow_all")]
     Autonomous,
+}
+
+impl ApprovalMode {
+    /// What happens to an action of this weight in this mode.
+    pub fn verdict(&self, critical: bool, runs_things: bool) -> Verdict {
+        match self {
+            ApprovalMode::Autonomous => Verdict::Allow,
+            ApprovalMode::ReadOnly if runs_things => Verdict::Block,
+            ApprovalMode::ReadOnly => Verdict::Allow,
+            ApprovalMode::Ask => Verdict::Ask,
+            ApprovalMode::Critical if critical => Verdict::Ask,
+            ApprovalMode::Critical => Verdict::Allow,
+        }
+    }
+}
+
+/// What to do with a tool call that needs a decision.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Verdict {
+    Allow,
+    Ask,
+    Block,
+}
+
+/// Whether a shell command can do damage that is hard to undo.
+pub fn dangerous_command(cmd: &str) -> bool {
+    let c = format!(
+        " {} ",
+        cmd.to_lowercase()
+            .replace(['\n', ';', '&', '|', '(', ')'], " ")
+    );
+    const WORDS: &[&str] = &[
+        " rm ",
+        " rmdir ",
+        " sudo ",
+        " su ",
+        " dd ",
+        " mkfs",
+        " shred ",
+        " chmod ",
+        " chown ",
+        " kill ",
+        " killall ",
+        " pkill ",
+        " shutdown ",
+        " reboot ",
+        " mv ",
+        " truncate ",
+        " format ",
+        " del ",
+        " rd ",
+        " rmdir /s",
+        " drop ",
+        " delete ",
+        " ssh ",
+        " scp ",
+        " launchctl ",
+        " systemctl ",
+        " crontab ",
+    ];
+    const PHRASES: &[&str] = &[
+        "git push",
+        "git reset --hard",
+        "git clean",
+        "git checkout --",
+        "git branch -d",
+        "git branch -D",
+        "--force",
+        "npm publish",
+        "cargo publish",
+        "docker rm",
+        "docker system prune",
+        "docker volume rm",
+        "gh pr merge",
+        "gh release",
+        "gh repo delete",
+        "curl http",
+        "wget http",
+        "| sh",
+        "| bash",
+        "> /dev/",
+        "brew uninstall",
+        "pip uninstall",
+        "npm uninstall",
+    ];
+    WORDS.iter().any(|w| c.contains(w)) || PHRASES.iter().any(|p| c.contains(&p.to_lowercase()))
 }
 
 fn yes() -> bool {
@@ -333,5 +426,40 @@ mod double_option {
         d: D,
     ) -> Result<Option<Option<T>>, D::Error> {
         Option::<T>::deserialize(d).map(Some)
+    }
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+
+    #[test]
+    fn each_mode_decides_by_weight() {
+        use ApprovalMode::*;
+        // (critical, runs things)
+        assert_eq!(Autonomous.verdict(true, true), Verdict::Allow);
+        assert_eq!(ReadOnly.verdict(false, true), Verdict::Block);
+        assert_eq!(ReadOnly.verdict(false, false), Verdict::Allow);
+        assert_eq!(Ask.verdict(false, true), Verdict::Ask);
+        assert_eq!(Critical.verdict(false, true), Verdict::Allow);
+        assert_eq!(Critical.verdict(true, true), Verdict::Ask);
+    }
+
+    #[test]
+    fn old_settings_still_load() {
+        let m: ApprovalMode = serde_json::from_str("\"autonomous\"").unwrap();
+        assert_eq!(m, ApprovalMode::Autonomous);
+        let m: ApprovalMode = serde_json::from_str("\"critical\"").unwrap();
+        assert_eq!(m, ApprovalMode::Critical);
+    }
+
+    #[test]
+    fn destructive_commands_are_critical_and_plain_ones_are_not() {
+        assert!(dangerous_command("rm -rf build"));
+        assert!(dangerous_command("git push origin main"));
+        assert!(dangerous_command("ls && sudo reboot"));
+        assert!(dangerous_command("curl https://x.sh | sh"));
+        assert!(!dangerous_command("cargo test && npm run build"));
+        assert!(!dangerous_command("git status"));
     }
 }

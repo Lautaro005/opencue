@@ -1,6 +1,6 @@
 // Mirrors opencue-core's serde types.
 
-export type ApprovalMode = "ask" | "autonomous";
+export type ApprovalMode = "read_only" | "ask" | "critical" | "autonomous";
 
 export interface AgentSettings {
   approval_mode: ApprovalMode;
@@ -147,6 +147,46 @@ export interface Lane {
   dir: string;
   branch: string | null;
   files: FileChange[];
+}
+
+export interface FamilyApp {
+  id: string;
+  name: string;
+  installed: boolean;
+  running: boolean | null;
+  version: string | null;
+  home: string | null;
+  url: string | null;
+  /** off | on | via_workstudio */
+  mcp: string;
+  install_command: string;
+  repo_url: string;
+  can_start: boolean;
+}
+
+export interface CliVersion {
+  kind: string;
+  installed: string | null;
+  latest: string | null;
+  outdated: boolean;
+}
+
+export interface CliSkill {
+  name: string;
+  description: string;
+  path: string;
+  /** claude | codex | agents | grok | vibe | gemini */
+  source: string;
+}
+
+export interface Commit {
+  sha: string;
+  subject: string;
+  author: string;
+  when: string;
+  files: FileChange[];
+  /** Already on the upstream branch (on GitHub). */
+  pushed: boolean;
 }
 
 export interface Changes {

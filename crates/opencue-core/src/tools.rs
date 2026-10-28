@@ -493,6 +493,38 @@ impl Toolbox {
         self.mcp.iter().find(|t| t.qualified_name() == name)
     }
 
+    /// What to do with this call under the agent's permission mode: run it, ask first, or refuse.
+    /// The reason is what the card (or the refusal) says.
+    pub fn check(
+        &self,
+        call: &ToolCall,
+        mode: &crate::models::ApprovalMode,
+    ) -> (crate::models::Verdict, String) {
+        use crate::models::Verdict;
+        let reason = self.approval_reason(call);
+        // Anything that runs or writes is blocked in the "nothing executes" mode, even in a sandbox.
+        let runs = matches!(call.name.as_str(), RUN_COMMAND | WRITE_FILE) || reason.is_some();
+        let critical = match call.name.as_str() {
+            FORGET | SEND_EMAIL | CREATE_AUTOMATION => true,
+            RUN_COMMAND => {
+                crate::models::dangerous_command(arg_str(&call.arguments, "command").unwrap_or(""))
+            }
+            _ => reason.is_some() && self.mcp_tool(&call.name).is_some(),
+        };
+        let v = if reason.is_none() && !runs {
+            Verdict::Allow
+        } else {
+            mode.verdict(critical, runs)
+        };
+        // Ask only has something to ask about when there is a reason.
+        let v = if v == Verdict::Ask && reason.is_none() {
+            Verdict::Allow
+        } else {
+            v
+        };
+        (v, reason.unwrap_or_else(|| "Runs something".into()))
+    }
+
     /// Why this call needs the user's OK in "ask" mode, if it does.
     pub fn approval_reason(&self, call: &ToolCall) -> Option<String> {
         match call.name.as_str() {

@@ -6,7 +6,7 @@ import type { GroupTemplate } from "./templates";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, TermInfo, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | "artifact" | "canvas" | null;
-export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
+export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "family" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
 export type Dialog = "create-agent" | "create-group" | "create-coding" | "cli-agents" | "templates" | "walkthrough" | null;
 
 export interface ModelList {
@@ -42,6 +42,9 @@ interface State {
   searchOpen: boolean;
   /** A message to scroll to once its chat is open (from the search). */
   focusMessage: string | null;
+  /** The reply being written to an agent's message, by chat. */
+  replyTo: Record<string, { agentId: string | null; name: string; text: string }>;
+  setReplyTo: (threadId: string, reply: { agentId: string | null; name: string; text: string } | null) => void;
   toast: string | null;
   /** The voice call in progress, if any. */
   call: { threadId: string; agentId: string } | null;
@@ -125,6 +128,12 @@ export const useStore = create<State>((set, get) => ({
   dm: null,
   searchOpen: false,
   focusMessage: null,
+  replyTo: {},
+  setReplyTo: (threadId, reply) =>
+    set((s) => {
+      const { [threadId]: _, ...rest } = s.replyTo;
+      return { replyTo: reply ? { ...rest, [threadId]: reply } : rest };
+    }),
   toast: null,
   call: null,
   models: {},

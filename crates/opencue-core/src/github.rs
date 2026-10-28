@@ -206,7 +206,7 @@ pub async fn status(dir: &Path) -> RepoStatus {
         s.additions = a;
         s.deletions = d;
     }
-    if let Ok(porcelain) = git(dir, &["status", "--porcelain"]).await {
+    if let Ok(porcelain) = git(dir, &["status", "--porcelain", "-uall"]).await {
         // Files git has not seen yet count as changed too.
         let untracked = porcelain.lines().filter(|l| l.starts_with("??")).count();
         s.changed_files += untracked;
@@ -386,62 +386,47 @@ fn porcelain_entry(line: &str) -> Option<(String, String)> {
     Some((letter.to_string(), path.to_string()))
 }
 
-/// The working tree's changes against HEAD: the files with their line counts, and the patch.
-pub async fn changes(dir: &Path) -> anyhow::Result<Changes> {
-    let numstat = git(dir, &["diff", "HEAD", "--numstat"])
-        .await
-        .unwrap_or_default();
-    let porcelain = git(dir, &["status", "--porcelain"]).await?;
-    let mut counts = std::collections::HashMap::new();
-    for l in numstat.lines() {
-        let mut p = l.split('\t');
-        let (a, d, path) = (p.next(), p.next(), p.next());
-        if let (Some(a), Some(d), Some(path)) = (a, d, path) {
-            counts.insert(
-                path.to_string(),
-                (a.parse::<u64>().unwrap_or(0), d.parse::<u64>().unwrap_or(0)),
-            );
-        }
+/// Files git has not seen yet: each one listed (not just its folder), with its lines counted and
+/// a patch written for it, because `git diff` never shows them.
+fn untracked_patch(dir: &Path, path: &str, with_patch: bool) -> (u64, String) {
+    const MAX_FILE: u64 = 200_000;
+    let full = dir.join(path);
+    let Ok(meta) = std::fs::metadata(&full) else {
+        return (0, String::new());
+    };
+    if !meta.is_file() || meta.len() > MAX_FILE {
+        return (0, String::new());
     }
-    let files = porcelain
-        .lines()
-        .filter_map(porcelain_entry)
-        .map(|(status, path)| {
-            let (additions, deletions) = counts.get(&path).copied().unwrap_or((0, 0));
-            FileChange {
-                path,
-                status,
-                additions,
-                deletions,
-            }
-        })
-        .collect();
-    let mut patch = git(dir, &["diff", "HEAD", "--no-color", "--no-ext-diff"])
-        .await
-        .unwrap_or_default();
-    let truncated = patch.len() > MAX_PATCH;
-    if truncated {
-        let mut end = MAX_PATCH;
-        while !patch.is_char_boundary(end) {
-            end -= 1;
-        }
-        patch.truncate(end);
+    let Ok(bytes) = std::fs::read(&full) else {
+        return (0, String::new());
+    };
+    if bytes.contains(&0) {
+        return (0, String::new());
     }
-    Ok(Changes {
-        files,
-        patch,
-        truncated,
-    })
+    let text = String::from_utf8_lossy(&bytes);
+    let lines: Vec<&str> = text.lines().collect();
+    if !with_patch {
+        return (lines.len() as u64, String::new());
+    }
+    let mut p = format!(
+        "diff --git a/{path} b/{path}\nnew file mode 100644\n--- /dev/null\n+++ b/{path}\n@@ -0,0 +1,{} @@\n",
+        lines.len()
+    );
+    for l in &lines {
+        p.push('+');
+        p.push_str(l);
+        p.push('\n');
+    }
+    (lines.len() as u64, p)
 }
 
-/// The changed files of a working tree with their line counts, without the patch.
-pub async fn changed_files(dir: &Path) -> Vec<FileChange> {
+/// The working tree against HEAD: tracked changes from `git diff`, and every new file.
+async fn collect(dir: &Path, with_patch: bool) -> anyhow::Result<Changes> {
     let numstat = git(dir, &["diff", "HEAD", "--numstat"])
         .await
         .unwrap_or_default();
-    let Ok(porcelain) = git(dir, &["status", "--porcelain"]).await else {
-        return vec![];
-    };
+    // `-uall` lists the files inside a new folder instead of only the folder.
+    let porcelain = git(dir, &["status", "--porcelain", "-uall"]).await?;
     let mut counts = std::collections::HashMap::new();
     for l in numstat.lines() {
         let mut p = l.split('\t');
@@ -452,19 +437,172 @@ pub async fn changed_files(dir: &Path) -> Vec<FileChange> {
             );
         }
     }
-    porcelain
-        .lines()
-        .filter_map(porcelain_entry)
-        .map(|(status, path)| {
-            let (additions, deletions) = counts.get(&path).copied().unwrap_or((0, 0));
-            FileChange {
-                path,
-                status,
-                additions,
-                deletions,
+    let mut files = vec![];
+    let mut extra = String::new();
+    for (status, path) in porcelain.lines().filter_map(porcelain_entry) {
+        let (mut additions, deletions) = counts.get(&path).copied().unwrap_or((0, 0));
+        if status == "?" {
+            let (n, patch) = untracked_patch(dir, &path, with_patch && extra.len() < MAX_PATCH);
+            additions = n;
+            extra.push_str(&patch);
+        }
+        files.push(FileChange {
+            path,
+            status,
+            additions,
+            deletions,
+        });
+    }
+    let mut patch = if with_patch {
+        git(dir, &["diff", "HEAD", "--no-color", "--no-ext-diff"])
+            .await
+            .unwrap_or_default()
+    } else {
+        String::new()
+    };
+    patch.push_str(&extra);
+    Ok(Changes {
+        files,
+        truncated: cut(&mut patch),
+        patch,
+    })
+}
+
+/// Keeps a patch within `MAX_PATCH`; true when it had to be cut.
+fn cut(patch: &mut String) -> bool {
+    if patch.len() <= MAX_PATCH {
+        return false;
+    }
+    let mut end = MAX_PATCH;
+    while !patch.is_char_boundary(end) {
+        end -= 1;
+    }
+    patch.truncate(end);
+    true
+}
+
+/// The working tree's changes against HEAD: the files with their line counts, and the patch.
+pub async fn changes(dir: &Path) -> anyhow::Result<Changes> {
+    collect(dir, true).await
+}
+
+/// The changed files of a working tree with their line counts, without the patch.
+pub async fn changed_files(dir: &Path) -> Vec<FileChange> {
+    collect(dir, false)
+        .await
+        .map(|c| c.files)
+        .unwrap_or_default()
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+pub struct Commit {
+    pub sha: String,
+    pub subject: String,
+    pub author: String,
+    pub when: String,
+    pub files: Vec<FileChange>,
+    /// Whether it is already on the upstream branch (on GitHub).
+    pub pushed: bool,
+}
+
+/// The latest commits of the branch with the files each one touched.
+pub async fn commits(dir: &Path, limit: usize) -> anyhow::Result<Vec<Commit>> {
+    let n = format!("-n{limit}");
+    let out = git(
+        dir,
+        &[
+            "log",
+            &n,
+            "--numstat",
+            "--no-color",
+            "--format=\u{1}%H\u{2}%s\u{2}%an\u{2}%cr",
+        ],
+    )
+    .await?;
+    // What is not on the upstream yet (empty without one, so then nothing counts as pushed).
+    let unpushed: std::collections::HashSet<String> = git(dir, &["rev-list", "@{upstream}..HEAD"])
+        .await
+        .map(|o| o.lines().map(str::to_string).collect())
+        .unwrap_or_default();
+    let has_upstream = git(dir, &["rev-parse", "@{upstream}"]).await.is_ok();
+    let mut list: Vec<Commit> = vec![];
+    for block in out.split('\u{1}').filter(|b| !b.trim().is_empty()) {
+        let mut lines = block.lines();
+        let mut head = lines.next().unwrap_or_default().split('\u{2}');
+        let (sha, subject, author, when) = (
+            head.next().unwrap_or_default().to_string(),
+            head.next().unwrap_or_default().to_string(),
+            head.next().unwrap_or_default().to_string(),
+            head.next().unwrap_or_default().to_string(),
+        );
+        let files = lines
+            .filter_map(|l| {
+                let mut p = l.split('\t');
+                let (a, d, path) = (p.next()?, p.next()?, p.next()?);
+                Some(FileChange {
+                    path: path.to_string(),
+                    status: "M".into(),
+                    additions: a.parse().unwrap_or(0),
+                    deletions: d.parse().unwrap_or(0),
+                })
+            })
+            .collect();
+        list.push(Commit {
+            pushed: has_upstream && !unpushed.contains(&sha),
+            sha,
+            subject,
+            author,
+            when,
+            files,
+        });
+    }
+    Ok(list)
+}
+
+/// The patch of one commit.
+pub async fn commit_patch(dir: &Path, sha: &str) -> anyhow::Result<Changes> {
+    anyhow::ensure!(
+        !sha.is_empty() && sha.chars().all(|c| c.is_ascii_hexdigit()),
+        "not a commit"
+    );
+    let mut patch = git(
+        dir,
+        &["show", sha, "--format=", "--no-color", "--no-ext-diff"],
+    )
+    .await?;
+    Ok(Changes {
+        files: vec![],
+        truncated: cut(&mut patch),
+        patch,
+    })
+}
+
+/// What a pull request changes on GitHub: its files and its patch.
+pub async fn pull_changes(dir: &Path, number: u64) -> anyhow::Result<Changes> {
+    let n = number.to_string();
+    let files = gh(dir, &["pr", "view", &n, "--json", "files", "-q", ".files"]).await?;
+    let list: Vec<Value> = serde_json::from_str(files.trim()).unwrap_or_default();
+    let files = list
+        .iter()
+        .map(|f| FileChange {
+            path: f["path"].as_str().unwrap_or_default().to_string(),
+            status: match f["changeType"].as_str() {
+                Some("ADDED") => "A",
+                Some("DELETED") => "D",
+                Some("RENAMED") => "R",
+                _ => "M",
             }
+            .into(),
+            additions: f["additions"].as_u64().unwrap_or(0),
+            deletions: f["deletions"].as_u64().unwrap_or(0),
         })
-        .collect()
+        .collect();
+    let mut patch = gh(dir, &["pr", "diff", &n, "--color", "never"]).await?;
+    Ok(Changes {
+        files,
+        truncated: cut(&mut patch),
+        patch,
+    })
 }
 
 /// A new pull request from the current branch (it is pushed first). Returns its address.
@@ -655,6 +793,40 @@ pub async fn add_worktree(repo: &Path, agent_name: &str) -> anyhow::Result<PathB
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn new_files_inside_new_folders_are_listed_with_a_patch_and_commits_show() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        init_repo(root).await.unwrap();
+        std::fs::create_dir_all(root.join("src/ui")).unwrap();
+        std::fs::write(root.join("src/ui/app.js"), "one\ntwo\nthree\n").unwrap();
+        let c = changes(root).await.unwrap();
+        assert_eq!(c.files.len(), 1, "{:?}", c.files);
+        assert_eq!(c.files[0].path, "src/ui/app.js");
+        assert_eq!((c.files[0].status.as_str(), c.files[0].additions), ("?", 3));
+        assert!(c.patch.contains("+++ b/src/ui/app.js") && c.patch.contains("+two"));
+        git(root, &["add", "-A"]).await.unwrap();
+        git(
+            root,
+            &[
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "commit",
+                "-qm",
+                "add app",
+            ],
+        )
+        .await
+        .unwrap();
+        let log = commits(root, 5).await.unwrap();
+        assert_eq!(log[0].subject, "add app");
+        assert_eq!(log[0].files[0].path, "src/ui/app.js");
+        let p = commit_patch(root, &log[0].sha).await.unwrap();
+        assert!(p.patch.contains("+three"));
+    }
 
     #[test]
     fn reads_github_remotes() {
