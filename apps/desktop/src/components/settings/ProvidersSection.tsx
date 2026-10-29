@@ -9,7 +9,6 @@ import { isConfigured } from "../../lib/models";
 import type { CliVersion, ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, DialogHeader, Field, Input, Modal, Spinner, Toggle } from "../ui";
-import { PageTitle } from "./SettingsModal";
 
 type Group = "connected" | "cloud" | "local" | "cli";
 type Tile = { info: ProviderInfo; provider: ProviderConfig | null; key: string; ready: boolean; group: Group };
@@ -55,7 +54,7 @@ function CliUpdateRow({ kind, versions, onDone }: { kind: string; versions: CliV
   );
 }
 
-/** One container per provider the app supports; click one to set it up. */
+/** One container per provider the app supports; click one to set it up (Settings → Models → Providers). */
 export function ProvidersSection() {
   const { t } = useTranslation();
   const providers = useStore((s) => s.providers);
@@ -81,7 +80,6 @@ export function ProvidersSection() {
 
   return (
     <>
-      <PageTitle title={t("settings.providers.title")} hint={t("settings.providers.hint")} />
       <div className="space-y-5">
         {groups.map(({ g, items }) => (
           <section key={g} aria-label={t(`settings.providers.group.${g}`)}>
@@ -91,13 +89,13 @@ export function ProvidersSection() {
             </h3>
             <div className="grid grid-cols-2 gap-2.5">
               {items.map(({ info, provider, key, ready }) => (
-                <div key={key} className={cx("flex flex-col rounded-xl border transition-colors", ready ? "border-line-strong" : "border-line")}>
+                <div key={key} className={cx("surface surface-hover flex flex-col rounded-2xl", ready && "ring-1 ring-success/25")}>
                 <button
                   onClick={() => setEditing({ provider, info })}
-                  className="flex min-h-[92px] flex-1 flex-col items-start gap-2 rounded-xl p-3.5 text-left transition-colors hover:bg-hover"
+                  className="flex min-h-[92px] flex-1 flex-col items-start gap-2 rounded-2xl p-3.5 text-left"
                 >
                   <span className="flex w-full items-center gap-2.5">
-                    <span className={cx("flex size-8 shrink-0 items-center justify-center rounded-lg", ready ? "bg-accent-soft" : "bg-hover")}>
+                    <span className={cx("flex size-9 shrink-0 items-center justify-center rounded-xl border border-line", ready ? "bg-accent-soft" : "bg-sidebar")}>
                       <ProviderLogo kind={info.kind} size={18} />
                     </span>
                     <span className="min-w-0 flex-1 truncate text-[13.5px] font-medium">{provider && provider.kind === "openai_compatible" ? provider.name : info.label}</span>

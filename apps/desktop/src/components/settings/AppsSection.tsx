@@ -6,7 +6,8 @@ import { api, isTauri, pickJsonFile } from "../../lib/api";
 import type { McpServerConfig, McpServerStatus } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, Field, Input, Textarea, Toggle } from "../ui";
-import { PageTitle } from "./SettingsModal";
+import { PageTitle, SectionTabs, useSectionTab } from "./SettingsModal";
+import { WorkStudioApps } from "./WorkStudioSection";
 import { CatalogCard } from "./CatalogSection";
 
 type Mode = null | "stdio" | "http" | "paste";
@@ -22,7 +23,26 @@ const toPairs = (s: string, sep: string) =>
       .filter((x): x is [string, string] => !!x),
   );
 
+const TABS = ["workstudio", "servers", "catalog"] as const;
+
+/** Tools for the agents: the WorkStudio family, MCP servers, and the catalog of apps to sign in to. */
 export function AppsSection() {
+  const { t } = useTranslation();
+  const tab = useSectionTab(TABS, "workstudio");
+  return (
+    <>
+      <PageTitle title={t("settings.apps.title")} hint={t(`settings.apps.hint.${tab}`)} />
+      <SectionTabs
+        label={t("settings.apps.title")}
+        fallback="workstudio"
+        tabs={TABS.map((id) => ({ id, label: t(`settings.apps.tab.${id}`) }))}
+      />
+      {tab === "workstudio" ? <WorkStudioApps /> : tab === "catalog" ? <CatalogCard /> : <McpServers />}
+    </>
+  );
+}
+
+function McpServers() {
   const { t } = useTranslation();
   const showToast = useStore((s) => s.showToast);
   const [servers, setServers] = useState<McpServerConfig[]>([]);
@@ -53,8 +73,7 @@ export function AppsSection() {
 
   return (
     <>
-      <PageTitle title={t("settings.apps.title")} hint={t("settings.apps.hint")} />
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between">
         <h3 className="text-[12.5px] font-semibold tracking-wide text-muted uppercase">{t("settings.apps.mcp")}</h3>
         <div className="flex gap-1.5">
           <Button size="sm" onClick={() => setMode("stdio")}>
@@ -84,9 +103,9 @@ export function AppsSection() {
             const st = status.find((x) => x.id === s.id);
             const state = st?.state ?? "stopped";
             return (
-              <div key={s.id} className="rounded-xl border border-line px-4 py-3">
+              <div key={s.id} className="surface rounded-2xl px-4 py-3">
                 <div className="flex items-center gap-3">
-                  <span className="flex size-8 items-center justify-center rounded-lg bg-hover text-muted">{s.transport === "http" ? <Globe size={15} /> : <Plug size={15} />}</span>
+                  <span className="flex size-9 items-center justify-center rounded-xl border border-line bg-sidebar text-muted">{s.transport === "http" ? <Globe size={15} /> : <Plug size={15} />}</span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-[13.5px] font-medium">{s.name}</span>
@@ -120,9 +139,6 @@ export function AppsSection() {
         </div>
       )}
 
-      <div className="mt-8">
-        <CatalogCard />
-      </div>
     </>
   );
 }

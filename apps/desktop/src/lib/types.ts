@@ -377,6 +377,20 @@ export interface AppInfo {
   space_supported: boolean;
 }
 
+export interface StorageItem {
+  id: "chats" | "agents" | "files" | "artifacts" | "models" | "memory" | "messenger" | "space" | "other";
+  bytes: number;
+  files: number;
+}
+
+export interface StorageReport {
+  root: string;
+  total: number;
+  items: StorageItem[];
+  disk_free: number | null;
+  disk_total: number | null;
+}
+
 export interface ApprovalRequest {
   id: string;
   thread_id: string;

@@ -36,6 +36,25 @@ pub fn app_info(state: State<'_, AppState>) -> AppInfo {
 }
 
 #[tauri::command]
+pub async fn storage_report(state: State<'_, AppState>) -> R<opencue_core::storage::StorageReport> {
+    state.core.storage_report().await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn storage_compact(
+    state: State<'_, AppState>,
+) -> R<opencue_core::storage::StorageReport> {
+    state.core.compact_storage().await.map_err(e)
+}
+
+/// Open the data folder in the file manager.
+#[tauri::command]
+pub fn open_data_dir(state: State<'_, AppState>) -> R<()> {
+    tauri_plugin_opener::open_path(state.core.paths().root(), None::<&str>)
+        .map_err(|err| err.to_string())
+}
+
+#[tauri::command]
 pub async fn list_threads(state: State<'_, AppState>) -> R<Vec<ThreadSummary>> {
     state.core.threads().await.map_err(e)
 }

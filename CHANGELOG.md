@@ -2,6 +2,38 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.5.4 — 2026-10-29
+
+### New
+
+- **One orchestrator per plan.** In a group, `/plan` starts a single agent (the first one you name, or the one the group
+  picks): it writes the checklist, gives each step to the best teammate and ticks it when they report back. The others
+  don't make plans of their own (OpenCue refuses `update_plan` from them during the run) and answer the lead with `DONE:`
+  or `BLOCKED:`; a lead still busy when a teammate reports goes again once it finishes, so no report is missed.
+- **A new plan card.** The checklist sits under the agents, with who does each step, the step in progress highlighted
+  and a check that pops in as it ticks. The lead is marked, working agents bob, the border glows while the run is live,
+  and the header says what is happening (*Test is making the plan…*, the current step, *Done · 4 steps*,
+  *Completed in 2:31*) instead of "Planning…" all the time. Before the first plan arrives it shows a placeholder list.
+- **Settings → Storage.** How much room OpenCue takes, split by kind (local models, agents, files, chats & settings,
+  artifacts, memory & skills, Messenger, SPACE, other) with sizes, file counts and the free space on the disk. **Compact
+  database** gives back the room deleted chats left behind; **Open folder** shows the data folder.
+- **Settings, reorganised.** The pages are grouped (AI, Connections, This computer). **Providers and Models are one page**
+  with three tabs: Providers, Cloud models and On this computer. **Family is now WorkStudio**, a tab of **Apps** next to
+  MCP servers and the Catalog. **Get help** moved into About, with *Report a problem* and *Documentation*.
+- **A more polished look.** A refined palette for both themes, the brand gradient on primary buttons and your own
+  messages, cards with a hairline border and a soft shadow, a floating message box, smoother dialogs and tabs.
+
+### Fixed
+
+- **Nothing twice in a plan.** Answers stay in the chat and **Open run** only holds what happened between them (tool calls,
+  notes, events), so a reply no longer shows both in the card and below it. A teammate's `DONE:` / `BLOCKED:` report lives
+  in the card, since the checklist already shows it.
+- **Reply sits above the message box**, like a tab, instead of inside it next to the + button.
+
+### Removed
+
+- Unused code and 39 translation strings nothing used any more.
+
 ## 0.5.3 — 2026-10-28
 
 ### New

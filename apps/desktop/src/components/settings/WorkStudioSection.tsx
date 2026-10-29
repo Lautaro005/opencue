@@ -5,7 +5,13 @@ import { api, openUrl } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import type { FamilyApp } from "../../lib/types";
 import { Badge, Button, Toggle } from "../ui";
-import { PageTitle } from "./SettingsModal";
+import { cx } from "../../lib/format";
+
+const TILE: Record<string, string> = {
+  brain: "bg-gradient-to-br from-violet-500 to-fuchsia-500",
+  lumina: "bg-gradient-to-br from-amber-400 to-orange-500",
+  workstudio: "bg-gradient-to-br from-sky-500 to-indigo-500",
+};
 
 const ICON: Record<string, React.ReactNode> = {
   brain: <BrainCircuit size={18} />,
@@ -13,8 +19,9 @@ const ICON: Record<string, React.ReactNode> = {
   workstudio: <LayoutGrid size={18} />,
 };
 
-/** brain, Lumina and AI WorkStudio: found on this computer and wired to the agents with one switch. */
-export function FamilySection() {
+/** Settings → Apps → WorkStudio: brain, Lumina and AI WorkStudio, found on this computer and wired
+ *  to the agents with one switch. */
+export function WorkStudioApps() {
   const { t } = useTranslation();
   const showToast = useStore((s) => s.showToast);
   const [apps, setApps] = useState<FamilyApp[] | null>(null);
@@ -44,29 +51,28 @@ export function FamilySection() {
 
   return (
     <>
-      <PageTitle title={t("settings.family.title")} hint={t("settings.family.hint")} />
       <div className="space-y-3">
         {apps.map((a) => {
           const via = a.mcp === "via_workstudio";
           return (
-            <section key={a.id} className="rounded-2xl border border-line p-4">
+            <section key={a.id} className="surface rounded-2xl p-4">
               <div className="flex items-center gap-3">
-                <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-hover text-ink">{ICON[a.id]}</span>
+                <span className={cx("flex size-10 shrink-0 items-center justify-center rounded-xl text-white shadow-sm", TILE[a.id])}>{ICON[a.id]}</span>
                 <div className="min-w-0 flex-1">
                   <h3 className="flex items-center gap-2 text-[14.5px] font-semibold">
                     {a.name}
                     {a.version && <span className="font-mono text-[11.5px] font-normal text-faint">v{a.version}</span>}
                   </h3>
-                  <p className="text-[12.5px] text-muted">{t(`settings.family.${a.id}.what`)}</p>
+                  <p className="text-[12.5px] text-muted">{t(`settings.workstudio.${a.id}.what`)}</p>
                 </div>
                 {!a.installed ? (
-                  <Badge>{t("settings.family.notInstalled")}</Badge>
+                  <Badge>{t("settings.workstudio.notInstalled")}</Badge>
                 ) : a.running === true ? (
-                  <Badge tone="success">{t("settings.family.running")}</Badge>
+                  <Badge tone="success">{t("settings.workstudio.running")}</Badge>
                 ) : a.running === false ? (
-                  <Badge tone="warning">{t("settings.family.stopped")}</Badge>
+                  <Badge tone="warning">{t("settings.workstudio.stopped")}</Badge>
                 ) : (
-                  <Badge tone="success">{t("settings.family.installed")}</Badge>
+                  <Badge tone="success">{t("settings.workstudio.installed")}</Badge>
                 )}
               </div>
 
@@ -74,42 +80,42 @@ export function FamilySection() {
                 <>
                   <div className="mt-3 flex items-center gap-3 rounded-xl bg-hover/60 px-3 py-2.5">
                     <div className="min-w-0 flex-1">
-                      <p className="text-[13px] font-medium">{t("settings.family.tools")}</p>
+                      <p className="text-[13px] font-medium">{t("settings.workstudio.tools")}</p>
                       <p className="text-[11.5px] text-muted">
-                        {via ? t("settings.family.viaWorkstudio") : a.id === "workstudio" ? t("settings.family.toolsHub") : t(`settings.family.${a.id}.tools`)}
+                        {via ? t("settings.workstudio.viaWorkstudio") : a.id === "workstudio" ? t("settings.workstudio.toolsHub") : t(`settings.workstudio.${a.id}.tools`)}
                       </p>
                     </div>
                     <Toggle
                       checked={a.mcp === "on" || via}
                       disabled={busy === `mcp-${a.id}` || via}
                       onChange={(v) => void act(`mcp-${a.id}`, async () => { setApps(await api.familySetMcp(a.id, v)); })}
-                      label={t("settings.family.tools")}
+                      label={t("settings.workstudio.tools")}
                     />
                   </div>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
                     {a.url && a.running ? (
                       <Button size="sm" variant="primary" onClick={() => void openUrl(a.url!)}>
-                        <ExternalLink size={13} /> {t("settings.family.open")}
+                        <ExternalLink size={13} /> {t("settings.workstudio.open")}
                       </Button>
                     ) : (
                       <Button size="sm" variant="primary" disabled={busy === `start-${a.id}`} onClick={() => void act(`start-${a.id}`, () => api.familyStart(a.id))}>
-                        <Play size={13} /> {a.id === "workstudio" ? t("settings.family.open") : t("settings.family.start")}
+                        <Play size={13} /> {a.id === "workstudio" ? t("settings.workstudio.open") : t("settings.workstudio.start")}
                       </Button>
                     )}
                     <Button size="sm" variant="ghost" onClick={() => void openUrl(a.repo_url)}>
                       GitHub
                     </Button>
-                    {a.id !== "workstudio" && ws?.installed && a.mcp !== "on" && !via && ws.mcp !== "on" && <span className="text-[11.5px] text-faint">{t("settings.family.tipWorkstudio")}</span>}
+                    {a.id !== "workstudio" && ws?.installed && a.mcp !== "on" && !via && ws.mcp !== "on" && <span className="text-[11.5px] text-faint">{t("settings.workstudio.tipWorkstudio")}</span>}
                   </div>
                 </>
               ) : (
                 <div className="mt-3">
-                  <p className="mb-1.5 text-[12px] text-muted">{t("settings.family.installHint")}</p>
+                  <p className="mb-1.5 text-[12px] text-muted">{t("settings.workstudio.installHint")}</p>
                   <div className="flex items-center gap-2 rounded-xl bg-hover/60 px-3 py-2">
                     <code className="selectable min-w-0 flex-1 truncate font-mono text-[11.5px]">{a.install_command}</code>
                     <Button
                       size="sm"
-                      onClick={() => void navigator.clipboard.writeText(a.install_command).then(() => showToast(t("settings.family.copied")))}
+                      onClick={() => void navigator.clipboard.writeText(a.install_command).then(() => showToast(t("settings.workstudio.copied")))}
                     >
                       <Copy size={12} /> {t("common.copy")}
                     </Button>
@@ -123,7 +129,7 @@ export function FamilySection() {
           );
         })}
       </div>
-      <p className="mt-4 text-[12px] text-faint">{t("settings.family.note")}</p>
+      <p className="mt-4 text-[12px] text-faint">{t("settings.workstudio.note")}</p>
     </>
   );
 }

@@ -182,6 +182,12 @@ fn sanitize(history: Vec<ChatMessage>) -> Vec<ChatMessage> {
     out
 }
 
+/// Whether a message is a `/plan` command.
+fn is_plan_command(text: &str) -> bool {
+    let t = text.trim_start().to_ascii_lowercase();
+    t == "/plan" || t.starts_with("/plan ") || t.starts_with("/plan\n")
+}
+
 /// `/create-automation`, `/create-skill` and `/<skill-name>` typed in the composer become
 /// instructions for the model. The chat keeps showing what the user typed.
 fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skill>) -> String {
@@ -206,7 +212,9 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
              2. EXECUTE. Carry the steps out one at a time. Before you start a step call `update_plan` with it as `doing`; the moment it is finished and checked (or a teammate reports `DONE` for it), call `update_plan` again with it as `done`, so the user's checklist ticks itself. \
              Always send the whole list. Write one short line to the user with each step (what you are about to do, or what you found): they follow it in the plan card. If a step fails, fix the cause, or change the plan with `update_plan` and say why in a line. \
              Don't ask whether to continue; use `ask_user` only for a decision or permission you really need (anything destructive or irreversible).\n\
-             3. FINISH. Leave every step `done` (do NOT clear the plan), then answer with a short summary: what you did, what changed, and anything left for the user.\n\n\
+             3. FINISH. Leave every step `done` (do NOT clear the plan), then answer with a short summary: what you did, what changed, and anything left for the user.\n\
+             In a group chat you are the ORCHESTRATOR: you alone keep the plan. Give every step an `agent` (the teammate best suited, or yourself), \
+             hand each teammate their step with `send_to_agent` (with everything they need), and tick it `done` when they report back. Don't repeat in your own messages what is already in the checklist.\n\n\
              Request: {request}"
         ),
         "artifact" => format!(
@@ -555,6 +563,23 @@ impl Core {
         if first.is_empty() {
             first = self.route(group, &members, user_text).await;
         }
+        // A /plan run has one orchestrator: the first agent named (or routed to). It keeps the
+        // checklist and hands each step to a teammate; nobody else starts on their own.
+        let plan = is_plan_command(user_text);
+        if plan {
+            first.truncate(1);
+            match first.first() {
+                Some(lead) => {
+                    self.plan_leads
+                        .lock()
+                        .unwrap()
+                        .insert(group.id.clone(), lead.clone());
+                }
+                None => {
+                    self.plan_leads.lock().unwrap().remove(&group.id);
+                }
+            }
+        }
         let name_of = |id: &str| {
             members
                 .iter()
@@ -574,6 +599,9 @@ impl Core {
         > = futures::stream::FuturesUnordered::new();
         let mut active: std::collections::HashSet<String> = Default::default();
         let mut pending: VecDeque<String> = VecDeque::new();
+        // In a /plan run, someone named while still working (the orchestrator, usually) goes again
+        // once they finish, so a teammate's DONE is never missed.
+        let mut rerun: std::collections::HashSet<String> = Default::default();
         let mut auto_turns = 0i64;
         let mut limit_hit = false;
         // In a coding group a handoff is an obligation: it stays open until the teammate answers
@@ -662,6 +690,9 @@ impl Core {
                     if token.is_cancelled() {
                         continue;
                     }
+                    if rerun.remove(&agent_id) && !pending.contains(&agent_id) {
+                        pending.push_back(agent_id.clone());
+                    }
                     let mut requester: Option<String> = None;
                     if coding {
                         if let Some(o) = owed.get_mut(&agent_id) {
@@ -695,6 +726,18 @@ impl Core {
                     let mut next = outcome.handoffs.clone();
                     next.extend(mentions(&outcome.text, &members, Some(&agent_id)));
                     for id in next {
+                        if plan && active.contains(&id) && id != agent_id {
+                            if rerun.contains(&id) {
+                                continue;
+                            }
+                            if auto_turns >= group.max_auto_turns {
+                                limit_hit = true;
+                                break;
+                            }
+                            auto_turns += 1;
+                            rerun.insert(id);
+                            continue;
+                        }
                         if id == agent_id
                             || active.contains(&id)
                             || pending.contains(&id)
@@ -730,6 +773,9 @@ impl Core {
             }
         }
         self.group_chans.lock().unwrap().remove(&group.id);
+        if plan {
+            self.plan_leads.lock().unwrap().remove(&group.id);
+        }
         if limit_hit && !token.is_cancelled() {
             let ev = message(
                 &group.id,
@@ -1466,6 +1512,24 @@ impl Core {
                  Don't repeat what others already said; speak when you add something.",
                 g.name
             ));
+            let plan_lead = self.plan_leads.lock().unwrap().get(&g.id).cloned();
+            if let Some(lead_id) = plan_lead {
+                if lead_id == agent.id {
+                    s.push_str(
+                        "\n\n## /plan run\nYou orchestrate this /plan run: you alone keep the checklist with `update_plan`, give each step an `agent`, hand the steps out with `send_to_agent` and tick them as your teammates report back.",
+                    );
+                } else {
+                    let lead = all
+                        .iter()
+                        .find(|a| a.id == lead_id)
+                        .map(|a| a.name.clone())
+                        .unwrap_or_default();
+                    s.push_str(&format!(
+                        "\n\n## /plan run\n{lead} orchestrates this /plan run and keeps the checklist; the /plan instructions in the user's message are for them. \
+                         Don't make your own plan or call `update_plan`: do only the step {lead} hands you, then reply to @{lead} with `DONE:` (what you did and how you checked it) or `BLOCKED:` (what you need)."
+                    ));
+                }
+            }
             if g.kind == "coding" {
                 let lead_id = g
                     .members
@@ -1634,6 +1698,23 @@ impl Core {
         let args = &call.arguments;
         let global_allowed = self.global_memory_enabled().await && agent.settings.use_global_memory;
         let scope_global = arg_str(args, "scope") == Some("global");
+        if call.name == tools::UPDATE_PLAN {
+            if let Some(g) = group {
+                let lead = self.plan_leads.lock().unwrap().get(&g.id).cloned();
+                if let Some(lead) = lead.filter(|l| l != &agent.id) {
+                    let name = self
+                        .store
+                        .get_agent(&lead)
+                        .await
+                        .map(|a| a.name)
+                        .ok()
+                        .unwrap_or_else(|| "the orchestrator".into());
+                    anyhow::bail!(
+                        "{name} keeps the checklist for this /plan run. Do your step and report `DONE:` or `BLOCKED:` to @{name} instead."
+                    );
+                }
+            }
+        }
         match call.name.as_str() {
             tools::REMEMBER => {
                 let text =
@@ -2116,10 +2197,7 @@ impl Core {
             .await
             .ok()
             .and_then(|list| list.into_iter().rev().find(|m| m.role == Role::User))
-            .is_some_and(|m| {
-                let t = m.content.trim_start().to_ascii_lowercase();
-                t == "/plan" || t.starts_with("/plan ") || t.starts_with("/plan\n")
-            })
+            .is_some_and(|m| is_plan_command(&m.content))
     }
 
     /// Reports how far a tool call the model is still writing has got (artifacts, mostly), so the
@@ -2476,6 +2554,12 @@ mod tests {
         assert!(!plan_is_finished("- [x] a\n- [~] b\n"));
         assert!(!plan_is_finished(""));
         assert!(expand_command("/plan add a login page", none).contains("add a login page"));
+        assert!(expand_command("/plan x", none).contains("ORCHESTRATOR"));
+        assert!(is_plan_command("  /PLAN build it"));
+        assert!(is_plan_command("/plan"));
+        assert!(!is_plan_command("/planet"));
+        assert!(!is_plan_command("make a /plan"));
+        assert!(plan_is_finished("- [x] a (@Codex)\n- [x] b\n"));
         assert!(expand_command("/artifact a landing page", none).contains("create_artifact"));
         assert!(expand_command("/canvas", none).contains("read_artifact"));
         assert!(expand_command("/ai-council which db?", none).contains("group"));

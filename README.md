@@ -225,6 +225,9 @@ Changes to `site/` deploy the website.
 - [x] **0.5.3**: four permission modes (nothing runs, ask, ask only the critical, allow all) that work the same in chats and
   groups and map to each CLI's sandbox, a Reply button, diffs/commits/PR files for coding teams, brain + Lumina + WorkStudio
   connected from Settings → Family, update buttons for the CLIs and the skills your CLIs already have.
+- [x] **0.5.4**: one orchestrator per `/plan` that hands the steps out, a new plan card (checklist with who does each
+  step, live states, nothing shown twice), Settings → Storage, Providers + Models in one page, WorkStudio inside Apps,
+  Reply above the message box and a more polished design.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

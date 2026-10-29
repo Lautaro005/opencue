@@ -94,14 +94,14 @@
         <h2 id="first-agent">Your first agent</h2>
         <p>The first time you open OpenCue a floating <strong>walkthrough</strong> asks your name, connects a provider, picks a default model and creates your first agent. Replay it from <strong>Settings → General</strong>. To do it by hand:</p>
         <ol>
-          <li>Open <strong>Settings → Providers</strong> (<code>Ctrl+,</code>) and set one up — paste an API key, or pick Ollama / LM Studio if you run models locally. <strong>Settings → Models</strong> then lists its models, with a search bar and switches to hide the ones you never use.</li>
+          <li>Open <strong>Settings → Models → Providers</strong> (<code>Ctrl+,</code>) and set one up — paste an API key, or pick Ollama / LM Studio if you run models locally. <strong>Settings → Models → Cloud models</strong> then lists its models, with a search bar and switches to hide the ones you never use.</li>
           <li>Click <strong>+</strong> at the top of the sidebar → <strong>Create Agent</strong>. Give it a name, a face, a sentence about what it should help with, and the provider and model.</li>
           <li>Say hi. Click the person icon at the top right to open its profile, or the screen icon to open its computer.</li>
         </ol>
         <p class="note">Closing the window keeps OpenCue in the tray so automations and running agents keep working. Quit from the tray icon.</p>
 
         <h2 id="providers">Model providers</h2>
-        <p>Every agent uses one provider and model, picked when you create it or later in its profile → <strong>Model</strong>. <strong>Settings → Providers</strong> shows a container for every supported provider; click one to connect it. <strong>Settings → Models</strong> lists the models of the providers that are ready — search them and switch off the ones that shouldn't appear in pickers; the star sets a provider's default model.</p>
+        <p>Every agent uses one provider and model, picked when you create it or later in its profile → <strong>Model</strong>. <strong>Settings → Models → Providers</strong> shows a container for every supported provider; click one to connect it. <strong>Cloud models</strong>, next to it, lists the models of the providers that are ready — search them and switch off the ones that shouldn't appear in pickers; the star sets a provider's default model.</p>
         <table>
           <tr><th>Provider</th><th>How it signs in</th></tr>
           <tr><td>OpenAI, Anthropic, xAI (Grok), Google Gemini, Meta Muse, Mistral, Groq, OpenRouter, CheaperInference, Ollama Cloud</td><td>API key, stored on this computer (<code>secrets.json</code>, mode 0600)</td></tr>
@@ -174,7 +174,7 @@
         <p>The <strong>+</strong> in the message box lists <strong>Skills</strong> in two groups: the <em>system</em> commands and, under their own label, <em>your skills</em>.</p>
         <table>
           <tr><th>Command</th><th>What it does</th></tr>
-          <tr><td><code>/plan</code></td><td>The agent plans (<code>update_plan</code>), then carries the plan out step by step without stopping to ask, with up to 80 tool steps. The reply is a card: what it is doing now, one segment per step, each action with its time, <strong>Approve / Deny</strong> when it needs you, Stop, and <em>Open run</em> for the whole list.</td></tr>
+          <tr><td><code>/plan</code></td><td>The agent plans (<code>update_plan</code>), then carries the plan out step by step without stopping to ask, with up to 80 tool steps. The reply is a card: what it is doing now, the checklist ticking itself (with who does each step), <strong>Approve / Deny</strong> when it needs you, Stop, and <em>Open run</em> for the tool calls and notes in between (answers stay in the chat). In a group one agent orchestrates — the first one you name — and hands the steps to its teammates, who report back with <code>DONE:</code> or <code>BLOCKED:</code>.</td></tr>
           <tr><td><code>/dashboard</code></td><td>Redesign the home screen (the agent chosen in Settings → General).</td></tr>
           <tr><td><code>/create-skill</code>, <code>/create-automation</code></td><td>The agent writes a skill or an automation for itself.</td></tr>
           <tr><td><code>/artifact</code></td><td>The agent makes a page, document, diagram or file as an artifact. While it writes, the chat shows a card with progress; when finished, click it to open the preview in the side panel.</td></tr>
@@ -338,7 +338,7 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
           <li><strong>Settings → Voice → Engines</strong> chooses, for speech to text and for text to speech, ElevenLabs, local models, or automatic (local when there is no ElevenLabs key).</li>
         </ol>
         <h3>Local models</h3>
-        <p><strong>Settings → Models → Local</strong> downloads speech models that run on your computer, so nothing you say leaves it. Sizes, licenses and memory are shown before downloading; the first download also fetches the small <a href="https://github.com/k2-fsa/sherpa-onnx">sherpa-onnx</a> runtime.</p>
+        <p><strong>Settings → Models → On this computer</strong> downloads speech models that run on your computer, so nothing you say leaves it. Sizes, licenses and memory are shown before downloading; the first download also fetches the small <a href="https://github.com/k2-fsa/sherpa-onnx">sherpa-onnx</a> runtime.</p>
         <table>
           <tr><th>Model</th><th>For</th><th>Size</th></tr>
           <tr><td>Parakeet TDT 0.6B v3</td><td>Speech to text, 25 European languages (Spanish and English included), detects the language</td><td>~465 MB</td></tr>
@@ -348,7 +348,7 @@ args = ["--mcp", "E7D-your-machine-id"]</code></pre>
           <tr><td>Kokoro 82M</td><td>Text to speech: 54 voices in Spanish, English, French, Italian, Portuguese, Hindi, Japanese and Chinese (or an English-only 8-bit build)</td><td>~330 MB / ~99 MB</td></tr>
         </table>
         <h3>NVIDIA PersonaPlex (real-time calls)</h3>
-        <p><a href="https://github.com/NVIDIA/personaplex">PersonaPlex</a> is a 7B full-duplex speech-to-speech model: it listens and talks at the same time, like a phone call. In <strong>Settings → Models → Local → NVIDIA PersonaPlex</strong>: accept the model license on <a href="https://huggingface.co/nvidia/personaplex-7b-v1">Hugging Face</a>, paste a token, press <em>Install</em> (a private Python environment, needs Python 3.10+ and the Opus library) and <em>Start</em> (the first start downloads about 17 GB). It needs an NVIDIA GPU, or <em>Use CPU memory too</em>, which is much slower. When it runs, the phone button in a chat offers <strong>PersonaPlex (real time)</strong>. Turn on <em>Allow calls from my phone</em> to get a QR code for a phone on the same network (accept the browser's certificate warning: the certificate is made on your computer).</p>
+        <p><a href="https://github.com/NVIDIA/personaplex">PersonaPlex</a> is a 7B full-duplex speech-to-speech model: it listens and talks at the same time, like a phone call. In <strong>Settings → Models → On this computer → NVIDIA PersonaPlex</strong>: accept the model license on <a href="https://huggingface.co/nvidia/personaplex-7b-v1">Hugging Face</a>, paste a token, press <em>Install</em> (a private Python environment, needs Python 3.10+ and the Opus library) and <em>Start</em> (the first start downloads about 17 GB). It needs an NVIDIA GPU, or <em>Use CPU memory too</em>, which is much slower. When it runs, the phone button in a chat offers <strong>PersonaPlex (real time)</strong>. Turn on <em>Allow calls from my phone</em> to get a QR code for a phone on the same network (accept the browser's certificate warning: the certificate is made on your computer).</p>
 
         <h2 id="internet">Internet</h2>
         <p>Agents with web access get <code>web_search</code> (DuckDuckGo and Wikipedia, no API keys) and <code>web_fetch</code> (any page, converted to Markdown). Results are cached in the local database. If you host <a href="https://docs.searxng.org">SearXNG</a>, add its URL in <strong>Settings → Internet</strong> and it is queried first.</p>
@@ -399,7 +399,7 @@ npm run tauri build   # installers for your system</code></pre>
         <h3>Is it safe to let agents run commands?</h3>
         <p>Prefer Docker or SPACE: they are isolated from your files. On <em>This computer</em>, keep the agent in Ask-first mode and read each command before allowing it. Report security problems privately — see the <a href="https://github.com/Lautaro005/opencue/security/policy">security policy</a>.</p>
         <h3>Something broke.</h3>
-        <p>Open an <a href="https://github.com/Lautaro005/opencue/issues">issue on GitHub</a> with your system, version (Settings → About) and steps to reproduce.</p>
+        <p>Open an <a href="https://github.com/Lautaro005/opencue/issues">issue on GitHub</a> with your system, version (Settings → About) and steps to reproduce; <strong>Settings → About → Get help</strong> has a shortcut. <strong>Settings → Storage</strong> shows how much room OpenCue takes, by kind, and can compact its database.</p>
       </article>
     </div>
   </main>

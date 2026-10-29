@@ -146,7 +146,7 @@ impl Toolbox {
         ));
         specs.push(spec(
             UPDATE_PLAN,
-            "Keep a short plan for work that takes several steps. Send the COMPLETE list each time, with every step's status; it is shown back to you at the end of every step so you stay on track. Send an empty list when the work is done.",
+            "Keep a short plan for work that takes several steps. Send the COMPLETE list each time, with every step's status (and, in a group, the `agent` doing it); it is shown back to you at the end of every step so you stay on track. Send an empty list when the work is done.",
             json!({
                 "type": "object",
                 "properties": {
@@ -156,7 +156,8 @@ impl Toolbox {
                             "type": "object",
                             "properties": {
                                 "step": { "type": "string" },
-                                "status": { "type": "string", "enum": ["pending", "doing", "done"] }
+                                "status": { "type": "string", "enum": ["pending", "doing", "done"] },
+                                "agent": { "type": "string", "description": "In a group: the name of the teammate doing this step (or yours)." }
                             },
                             "required": ["step", "status"]
                         }

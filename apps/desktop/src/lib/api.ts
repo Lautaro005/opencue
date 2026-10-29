@@ -48,6 +48,7 @@ import type {
   Changes, CliSkill, FamilyApp, CliVersion, Commit, Lane,
   PersonaStatus,
   SpeechAudio,
+  StorageReport,
 } from "./types";
 
 export const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
@@ -82,6 +83,9 @@ export type MemoryScope = "agent" | "global";
 
 export const api = {
   appInfo: () => invokeImpl<AppInfo>("app_info"),
+  storageReport: () => invokeImpl<StorageReport>("storage_report"),
+  storageCompact: () => invokeImpl<StorageReport>("storage_compact"),
+  openDataDir: () => invokeImpl<void>("open_data_dir"),
   listThreads: () => invokeImpl<ThreadSummary[]>("list_threads"),
   listAgents: () => invokeImpl<Agent[]>("list_agents"),
   getAgent: (id: string) => invokeImpl<Agent>("get_agent", { id }),

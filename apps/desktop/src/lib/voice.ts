@@ -13,10 +13,6 @@ let player: HTMLAudioElement | null = null;
 /** Threads where the last user message was spoken, so the reply should be spoken too. */
 const voiceThreads = new Set<string>();
 
-export function isRecording() {
-  return recorder?.state === "recording";
-}
-
 export async function startRecording(): Promise<void> {
   stopSpeaking();
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });

@@ -45,7 +45,7 @@ export function AskCard({
         </div>
         <p className="selectable mt-1.5 whitespace-pre-wrap break-words leading-relaxed text-ink/90">{body}</p>
         <div className="mt-3 flex gap-2">
-          <button onClick={onAccept} className="inline-flex items-center gap-1 rounded-lg bg-accent px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+          <button onClick={onAccept} className="inline-flex items-center gap-1 rounded-lg btn-primary px-3.5 py-1.5 text-[13px] font-medium text-white">
             <Check size={14} /> {t("ask.accept")}
           </button>
           <button onClick={onReject} className="inline-flex items-center gap-1 rounded-lg border border-line bg-elevated px-3.5 py-1.5 text-[13px] font-medium hover:bg-hover">
@@ -90,7 +90,7 @@ export function AskCard({
               placeholder={t("ask.other")}
               className="min-h-9 flex-1 resize-none rounded-lg border border-line bg-elevated px-3 py-2 text-[13.5px] outline-none focus:border-warning"
             />
-            <button onClick={() => submit(text)} disabled={!text.trim()} className="inline-flex h-9 items-center gap-1 rounded-lg bg-accent px-3 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40">
+            <button onClick={() => submit(text)} disabled={!text.trim()} className="inline-flex h-9 items-center gap-1 rounded-lg btn-primary px-3 text-[13px] font-medium text-white disabled:opacity-40">
               <Send size={14} /> {t("ask.send")}
             </button>
           </div>

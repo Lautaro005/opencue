@@ -11,10 +11,10 @@ export function Button({ variant = "secondary", size = "md", className, ...props
     <button
       {...props}
       className={cx(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg font-medium transition-colors disabled:opacity-45 disabled:pointer-events-none whitespace-nowrap",
+        "inline-flex items-center justify-center gap-1.5 rounded-[9px] font-medium transition-[background-color,border-color,filter,color] disabled:opacity-45 disabled:pointer-events-none whitespace-nowrap",
         size === "sm" ? "h-7 px-2.5 text-[12.5px]" : "h-8.5 px-3.5 text-[13px]",
-        variant === "primary" && "bg-accent text-white hover:bg-accent-hover",
-        variant === "secondary" && "bg-elevated text-ink border border-line hover:bg-hover",
+        variant === "primary" && "btn-primary text-white",
+        variant === "secondary" && "bg-elevated text-ink border border-line shadow-[var(--highlight)] hover:bg-hover hover:border-line-strong",
         variant === "ghost" && "text-muted hover:text-ink hover:bg-hover",
         variant === "danger" && "text-danger hover:bg-danger-soft",
         className,
@@ -46,7 +46,7 @@ export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputE
       ref={ref}
       {...props}
       className={cx(
-        "h-9 w-full rounded-lg border border-line bg-bg px-3 text-[13.5px] text-ink placeholder:text-faint outline-none transition-colors focus:border-accent",
+        "h-9 w-full rounded-[10px] border border-line bg-bg px-3 text-[13.5px] text-ink placeholder:text-faint outline-none transition-[border-color,box-shadow] focus:border-accent focus:ring-4 focus:ring-accent/10",
         className,
       )}
     />
@@ -318,8 +318,8 @@ export function Modal({ open, onClose, children, className, label }: { open: boo
   }, [open, id]);
   if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div ref={ref} role="dialog" aria-label={label} className={cx("animate-pop relative max-h-full overflow-hidden rounded-2xl border border-line bg-panel shadow-pop", className)}>
+    <div className="animate-fade fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] p-6 backdrop-blur-[2px]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div ref={ref} role="dialog" aria-label={label} className={cx("animate-pop relative max-h-full overflow-hidden rounded-[20px] border border-line bg-panel shadow-pop", className)}>
         {children}
       </div>
     </div>,

@@ -7,18 +7,41 @@ import { isConfigured } from "../../lib/models";
 import type { ProviderConfig, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
 import { Badge, Button, IconButton, Input, Spinner, Toggle } from "../ui";
-import { PageTitle } from "./SettingsModal";
+import { PageTitle, SectionTabs, useSectionTab } from "./SettingsModal";
+import { ProvidersSection } from "./ProvidersSection";
 import { LocalModels } from "./LocalModels";
 
-/** Models of the providers that are set up: search them, and choose which ones show in pickers. */
+const TABS = ["providers", "cloud", "local"] as const;
+
+/** Where models come from and which ones show up: providers, their models, and models on this computer. */
 export function ModelsSection() {
   const { t } = useTranslation();
   const providers = useStore((s) => s.providers);
+  const tab = useSectionTab(TABS, "providers");
+  return (
+    <>
+      <PageTitle title={t("settings.models.title")} hint={t(`settings.models.hint.${tab}`)} />
+      <SectionTabs
+        label={t("settings.models.title")}
+        fallback="providers"
+        tabs={[
+          { id: "providers", label: t("settings.models.tab.providers"), count: providers.length },
+          { id: "cloud", label: t("settings.models.tab.cloud") },
+          { id: "local", label: t("settings.models.tab.local") },
+        ]}
+      />
+      {tab === "providers" ? <ProvidersSection /> : tab === "local" ? <LocalModels /> : <CloudModels />}
+    </>
+  );
+}
+
+/** Models of the providers that are set up: search them, and choose which ones show in pickers. */
+function CloudModels() {
+  const { t } = useTranslation();
+  const providers = useStore((s) => s.providers);
   const loadModels = useStore((s) => s.loadModels);
-  const openSettings = useStore((s) => s.openSettings);
   const [catalog, setCatalog] = useState<ProviderInfo[]>([]);
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"cloud" | "local">("cloud");
 
   useEffect(() => void api.providerCatalog().then(setCatalog), []);
   const ready = providers.filter((p) => isConfigured(p, catalog.find((c) => c.kind === p.kind)));
@@ -27,38 +50,26 @@ export function ModelsSection() {
     ready.forEach((p) => void loadModels(p.id));
   }, [readyKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (catalog.length > 0 && ready.length === 0)
+    return (
+      <div className="surface rounded-2xl px-5 py-9 text-center">
+        <p className="text-[13px] text-muted">{t("settings.models.noneReady")}</p>
+        <Button className="mt-3" variant="primary" onClick={() => useStore.setState({ settingsTab: "providers" })}>
+          {t("settings.models.goProviders")}
+        </Button>
+      </div>
+    );
   return (
     <>
-      <PageTitle title={t("settings.models.title")} hint={t("settings.models.hint")} />
-      <div className="mb-5 inline-flex rounded-lg bg-hover p-0.5" role="tablist">
-        {(["cloud", "local"] as const).map((k) => (
-          <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cx("rounded-md px-3.5 py-1.5 text-[12.5px] font-medium", tab === k ? "bg-bg text-ink shadow-sm" : "text-muted hover:text-ink")}>
-            {t(`settings.models.tab.${k}`)}
-          </button>
+      <div className="relative mb-4">
+        <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
+        <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("settings.models.search")} className="pl-9" />
+      </div>
+      <div className="space-y-3">
+        {ready.map((p) => (
+          <ProviderModels key={p.id} provider={p} query={query.trim().toLowerCase()} />
         ))}
       </div>
-      {tab === "local" ? (
-        <LocalModels />
-      ) : catalog.length > 0 && ready.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-line px-5 py-8 text-center">
-          <p className="text-[13px] text-muted">{t("settings.models.noneReady")}</p>
-          <Button className="mt-3" variant="primary" onClick={() => openSettings("providers")}>
-            {t("settings.models.goProviders")}
-          </Button>
-        </div>
-      ) : (
-        <>
-          <div className="relative mb-4">
-            <Search size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-faint" />
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("settings.models.search")} className="pl-9" />
-          </div>
-          <div className="space-y-3">
-            {ready.map((p) => (
-              <ProviderModels key={p.id} provider={p} query={query.trim().toLowerCase()} />
-            ))}
-          </div>
-        </>
-      )}
     </>
   );
 }
@@ -92,7 +103,7 @@ function ProviderModels({ provider, query }: { provider: ProviderConfig; query: 
   };
 
   return (
-    <div className="rounded-xl border border-line">
+    <div className="surface overflow-hidden rounded-2xl">
       <div className="flex items-center gap-2 px-4 py-2.5">
         <button onClick={() => setOpen((v) => !v)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
           <ChevronDown size={15} className={cx("shrink-0 text-faint transition-transform", !open && "-rotate-90")} />

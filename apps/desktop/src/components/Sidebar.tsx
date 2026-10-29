@@ -207,7 +207,7 @@ export function Sidebar() {
             <p className="mt-1 text-[12.5px] text-muted">{t("sidebar.emptyHint")}</p>
             <button
               onClick={() => setDialog("create-agent")}
-              className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover"
+              className="mt-3 inline-flex items-center gap-1.5 rounded-lg btn-primary px-3 py-1.5 text-[13px] font-medium text-white"
             >
               <MessageSquarePlus size={15} /> {t("sidebar.createAgent")}
             </button>
@@ -241,7 +241,7 @@ export function Sidebar() {
                     className={cx(
                       "group flex w-full items-center rounded-xl py-2 text-left transition-colors",
                       collapsed ? "justify-center px-0" : "gap-3 px-2.5",
-                      selected === th.id ? "bg-active" : "hover:bg-hover",
+                      selected === th.id ? "bg-elevated shadow-card" : "hover:bg-hover",
                     )}
                   >
                     <span className="relative shrink-0">

@@ -78,7 +78,7 @@ export function CatalogCard() {
   const label = (state: CatalogStatus["state"]) => t(`settings.catalog.state.${state}`);
 
   return (
-    <Card title={t("settings.catalog.title")}>
+    <Card>
       <div className="space-y-3 px-4 py-3.5">
         <p className="text-[12.5px] text-muted">{t("settings.catalog.hint")}</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">

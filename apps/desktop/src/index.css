@@ -4,61 +4,67 @@
 
 :root {
   --bg: #ffffff;
-  --sidebar: #f6f6f7;
+  --sidebar: #f6f7f9;
   --panel: #ffffff;
   --elevated: #ffffff;
-  --hover: #ececee;
-  --active: #e4e4e7;
-  --border: #e9e9ec;
-  --border-strong: #d9d9de;
-  --text: #17171a;
-  --muted: #6e6e76;
-  --faint: #a1a1aa;
-  --accent: #0a7cff;
-  --accent-hover: #006be0;
-  --accent-soft: #e8f2ff;
-  --bubble-me: #0a7cff;
+  --hover: #eff0f3;
+  --active: #e6e8ec;
+  --border: #e8e9ee;
+  --border-strong: #d7d9e0;
+  --text: #121317;
+  --muted: #666a75;
+  --faint: #a0a3ad;
+  --accent: #1a6dff;
+  --accent-hover: #0a5ef0;
+  --accent-soft: #eaf1ff;
+  --accent-grad: linear-gradient(140deg, #3f8cff 0%, #1a6dff 55%, #0a55e6 100%);
+  --bubble-me: #1a6dff;
   --bubble-me-text: #ffffff;
-  --bubble-agent: #f0f0f2;
-  --bubble-agent-text: #17171a;
-  --event: #f7f7f8;
+  --bubble-agent: #f1f2f5;
+  --bubble-agent-text: #121317;
+  --event: #f7f8fa;
   --danger: #e5484d;
-  --danger-soft: #fdecec;
-  --success: #30a46c;
-  --warning: #f5a524;
-  --warning-soft: #fff6e5;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 8px 24px -6px rgb(0 0 0 / 0.12);
-  --overlay: rgb(15 15 18 / 0.32);
+  --danger-soft: #fdeded;
+  --success: #2f9e6a;
+  --warning: #e8960c;
+  --warning-soft: #fff5e3;
+  --shadow: 0 1px 2px rgb(16 18 27 / 0.05), 0 12px 32px -8px rgb(16 18 27 / 0.16);
+  --shadow-card: 0 1px 2px rgb(16 18 27 / 0.04), 0 2px 8px -2px rgb(16 18 27 / 0.06);
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 0.7);
+  --overlay: rgb(14 16 22 / 0.34);
   color-scheme: light;
 }
 
 .dark {
-  --bg: #161618;
-  --sidebar: #1c1c1f;
-  --panel: #19191b;
-  --elevated: #232327;
-  --hover: #26262a;
-  --active: #2e2e33;
-  --border: #2a2a2f;
-  --border-strong: #38383e;
-  --text: #f2f2f4;
-  --muted: #a0a0a9;
-  --faint: #6b6b74;
-  --accent: #3b93ff;
-  --accent-hover: #5aa4ff;
-  --accent-soft: #1b2a3f;
-  --bubble-me: #2f86f6;
+  --bg: #121316;
+  --sidebar: #17181c;
+  --panel: #16171b;
+  --elevated: #1e1f24;
+  --hover: #24252b;
+  --active: #2c2d34;
+  --border: #26272e;
+  --border-strong: #363842;
+  --text: #f3f4f6;
+  --muted: #9fa2ad;
+  --faint: #686b76;
+  --accent: #4b8dff;
+  --accent-hover: #69a0ff;
+  --accent-soft: #19253d;
+  --accent-grad: linear-gradient(140deg, #5a9bff 0%, #2f78ff 55%, #1d5ff0 100%);
+  --bubble-me: #2f78ff;
   --bubble-me-text: #ffffff;
-  --bubble-agent: #26262a;
-  --bubble-agent-text: #f2f2f4;
-  --event: #1f1f22;
+  --bubble-agent: #23242a;
+  --bubble-agent-text: #f3f4f6;
+  --event: #1b1c20;
   --danger: #ff6369;
-  --danger-soft: #3a1f21;
+  --danger-soft: #3a1f22;
   --success: #3dd68c;
   --warning: #ffb224;
   --warning-soft: #33280f;
-  --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -8px rgb(0 0 0 / 0.6);
-  --overlay: rgb(0 0 0 / 0.55);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 16px 40px -10px rgb(0 0 0 / 0.65);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.3), 0 4px 12px -4px rgb(0 0 0 / 0.35);
+  --highlight: inset 0 1px 0 rgb(255 255 255 / 0.04);
+  --overlay: rgb(0 0 0 / 0.58);
   color-scheme: dark;
 }
 
@@ -88,6 +94,7 @@
   --color-warning: var(--warning);
   --color-warning-soft: var(--warning-soft);
   --shadow-pop: var(--shadow);
+  --shadow-card: var(--shadow-card);
   --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI Variable Text", "Segoe UI", Ubuntu, Cantarell, "Noto Sans", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", Consolas, "Ubuntu Mono", monospace;
 }
@@ -253,7 +260,27 @@ button {
   }
 }
 .animate-pop {
-  animation: pop-in 140ms ease-out;
+  animation: pop-in 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.animate-fade {
+  animation: fade-in 220ms ease-out;
+}
+
+/* Rows that arrive one after another (checklist steps, cards): up and in. */
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+.animate-rise {
+  animation: rise-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
 
 @keyframes slide-in {
@@ -293,8 +320,197 @@ button {
 @media (prefers-reduced-motion: reduce) {
   .animate-pop,
   .animate-slide,
+  .animate-fade,
+  .animate-rise,
   .typing-dot {
     animation: none;
+  }
+}
+
+/* Surfaces: a hairline border, a soft shadow and a light top edge, the same on every card. */
+.surface {
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card), var(--highlight);
+}
+.surface-hover {
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.surface-hover:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.04), 0 10px 24px -10px rgb(16 18 27 / 0.22), var(--highlight);
+}
+
+/* Primary actions and your own messages wear the brand gradient. */
+.btn-primary,
+.bubble-me {
+  background: var(--accent-grad);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.18), 0 1px 2px rgb(10 60 200 / 0.25);
+}
+.btn-primary:hover {
+  filter: brightness(1.06);
+}
+
+/* The message box floats a little above the chat. */
+.composer-box {
+  background: var(--elevated);
+  box-shadow: 0 1px 2px rgb(16 18 27 / 0.04), 0 8px 28px -12px rgb(16 18 27 / 0.18), var(--highlight);
+}
+.composer-box:focus-within {
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 10%, transparent), 0 8px 28px -12px rgb(16 18 27 / 0.22), var(--highlight);
+}
+
+/* ---------- The /plan card ---------- */
+.plan-card {
+  --plan-bg: var(--elevated);
+  --plan-inset: color-mix(in srgb, var(--sidebar) 70%, var(--elevated));
+  --plan-ring: var(--border);
+  position: relative;
+  border-radius: 22px;
+  border: 1px solid var(--plan-ring);
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%),
+    var(--plan-bg);
+  box-shadow: var(--shadow-card), var(--highlight);
+  overflow: hidden;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+/* While it runs, a light sweeps round its border. */
+.plan-card[data-phase="planning"],
+.plan-card[data-phase="working"] {
+  border-color: transparent;
+  background:
+    radial-gradient(120% 60% at 0% 0%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%) padding-box,
+    linear-gradient(var(--plan-bg), var(--plan-bg)) padding-box,
+    conic-gradient(from var(--ask-angle), var(--border), color-mix(in srgb, var(--accent) 70%, transparent) 12%, var(--border) 30%, var(--border) 100%) border-box;
+  animation: ask-spin 3.6s linear infinite;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 6%, transparent), var(--shadow-card);
+}
+.plan-card[data-phase="waiting"] {
+  border-color: color-mix(in srgb, var(--warning) 55%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 10%, transparent), var(--shadow-card);
+}
+.plan-card[data-phase="done"] {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border));
+}
+.plan-card[data-phase="failed"] {
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--border));
+}
+.plan-bar {
+  background: var(--accent-grad);
+}
+.plan-card[data-phase="done"] .plan-bar {
+  background: var(--success);
+}
+.plan-bar.is-live {
+  background-image: linear-gradient(100deg, transparent 20%, rgb(255 255 255 / 0.45) 50%, transparent 80%), var(--accent-grad);
+  background-size: 200% 100%, 100% 100%;
+  animation: bar-shine 1.6s linear infinite;
+}
+.plan-bar.is-planning {
+  opacity: 0.35;
+}
+@keyframes bar-shine {
+  from {
+    background-position: 150% 0, 0 0;
+  }
+  to {
+    background-position: -50% 0, 0 0;
+  }
+}
+/* The step being worked on. */
+.step-current {
+  background: var(--plan-bg);
+  box-shadow: var(--shadow-card);
+}
+.step-ring {
+  border: 1.5px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-top-color: var(--accent);
+  border-radius: 999px !important;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.check-pop {
+  animation: check-pop 320ms cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+@keyframes check-pop {
+  0% {
+    transform: scale(0.4);
+    opacity: 0;
+  }
+  100% {
+    transform: none;
+    opacity: 1;
+  }
+}
+.live-dot {
+  animation: live-dot 1.4s ease-in-out infinite;
+}
+@keyframes live-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+  }
+  60% {
+    box-shadow: 0 0 0 5px transparent;
+  }
+}
+.agent-bob {
+  display: inline-flex;
+  animation: notch-hop 1.3s ease-in-out infinite;
+}
+.shimmer-text {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--muted) 35%, var(--text) 50%, var(--muted) 65%, var(--muted) 100%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: text-shine 2.4s linear infinite;
+}
+@keyframes text-shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -150% 0;
+  }
+}
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, var(--hover) 0%, color-mix(in srgb, var(--hover) 40%, var(--elevated)) 50%, var(--hover) 100%);
+  background-size: 200% 100%;
+  animation: skeleton 1.4s ease-in-out infinite;
+}
+@keyframes skeleton {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plan-card,
+  .plan-bar.is-live,
+  .step-ring,
+  .check-pop,
+  .live-dot,
+  .agent-bob,
+  .shimmer-text,
+  .skeleton {
+    animation: none;
+  }
+  .plan-card[data-phase="planning"],
+  .plan-card[data-phase="working"] {
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: var(--plan-bg);
+  }
+  .shimmer-text {
+    color: var(--muted);
   }
 }
 
