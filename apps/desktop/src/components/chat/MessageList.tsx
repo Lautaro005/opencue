@@ -12,7 +12,7 @@ import { ToolCard } from "./ToolCard";
 import { AttachmentList } from "./Attachments";
 import { QuestionCards } from "./AskCard";
 import { ArtifactProgress } from "./ArtifactProgress";
-import { PlanCard } from "./PlanCard";
+import { chatMessages, PlanCard } from "./PlanCard";
 
 const EMPTY: Message[] = [];
 
@@ -72,9 +72,11 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
   };
 
   // A /plan message owns what follows it up to the next message from the user: that is one card.
+  // Of those, only the answers show in the chat as well (`shown`); the rest is in the card.
   const planRuns = useMemo(() => {
     const runs = new Map<string, Message[]>();
     const owner = new Map<string, string>();
+    const shown = new Set<string>();
     let cur: Message[] | null = null;
     let curId = "";
     for (const m of messages) {
@@ -88,7 +90,8 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
         owner.set(m.id, curId);
       }
     }
-    return { runs, owner };
+    for (const run of runs.values()) for (const id of chatMessages(run)) shown.add(id);
+    return { runs, owner, shown };
   }, [messages]);
 
   const lastUserId = useMemo(() => [...messages].reverse().find((m) => m.role === "user" && m.status !== "queued")?.id, [messages]);
@@ -122,13 +125,12 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                     started={m.created_at}
                     task={m.content.trimStart().replace(/^\/plan\s*/i, "").split("\n")[0].slice(0, 120)}
                     run={planRuns.runs.get(m.id)!}
-                    agent={(planRuns.runs.get(m.id)!.find((x) => x.agent_id)?.agent_id ?? (isGroup ? null : threadId)) ? agents[planRuns.runs.get(m.id)!.find((x) => x.agent_id)?.agent_id ?? threadId] : undefined}
                     active={workingNow && m.id === lastUserId}
                   />
                 </div>
               )}
               {m.role === "event" && <EventCard m={m} />}
-              {m.role === "assistant" && !(planRuns.owner.has(m.id) && (m.tool_calls?.length || (m.status === "streaming" && !m.content))) && (
+              {m.role === "assistant" && (!planRuns.owner.has(m.id) || planRuns.shown.has(m.id)) && (
                 <AgentRow agent={agent} showHeader={firstOfRun || (isGroup && planRuns.owner.has(m.id))} isGroup={isGroup}>
                   {m.status === "error" ? (
                     <div className="max-w-full rounded-2xl rounded-tl-md border border-danger/30 bg-danger-soft px-3.5 py-2.5 text-[13.5px]">
@@ -137,7 +139,7 @@ export function MessageList({ threadId, isGroup }: { threadId: string; isGroup: 
                       </div>
                       <p className="selectable mt-1 whitespace-pre-wrap text-ink/90">{m.content}</p>
                       {/settings|ajustes|api key|provider/i.test(m.content) && (
-                        <button onClick={() => openSettings("models")} className="mt-2 text-[12.5px] font-medium text-accent hover:underline">
+                        <button onClick={() => openSettings("providers")} className="mt-2 text-[12.5px] font-medium text-accent hover:underline">
                           {t("chat.openSettings")}
                         </button>
                       )}
@@ -263,7 +265,7 @@ function UserText({ content, queued }: { content: string; queued: boolean }) {
   const quote = lines.slice(0, i).map((l) => l.replace(/^>\s?/, "")).join(" ").trim();
   const body = quote ? lines.slice(i).join("\n").trim() : content;
   return (
-    <div className={cx("selectable break-words rounded-[20px] bg-me px-4 py-2.5 text-[14px] leading-relaxed text-me-ink", queued && "opacity-70")}>
+    <div className={cx("bubble-me selectable break-words rounded-[20px] px-4 py-2.5 text-[14px] leading-relaxed text-me-ink", queued && "opacity-70")}>
       {quote && <div className="mb-1.5 line-clamp-3 border-l-2 border-me-ink/40 pl-2.5 text-[12.5px] opacity-80">{quote.replace(/\*\*/g, "")}</div>}
       <div className="whitespace-pre-wrap">{body}</div>
     </div>
@@ -309,7 +311,7 @@ function UserBubble({ m, firstOfRun, isLast }: { m: Message; firstOfRun: boolean
               <button onClick={() => setEditing(false)} className="rounded-lg px-2.5 py-1 text-[12.5px] text-muted hover:bg-hover">
                 {t("common.cancel")}
               </button>
-              <button onClick={save} disabled={!draft.trim()} className="rounded-lg bg-accent px-2.5 py-1 text-[12.5px] font-medium text-white hover:bg-accent-hover disabled:opacity-40">
+              <button onClick={save} disabled={!draft.trim()} className="rounded-lg btn-primary px-2.5 py-1 text-[12.5px] font-medium text-white disabled:opacity-40">
                 {t("chat.saveEdit")}
               </button>
             </div>

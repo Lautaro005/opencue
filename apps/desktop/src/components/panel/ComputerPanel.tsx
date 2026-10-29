@@ -75,7 +75,7 @@ export function ComputerPanel({ agent }: { agent: Agent }) {
           <TerminalSquare size={30} className="text-faint" />
           <p className="text-[13.5px] font-medium">{backend === "vmpal" ? t("computer.vmpalTitle", { name: agent.name }) : t("computer.noneTitle", { name: agent.name })}</p>
           <p className="text-[12.5px] text-muted">{backend === "vmpal" ? t("computer.vmpalHint") : t("computer.noneHint")}</p>
-          <button onClick={() => setPanel("profile")} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+          <button onClick={() => setPanel("profile")} className="mt-1 rounded-lg btn-primary px-3 py-1.5 text-[13px] font-medium text-white">
             {t("computer.choose")}
           </button>
         </div>
@@ -152,11 +152,11 @@ function Desktop({ agent }: { agent: Agent }) {
         <p className="text-[13.5px] font-medium">{t("computer.desktopTitle")}</p>
         <p className="text-[12.5px] text-muted">{needsSetting ? t("computer.desktopOff") : needsRestart ? t("computer.desktopRestartHint") : state.error}</p>
         {needsSetting ? (
-          <button onClick={() => setPanel("profile")} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+          <button onClick={() => setPanel("profile")} className="mt-1 rounded-lg btn-primary px-3 py-1.5 text-[13px] font-medium text-white">
             {t("computer.configure")}
           </button>
         ) : (
-          <button onClick={() => void (needsRestart ? restart() : load())} className="mt-1 rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+          <button onClick={() => void (needsRestart ? restart() : load())} className="mt-1 rounded-lg btn-primary px-3 py-1.5 text-[13px] font-medium text-white">
             {needsRestart ? t("computer.restart") : t("computer.retry")}
           </button>
         )}

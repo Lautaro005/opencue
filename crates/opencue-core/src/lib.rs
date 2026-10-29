@@ -31,6 +31,7 @@ pub mod providers;
 pub mod secrets;
 pub mod skills;
 pub mod space_setup;
+pub mod storage;
 pub mod store;
 pub mod templates;
 pub mod terminal;
@@ -89,6 +90,8 @@ pub struct Core {
     active_threads: Mutex<HashMap<String, String>>,
     /// Where a running group takes the work its members hand to each other (they start at once).
     group_chans: Mutex<HashMap<String, tokio::sync::mpsc::UnboundedSender<runtime::Handoff>>>,
+    /// The one agent orchestrating a `/plan` run in a group, by group id.
+    plan_leads: Mutex<HashMap<String, String>>,
     /// What an @mention in a 1:1 chat tells the agent for the turn that follows.
     mention_hints: Mutex<HashMap<String, String>>,
     skills: skills::Skills,
@@ -152,6 +155,7 @@ impl Core {
             bridge_started: std::sync::atomic::AtomicBool::new(false),
             active_threads: Mutex::new(HashMap::new()),
             group_chans: Mutex::new(HashMap::new()),
+            plan_leads: Mutex::new(HashMap::new()),
             mention_hints: Mutex::new(HashMap::new()),
             skills: skills::Skills::new(paths.skills_dir()),
             computer_logs: Mutex::new(HashMap::new()),
@@ -202,6 +206,21 @@ impl Core {
 
     pub fn paths(&self) -> &Paths {
         &self.store.paths
+    }
+
+    /// How much room OpenCue's data takes, by kind (Settings → Storage).
+    pub async fn storage_report(&self) -> anyhow::Result<storage::StorageReport> {
+        let root = self.paths().root().to_path_buf();
+        Ok(tokio::task::spawn_blocking(move || storage::report(&root)).await?)
+    }
+
+    /// Give the database back the room deleted chats left behind, then measure again.
+    pub async fn compact_storage(&self) -> anyhow::Result<storage::StorageReport> {
+        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .execute(&self.store.db)
+            .await?;
+        sqlx::query("VACUUM").execute(&self.store.db).await?;
+        self.storage_report().await
     }
 
     // ---------- threads / agents ----------

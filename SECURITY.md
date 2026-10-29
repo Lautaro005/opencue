@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.5.x`, currently `0.5.3`) | ✅ |
+| Latest release (`0.5.x`, currently `0.5.4`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -80,8 +80,12 @@ In scope:
   reaching files outside that folder
 - **Permission modes** — an agent running something its mode says it must not (a command or a file write in *Nothing runs*,
   a critical action without asking in *Ask only for the critical*), or a CLI agent getting more sandbox than its mode allows
-- **Family apps and CLI updates** — the commands OpenCue starts for brain, Lumina and WorkStudio (and for updating a CLI) doing
-  more than the fixed commands in the code, or an MCP entry for them pointing somewhere else
+- **WorkStudio apps and CLI updates** — the commands OpenCue starts for brain, Lumina and WorkStudio (Settings → Apps →
+  WorkStudio, and for updating a CLI) doing more than the fixed commands in the code, or an MCP entry for them pointing
+  somewhere else
+- **Storage** — Settings → Storage reading or changing anything outside OpenCue's data folder (it only measures that
+  folder, runs `VACUUM` on its own database and opens the folder), or following links out of it
+- **/plan runs** — a teammate keeping or changing the checklist of a run another agent orchestrates
 - **Floating windows** — a floating window being given more commands or access than the main window
 - **Supply chain** — compromised dependencies, release artifacts, update signatures or the website produced by our
   GitHub Actions workflows

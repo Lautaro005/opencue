@@ -1185,7 +1185,13 @@ impl Core {
                         Some("doing") => "~",
                         _ => " ",
                     };
-                    body.push_str(&format!("- [{mark}] {text}\n"));
+                    match s["agent"].as_str().map(str::trim).filter(|a| !a.is_empty()) {
+                        Some(who) => body.push_str(&format!(
+                            "- [{mark}] {text} (@{})\n",
+                            who.trim_start_matches('@')
+                        )),
+                        None => body.push_str(&format!("- [{mark}] {text}\n")),
+                    }
                 }
                 self.store.set_plan(&agent.id, &body)?;
                 Ok(if body.is_empty() {

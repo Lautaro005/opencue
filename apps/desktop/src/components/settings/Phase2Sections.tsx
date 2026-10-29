@@ -599,7 +599,7 @@ export function VoiceSection() {
       <Card
         title={t("settings.voice.engines")}
         action={
-          <button onClick={() => useStore.getState().openSettings("models")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
+          <button onClick={() => useStore.getState().openSettings("models", "local")} className="flex items-center gap-1 text-[12px] text-muted hover:text-accent">
             {t("settings.voice.localModels")}
           </button>
         }

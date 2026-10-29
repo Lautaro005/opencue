@@ -35,6 +35,8 @@ export function formatTime(iso: string): string {
 }
 
 export function formatBytes(n: number): string {
+  if (n >= 1024 ** 4) return `${(n / 1024 ** 4).toFixed(2)} TB`;
+  if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(n >= 100 * 1024 ** 3 ? 0 : 1)} GB`;
   if (n >= 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
   if (n >= 1024) return `${Math.round(n / 1024)} KB`;
   return `${n} B`;

@@ -70,6 +70,23 @@ const familyApps = [
   { id: "lumina", name: "Lumina", installed: true, running: false, version: "0.1.6", home: "~/.lumina", url: "http://127.0.0.1:47770", mcp: "on", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/lumina/main/install.sh | sh", repo_url: "https://github.com/Lautaro005/lumina", can_start: true },
   { id: "workstudio", name: "AI WorkStudio", installed: false, running: null, version: null, home: null, url: null, mcp: "off", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/workstudio/main/install.sh | sh -s -- --all", repo_url: "https://github.com/Lautaro005/workstudio", can_start: false },
 ];
+const storage = {
+  root: "/Users/you/Library/Application Support/opencue",
+  total: 0,
+  items: [
+    { id: "models" as const, bytes: 2_310_000_000, files: 14 },
+    { id: "agents" as const, bytes: 486_000_000, files: 3_208 },
+    { id: "files" as const, bytes: 132_500_000, files: 241 },
+    { id: "chats" as const, bytes: 24_800_000, files: 3 },
+    { id: "artifacts" as const, bytes: 9_600_000, files: 88 },
+    { id: "messenger" as const, bytes: 3_100_000, files: 2 },
+    { id: "memory" as const, bytes: 412_000, files: 37 },
+    { id: "other" as const, bytes: 96_000, files: 9 },
+  ],
+  disk_free: 182_000_000_000,
+  disk_total: 494_000_000_000,
+};
+storage.total = storage.items.reduce((n, i) => n + i.bytes, 0);
 const groups: Group[] = [
   { id: "g1", name: "Asistentes", max_auto_turns: 6, created_at: ago(20000), kind: "chat", config: {}, members: [{ agent_id: "a1", is_owner: true }, { agent_id: "a2", is_owner: false }, { agent_id: "a6", is_owner: false }] },
   { id: "g2", name: "Coding team", max_auto_turns: 8, created_at: ago(900), kind: "coding", config: { repo_dir: "/Users/you/code/opencue", isolate: false }, members: [{ agent_id: "a3", is_owner: true }, { agent_id: "a4", is_owner: false }] },
@@ -200,6 +217,7 @@ async function simulateReply(threadId: string, text: string) {
     return;
   }
   const g = groups.find((x) => x.id === threadId);
+  if (g && /^\/plan\b/.test(text)) return simulatePlan(g, text);
   const agentId = g ? g.members[0].agent_id : threadId;
   busy.add(threadId);
   emit({ type: "threads_changed" });
@@ -218,6 +236,65 @@ async function simulateReply(threadId: string, text: string) {
   emit({ type: "message", message: { ...m } });
   busy.delete(threadId);
   emit({ type: "busy", thread_id: threadId, agent_id: agentId, busy: false });
+  emit({ type: "threads_changed" });
+}
+
+/** Preview of a /plan run in a group: the lead plans, hands the steps out and ticks them. */
+async function simulatePlan(g: Group, text: string) {
+  const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const lead = g.members.find((m) => m.is_owner)?.agent_id ?? g.members[0].agent_id;
+  const mates = g.members.map((m) => m.agent_id).filter((x) => x !== lead);
+  const nameOf = (a: string) => agents.find((x) => x.id === a)!.name;
+  const say = (agent: string, content: string, extra: Partial<Message> = {}) => {
+    const m = msg(g.id, "assistant", content, 0, agent, extra);
+    messages.push(m);
+    emit({ type: "message", message: { ...m } });
+    return m;
+  };
+  const tool = (agent: string, name: string, args: Record<string, unknown>, result: string, note = "") => {
+    const call = { id: id(), name, arguments: args };
+    say(agent, note, { tool_calls: [call] });
+    const r = msg(g.id, "tool", result, 0, agent, { tool_call_id: call.id, tool_name: name });
+    messages.push(r);
+    emit({ type: "message", message: { ...r } });
+  };
+  const setBusy = (agent: string, on: boolean) => emit({ type: "busy", thread_id: g.id, agent_id: agent, busy: on });
+  const task = text.replace(/^\/plan\s*/, "") || "the request";
+  const plan = [
+    { step: "Look up the options and their limits", agent: nameOf(mates[0] ?? lead) },
+    { step: "Compare them and pick one", agent: nameOf(lead) },
+    { step: "Write the summary for the user", agent: nameOf(mates[1] ?? lead) },
+  ].map((x) => ({ ...x, status: "pending" }));
+  const update = (note = "") => tool(lead, "update_plan", { steps: plan.map((x) => ({ ...x })) }, "Plan saved.", note);
+
+  busy.add(g.id);
+  emit({ type: "threads_changed" });
+  setBusy(lead, true);
+  await wait(1400);
+  update(`I'll split “${task.slice(0, 60)}” in three steps.`);
+  for (let i = 0; i < plan.length; i++) {
+    await wait(700);
+    plan[i].status = "doing";
+    update();
+    const who = agents.find((x) => x.name === plan[i].agent)!.id;
+    if (who !== lead) {
+      tool(lead, "send_to_agent", { agent: plan[i].agent, message: plan[i].step }, `Delivered to ${plan[i].agent}.`);
+      setBusy(who, true);
+    }
+    await wait(900);
+    tool(who, "web_search", { query: plan[i].step }, "5 results", `Working on: ${plan[i].step.toLowerCase()}.`);
+    await wait(1100);
+    if (who !== lead) {
+      say(who, `@${nameOf(lead)} DONE: ${plan[i].step.toLowerCase()}.`);
+      setBusy(who, false);
+    }
+    plan[i].status = "done";
+    update();
+  }
+  await wait(500);
+  say(lead, "Listo. Comparé las opciones, elegí la mejor para tu caso y dejé el resumen arriba. Si querés, lo paso a un documento.");
+  busy.delete(g.id);
+  setBusy(lead, false);
   emit({ type: "threads_changed" });
 }
 
@@ -257,7 +334,10 @@ const voice = { configured: false, has_key: false, voice_id: "", auto_speak: tru
 
 type Args = Record<string, any>;
 const handlers: Record<string, (a: Args) => unknown> = {
-  app_info: () => ({ version: "0.5.3-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  storage_report: () => storage,
+  storage_compact: () => ((storage.items.find((i) => i.id === "chats")!.bytes = 18_400_000), (storage.total = storage.items.reduce((n, i) => n + i.bytes, 0)), storage),
+  open_data_dir: () => undefined,
+  app_info: () => ({ version: "0.5.4-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),

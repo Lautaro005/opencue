@@ -88,7 +88,7 @@ export function Dashboard() {
         <Logo size={48} />
         <h1 className="text-[19px] font-semibold tracking-tight">{t("chat.selectTitle")}</h1>
         <p className="max-w-xs text-[13.5px] text-muted">{t("chat.selectHint")}</p>
-        <button onClick={() => setDialog("create-agent")} className="mt-1 rounded-lg bg-accent px-3.5 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover">
+        <button onClick={() => setDialog("create-agent")} className="mt-1 rounded-lg btn-primary px-3.5 py-1.5 text-[13px] font-medium text-white">
           {t("sidebar.createAgent")}
         </button>
       </main>

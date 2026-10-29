@@ -248,9 +248,25 @@ export function Composer({
           </div>
         )}
 
+        {/* The message being answered sits on top of the box, like a tab, not inside it. */}
+        {reply && (
+          <div className="animate-rise relative mx-4 flex items-start gap-2.5 rounded-t-[16px] border border-b-0 border-line bg-sidebar px-3.5 pt-2.5 pb-3 text-[12.5px]">
+            <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-accent-soft text-accent">
+              <Reply size={12} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block font-medium text-ink">{t("chat.replyingTo", { name: reply.name || t("chat.reply") })}</span>
+              <span className="line-clamp-2 block text-muted">{reply.text}</span>
+            </span>
+            <IconButton label={t("common.cancel")} onClick={() => setReplyTo(threadId, null)} className="size-6">
+              <X size={13} />
+            </IconButton>
+          </div>
+        )}
         <div
           className={cx(
-            "rounded-[22px] border bg-bg py-1.5 pr-1.5 pl-1.5 shadow-[0_1px_2px_rgb(0_0_0/0.04)] focus-within:border-line-strong",
+            "composer-box relative rounded-[24px] border py-1.5 pr-1.5 pl-1.5 transition-[border-color,box-shadow] focus-within:border-line-strong",
+            reply && "-mt-2",
             dragging ? "border-accent ring-2 ring-accent/20" : "border-line",
           )}
         >
@@ -383,18 +399,6 @@ export function Composer({
             )}
           </div>
 
-          {reply && (
-            <div className="mx-1 mb-1.5 flex items-start gap-2 rounded-xl bg-hover px-3 py-2 text-[12.5px]">
-              <Reply size={14} className="mt-0.5 shrink-0 text-muted" />
-              <span className="min-w-0 flex-1">
-                <span className="block font-medium">{t("chat.replyingTo", { name: reply.name || t("chat.reply") })}</span>
-                <span className="line-clamp-2 block text-muted">{reply.text}</span>
-              </span>
-              <IconButton label={t("common.cancel")} onClick={() => setReplyTo(threadId, null)} className="size-6">
-                <X size={13} />
-              </IconButton>
-            </div>
-          )}
           <textarea
             ref={ref}
             rows={1}
@@ -479,7 +483,7 @@ export function Composer({
               data-tip={busy ? t("chat.queue") : t("chat.send")}
               onClick={submit}
               disabled={!text.trim() && files.length === 0}
-              className="flex size-8 items-center justify-center rounded-full bg-accent text-white transition-opacity hover:bg-accent-hover disabled:opacity-30"
+              className="btn-primary flex size-8 items-center justify-center rounded-full text-white transition-[opacity,filter] disabled:opacity-30 disabled:shadow-none"
             >
               <ArrowUp size={18} strokeWidth={2.4} />
             </button>

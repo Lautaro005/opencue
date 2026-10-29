@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { RefreshCw, Search } from "lucide-react";
+import { ArrowUpRight, LifeBuoy, RefreshCw, Search } from "lucide-react";
 import { useStore } from "../../lib/store";
 import { api, checkForUpdate, openUrl } from "../../lib/api";
 import { confirmDialog } from "../../lib/confirm";
@@ -489,10 +489,24 @@ export function AboutSection() {
           <span className="text-[12.5px] text-muted">Apache-2.0 + Commons Clause</span>
         </CardRow>
       </Card>
+      <Card title={t("settings.about.help")}>
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
+            <LifeBuoy size={17} />
+          </span>
+          <p className="min-w-0 flex-1 text-[13px] text-muted">{t("settings.about.helpHint")}</p>
+          <Button size="sm" variant="primary" onClick={() => void openUrl("https://github.com/Lautaro005/opencue/issues/new")}>
+            {t("settings.about.reportIssue")} <ArrowUpRight size={13} />
+          </Button>
+          <Button size="sm" onClick={() => void openUrl("https://lautaro005.github.io/opencue/docs/")}>
+            {t("settings.about.docs")}
+          </Button>
+        </div>
+      </Card>
       <div className="flex flex-wrap gap-2">
         {links.map((l) => (
-          <Button key={l.url} size="sm" onClick={() => void openUrl(l.url)}>
-            {l.label}
+          <Button key={l.url} size="sm" variant="ghost" onClick={() => void openUrl(l.url)}>
+            {l.label} <ArrowUpRight size={12} className="text-faint" />
           </Button>
         ))}
       </div>

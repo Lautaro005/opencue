@@ -206,6 +206,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
+            commands::storage_report,
+            commands::storage_compact,
+            commands::open_data_dir,
             commands::list_threads,
             commands::list_agents,
             commands::get_agent,

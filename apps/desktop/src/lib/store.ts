@@ -6,7 +6,9 @@ import type { GroupTemplate } from "./templates";
 import type { Agent, ApprovalRequest, CoreEvent, Group, Message, ProviderConfig, Question, TermInfo, ThreadSummary } from "./types";
 
 export type Panel = "profile" | "group" | "computer" | "artifact" | "canvas" | null;
-export type SettingsSection = "general" | "account" | "usage" | "providers" | "models" | "apps" | "family" | "messenger" | "skills" | "computers" | "notifications" | "voice" | "internet" | "about";
+export type SettingsSection = "general" | "account" | "usage" | "notifications" | "models" | "skills" | "apps" | "messenger" | "computers" | "voice" | "internet" | "storage" | "about";
+/** Pages that became tabs of another one: Providers lives in Models, WorkStudio in Apps. */
+type SettingsTarget = SettingsSection | "providers" | "workstudio";
 export type Dialog = "create-agent" | "create-group" | "create-coding" | "cli-agents" | "templates" | "walkthrough" | null;
 
 export interface ModelList {
@@ -30,6 +32,8 @@ interface State {
   /** The coding-team template waiting for its name and folder in the create-coding dialog. */
   codingTemplate: GroupTemplate | null;
   settingsSection: SettingsSection | null;
+  /** The tab a settings page opens on, when one was asked for. */
+  settingsTab: string | null;
   messages: Record<string, Message[]>;
   /** thread id → agent ids currently working */
   working: Record<string, string[]>;
@@ -79,7 +83,7 @@ interface State {
   prefill: string | null;
   setPrefill: (text: string | null) => void;
   setDialog: (d: Dialog) => void;
-  openSettings: (s?: SettingsSection) => void;
+  openSettings: (s?: SettingsTarget, tab?: string) => void;
   closeSettings: () => void;
   loadMessages: (threadId: string) => Promise<void>;
   send: (threadId: string, text: string, files?: File[]) => Promise<void>;
@@ -121,6 +125,7 @@ export const useStore = create<State>((set, get) => ({
   dialog: null,
   codingTemplate: null,
   settingsSection: null,
+  settingsTab: null,
   messages: {},
   working: {},
   approvals: {},
@@ -207,8 +212,15 @@ export const useStore = create<State>((set, get) => ({
   setPrefill: (prefill) => set({ prefill }),
   openArtifact: (id, version) => set({ panel: "artifact", artifactView: { id, version } }),
   setDialog: (dialog) => set({ dialog }),
-  openSettings: (s = "general") => set({ settingsSection: s }),
-  closeSettings: () => set({ settingsSection: null }),
+  openSettings: (s = "general", tab) =>
+    set(
+      s === "providers"
+        ? { settingsSection: "models", settingsTab: "providers" }
+        : s === "workstudio"
+          ? { settingsSection: "apps", settingsTab: "workstudio" }
+          : { settingsSection: s, settingsTab: tab ?? null },
+    ),
+  closeSettings: () => set({ settingsSection: null, settingsTab: null }),
 
   loadMessages: async (threadId) => {
     const list = await api.getMessages(threadId);
