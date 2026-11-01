@@ -89,8 +89,19 @@ export function GeneralSection() {
   const [global, setGlobal] = useState<MemoryEntry[]>([]);
   const [draft, setDraft] = useState("");
   useEffect(() => void api.appInfo().then(setInfo), []);
-  const loadGlobal = () => void api.listMemory("global").then(setGlobal);
-  useEffect(loadGlobal, []);
+  const loadGlobal = () => void api.listMemory("global").then(setGlobal).catch(() => {});
+  // Agents add to the shared memory as they work: follow it while this page is open. The event
+  // covers this app; the timer also catches agents running as CLIs, which write it from outside.
+  useEffect(() => {
+    loadGlobal();
+    const on = (e: Event) => (e as CustomEvent).detail == null && loadGlobal();
+    window.addEventListener("opencue:memory-changed", on);
+    const timer = window.setInterval(loadGlobal, 5000);
+    return () => {
+      window.removeEventListener("opencue:memory-changed", on);
+      window.clearInterval(timer);
+    };
+  }, []);
 
   const sharedOn = settings.global_memory_enabled !== "false";
 

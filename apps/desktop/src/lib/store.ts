@@ -400,6 +400,9 @@ function handleEvent(ev: CoreEvent, set: (fn: (s: State) => Partial<State>) => v
     case "profile_changed":
       window.dispatchEvent(new CustomEvent("opencue:profile-changed", { detail: ev.agent_id }));
       break;
+    case "memory_changed":
+      window.dispatchEvent(new CustomEvent("opencue:memory-changed", { detail: ev.agent_id }));
+      break;
     case "mcp_changed":
       window.dispatchEvent(new CustomEvent("opencue:mcp-changed"));
       break;

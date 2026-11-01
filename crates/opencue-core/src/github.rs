@@ -17,6 +17,7 @@ const TIMEOUT: Duration = Duration::from_secs(40);
 const MAX_PATCH: usize = 400_000;
 
 async fn run(program: &str, args: &[&str], dir: &Path, secs: Duration) -> anyhow::Result<String> {
+    crate::paths::volume_access(dir).await;
     let mut cmd = Command::new(program);
     cmd.args(args)
         .current_dir(dir)

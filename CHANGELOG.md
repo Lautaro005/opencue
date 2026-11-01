@@ -2,6 +2,45 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.5.5 — 2026-11-01
+
+### New
+
+- **Folders for the agents in brain.** With brain connected (Settings → Apps → WorkStudio → brain), turn on *Folders for
+  the agents in brain*: every agent, every group and all of them together get a folder in the vault
+  (`projects/opencue-agents/<agent>`, `group-<name>`, `shared`), written the way brain's FORMAT.md asks. Each one keeps
+  an `index.md` (one line per note), the agent's `profile.md` (instructions and soul) and `memory.md`, plus the insights
+  it saves with the new `brain_save` tool; `brain_read` reads an index first and then only the notes it needs. Files
+  are rewritten only when they change. The folder of each agent (profile → Memory) and group (details → Files) can be
+  moved or turned off, and the root and shared folder are set in the brain card.
+- **Customize the dashboard.** A **Customize** button on the home screen: pick the agent in charge, what to show
+  (priorities, agents, automations, usage, recent chats, email, today's meetings, tasks, pipeline, pull requests, the
+  week's decisions in brain, latest meetings in Lumina), which **connected apps** it should pull data from, the layout,
+  the style and how often the app data refreshes, plus anything else in your own words. The agent builds it from there.
+  Agents can now save data from any app with `update_dashboard_data`; the page gets it as `data.custom`, along with the
+  list of connected apps, and the built-in page shows it under *From your apps*.
+- **Bigger browser.** The agent's browser in the Computer panel has an expand button that opens it over the whole app;
+  Esc or the same button brings it back.
+- **brain, Lumina and WorkStudio logos** in Settings → Apps → WorkStudio and next to every brain folder setting.
+- **Agents that push back.** Following the "second brain" lessons (Ben AI's 18 tips): agents work in your real interest
+  and say so when a request conflicts with your goals or the facts instead of just agreeing; they keep insights, not raw
+  data, and forget a fact when a new one replaces it; with a computer, they read the workspace's `AGENTS.md` map first
+  and keep it short.
+
+### Fixed
+
+- **Memory and profile now update for every agent.** Learning after each reply only ran for models with native tools,
+  so agents on Claude Code, Codex and other CLIs never saved anything, and instructions and soul were only rewritten when
+  they were empty. Now one short call after each reply (small talk is skipped) adds new facts, removes the ones they
+  replace and rewrites the instructions or soul when you changed them, for every kind of agent.
+- **Shared memory refreshes by itself** in Settings → General, and an agent's memory page follows what it learns, even
+  while you look at them.
+- **A new browser tab stays inside its box.** It used to open a title bar too high, over the toolbar, until you resized
+  the panel; it is now placed in the box before it appears, and placed again whenever the tab changes.
+- **One permission prompt for an external drive on macOS.** Opening OpenCue with an agent, coding group or terminal on a
+  USB drive set off several checks at once (git, the terminal, the agent), and macOS showed a prompt for each. They now
+  wait for a single first look at the drive, so you answer once, and the prompt says why OpenCue asks.
+
 ## 0.5.4 — 2026-10-29
 
 ### New

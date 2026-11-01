@@ -90,8 +90,10 @@ pub fn get_instructions(state: State<'_, AppState>, id: String) -> String {
 }
 
 #[tauri::command]
-pub fn set_instructions(state: State<'_, AppState>, id: String, text: String) -> R<()> {
-    state.core.store.set_instructions(&id, &text).map_err(e)
+pub async fn set_instructions(state: State<'_, AppState>, id: String, text: String) -> R<()> {
+    state.core.store.set_instructions(&id, &text).map_err(e)?;
+    let _ = state.core.brain_sync_agent(&id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -100,8 +102,10 @@ pub fn get_soul(state: State<'_, AppState>, id: String) -> String {
 }
 
 #[tauri::command]
-pub fn set_soul(state: State<'_, AppState>, id: String, text: String) -> R<()> {
-    state.core.store.set_soul(&id, &text).map_err(e)
+pub async fn set_soul(state: State<'_, AppState>, id: String, text: String) -> R<()> {
+    state.core.store.set_soul(&id, &text).map_err(e)?;
+    let _ = state.core.brain_sync_agent(&id).await;
+    Ok(())
 }
 
 /// A new agent's first message, asking what its job will be. Only posts into an empty chat.
@@ -143,20 +147,28 @@ pub fn list_memory(
     Ok(memory_file(&state, &scope, agent_id.as_deref())?.entries())
 }
 
+/// Tell the app and brain that a memory changed (`agent_id` None: the shared one).
+async fn memory_changed(state: &AppState, scope: &str, agent_id: Option<String>) {
+    let who = if scope == "global" { None } else { agent_id };
+    state.core.memory_changed(who).await;
+}
+
 #[tauri::command]
-pub fn add_memory(
+pub async fn add_memory(
     state: State<'_, AppState>,
     scope: String,
     agent_id: Option<String>,
     text: String,
 ) -> R<MemoryEntry> {
-    memory_file(&state, &scope, agent_id.as_deref())?
+    let entry = memory_file(&state, &scope, agent_id.as_deref())?
         .add(&text)
-        .map_err(e)
+        .map_err(e)?;
+    memory_changed(&state, &scope, agent_id).await;
+    Ok(entry)
 }
 
 #[tauri::command]
-pub fn delete_memory(
+pub async fn delete_memory(
     state: State<'_, AppState>,
     scope: String,
     agent_id: Option<String>,
@@ -164,8 +176,9 @@ pub fn delete_memory(
 ) -> R<()> {
     memory_file(&state, &scope, agent_id.as_deref())?
         .remove(id)
-        .map(|_| ())
-        .map_err(e)
+        .map_err(e)?;
+    memory_changed(&state, &scope, agent_id).await;
+    Ok(())
 }
 
 #[tauri::command]
@@ -178,7 +191,7 @@ pub fn get_memory_raw(
 }
 
 #[tauri::command]
-pub fn set_memory_raw(
+pub async fn set_memory_raw(
     state: State<'_, AppState>,
     scope: String,
     agent_id: Option<String>,
@@ -186,7 +199,28 @@ pub fn set_memory_raw(
 ) -> R<()> {
     memory_file(&state, &scope, agent_id.as_deref())?
         .set_raw(&text)
-        .map_err(e)
+        .map_err(e)?;
+    memory_changed(&state, &scope, agent_id).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn set_group_config(
+    state: State<'_, AppState>,
+    id: String,
+    config: serde_json::Value,
+) -> R<()> {
+    state.core.set_group_config(&id, config).await.map_err(e)
+}
+
+#[tauri::command]
+pub async fn brain_info(state: State<'_, AppState>) -> R<opencue_core::brain::BrainInfo> {
+    Ok(state.core.brain_info().await)
+}
+
+#[tauri::command]
+pub async fn brain_sync_all(state: State<'_, AppState>) -> R<usize> {
+    state.core.brain_sync_all().await.map_err(e)
 }
 
 #[tauri::command]

@@ -42,7 +42,7 @@ fn home_dir() -> Option<PathBuf> {
     directories::UserDirs::new().map(|d| d.home_dir().to_path_buf())
 }
 
-fn app_home(id: &str) -> Option<PathBuf> {
+pub(crate) fn app_home(id: &str) -> Option<PathBuf> {
     let (var, folder) = match id {
         "brain" => ("BRAIN_HOME", ".brain"),
         "lumina" => ("LUMINA_HOME", ".lumina"),

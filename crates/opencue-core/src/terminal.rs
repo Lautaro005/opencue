@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -161,7 +161,7 @@ impl Core {
             .collect()
     }
 
-    async fn term_saved(&self) -> Vec<TermInfo> {
+    pub(crate) async fn term_saved(&self) -> Vec<TermInfo> {
         self.store
             .setting(SETTING)
             .await
@@ -201,6 +201,7 @@ impl Core {
     ) -> anyhow::Result<TermInfo> {
         let t = tool(tool_key).ok_or_else(|| anyhow::anyhow!("unknown tool `{tool_key}`"))?;
         let dir = PathBuf::from(cwd.trim());
+        crate::paths::volume_access(&dir).await;
         anyhow::ensure!(dir.is_dir(), "{} is not a folder", dir.display());
         let info = TermInfo {
             id: new_id(),
@@ -234,6 +235,7 @@ impl Core {
             .into_iter()
             .find(|t| t.id == id)
             .ok_or_else(|| anyhow::anyhow!("no such session"))?;
+        crate::paths::volume_access(Path::new(&info.cwd)).await;
         self.term_kill(id);
         self.term_spawn(&info, cols, rows)?;
         self.emit(CoreEvent::ThreadsChanged);

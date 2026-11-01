@@ -5,6 +5,9 @@ import { useStore } from "../../lib/store";
 import type { DashboardData } from "../../lib/types";
 import { Logo } from "../Sidebar";
 import { frameBase } from "../panel/ArtifactPanel";
+import { SlidersHorizontal } from "lucide-react";
+import { Button } from "../ui";
+import { CustomizeDashboard } from "./CustomizeDashboard";
 
 const REFRESH_MS = 5000;
 
@@ -23,6 +26,7 @@ export function Dashboard() {
   const [base, setBase] = useState<string | null>(null);
   const [srcDoc, setSrcDoc] = useState("");
   const [nonce, setNonce] = useState(0);
+  const [customizing, setCustomizing] = useState(false);
 
   useEffect(() => void frameBase().then(setBase), []);
 
@@ -98,8 +102,14 @@ export function Dashboard() {
   return (
     <main className="flex min-w-0 flex-1 flex-col bg-bg">
       <header className="flex h-13 shrink-0 items-center gap-2 border-b border-line px-4" data-tauri-drag-region>
-        <h1 className="text-[14px] font-semibold">{t("dashboard.title")}</h1>
+        <h1 className="flex-1 text-[14px] font-semibold" data-tauri-drag-region>
+          {t("dashboard.title")}
+        </h1>
+        <Button size="sm" onClick={() => setCustomizing(true)}>
+          <SlidersHorizontal size={13} /> {t("dashboard.customize.open")}
+        </Button>
       </header>
+      <CustomizeDashboard open={customizing} onClose={() => setCustomizing(false)} data={data.current} />
       {base !== null && (
         <iframe
           key={nonce}

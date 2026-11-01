@@ -91,6 +91,10 @@ pub enum CoreEvent {
     ProfileChanged {
         agent_id: String,
     },
+    /// A memory changed: an agent's (`agent_id`) or the shared one (`None`).
+    MemoryChanged {
+        agent_id: Option<String>,
+    },
     AutomationsChanged,
     /// The dashboard page was rewritten (or reset).
     DashboardChanged,

@@ -10,6 +10,7 @@ import { Badge, Button, IconButton, Input, Toggle, useClickOutside } from "../ui
 import { Section } from "./Section";
 import { SharedFiles } from "./SharedFiles";
 import { useResizable } from "../ui/Resizer";
+import { BrainFolder, brainSlug } from "./BrainFolder";
 
 export function GroupDetails({ group }: { group: Group }) {
   const { t } = useTranslation();
@@ -148,6 +149,12 @@ export function GroupDetails({ group }: { group: Group }) {
 
         <Section title={t("group.files")} icon={<FolderOpen size={15} />}>
           <SharedFiles threadId={group.id} />
+          <BrainFolder
+            on={group.config.brain_sync !== false}
+            folder={group.config.brain_folder ?? ""}
+            fallback={(root) => `${root}/group-${brainSlug(group.name)}`}
+            onChange={(on, folder) => api.setGroupConfig(group.id, { ...group.config, brain_sync: on, brain_folder: folder || undefined }).then(refresh)}
+          />
         </Section>
 
         <div className="border-t border-line px-5 py-4">

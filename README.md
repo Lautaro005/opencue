@@ -78,7 +78,7 @@ creates your first agent. Replay it any time from **Settings → General**.
   </tr>
   <tr>
     <td valign="top"><b>🧱 Make things (Artifacts)</b><br>Agents hand you web pages, diagrams, code, and real <code>.xlsx</code>, <code>.docx</code>, <code>.pptx</code> and <code>.pdf</code> files in a side panel, with versions. Each one is kept in the agent's Files.</td>
-    <td valign="top"><b>📊 Start from a dashboard</b><br>A home screen with what is running, plans, automations and usage. Click the logo or press <code>Esc</code> in any chat to return, and run <code>/dashboard</code> to have an agent redesign it in HTML.</td>
+    <td valign="top"><b>📊 Start from a dashboard</b><br>A home screen with what is running, plans, automations and usage. Click the logo or press <code>Esc</code> in any chat to return, and press <b>Customize</b> (or run <code>/dashboard</code>) to have an agent rebuild it, with data from your connected apps.</td>
   </tr>
   <tr>
     <td valign="top"><b>🗺️ Plan, then do</b><br><code>/plan</code> has an agent plan and carry the work out, with a live status card (steps, timings, Approve / Deny). <code>/canvas</code> opens a document you and the agent edit together; <code>/artifact</code> makes a file.</td>
@@ -228,6 +228,9 @@ Changes to `site/` deploy the website.
 - [x] **0.5.4**: one orchestrator per `/plan` that hands the steps out, a new plan card (checklist with who does each
   step, live states, nothing shown twice), Settings → Storage, Providers + Models in one page, WorkStudio inside Apps,
   Reply above the message box and a more polished design.
+- [x] **0.5.5**: a folder in brain for each agent, group and all of them (profile, memory and saved insights), a
+  Customize panel for the dashboard with data from your connected apps, memory and profile that update for every agent
+  (CLI ones too), a bigger browser view, one prompt per external drive on macOS and the family's logos.
 - [ ] Still open: notarized macOS and code-signed Windows installers (need an Apple Developer ID and a Windows certificate).
 
 ## Use cases

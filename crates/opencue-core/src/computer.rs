@@ -242,6 +242,7 @@ impl Computer<'_> {
         sink: Sink<'_>,
         cancel: &CancellationToken,
     ) -> anyhow::Result<CommandResult> {
+        crate::paths::volume_access(&self.workspace).await;
         std::fs::create_dir_all(&self.workspace)?;
         match self.backend {
             ComputerBackend::None | ComputerBackend::Vmpal => {

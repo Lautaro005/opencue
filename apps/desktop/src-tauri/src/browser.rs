@@ -201,11 +201,6 @@ impl TauriBrowser {
         }
         let b = *self.bounds.lock().unwrap();
         let on_screen = b.known && self.is_shown(agent_id);
-        let (x, y, w, h) = if on_screen {
-            (b.x, b.y, b.w, b.h)
-        } else {
-            (-10000.0, -10000.0, 900.0, 600.0)
-        };
         // Hide whatever else this agent had on screen: the new tab takes its place.
         let others: Vec<u32> = self
             .tabs
@@ -219,11 +214,19 @@ impl TauriBrowser {
                 let _ = v.hide();
             }
         }
-        let view = window.add_child(builder, LogicalPosition::new(x, y), LogicalSize::new(w, h))?;
-        if on_screen {
-            self.apply(&view, x, y, w, h);
+        // Always born off screen and hidden: the window counts a child's position from its frame
+        // (title bar included on macOS), so a page placed straight away would sit too high, over
+        // the toolbar. It appears only once `apply` has put it inside the box the UI drew.
+        let size = if on_screen {
+            LogicalSize::new(b.w.max(1.0), b.h.max(1.0))
         } else {
-            let _ = view.hide();
+            LogicalSize::new(900.0, 600.0)
+        };
+        let view = window.add_child(builder, LogicalPosition::new(-10000.0, -10000.0), size)?;
+        let _ = view.hide();
+        if on_screen {
+            self.apply(&view, b.x, b.y, b.w, b.h);
+            let _ = view.show();
         }
         let mut all = self.tabs.lock().unwrap();
         let t = all.entry(agent_id.to_string()).or_default();

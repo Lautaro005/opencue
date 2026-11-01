@@ -5,7 +5,7 @@
 Key facts:
 
 - Install on macOS/Linux: `curl -fsSL https://lautaro005.github.io/opencue/install.sh | sh`. On Windows (PowerShell): `irm https://lautaro005.github.io/opencue/install.ps1 | iex`. Start with `opencue`. Installers (.dmg, .AppImage, .deb, .rpm, .exe, .msi) are on GitHub Releases.
-- Current version: 0.5.4 (October 29, 2026). The app updates itself with signed releases from GitHub.
+- Current version: 0.5.5 (November 1, 2026). The app updates itself with signed releases from GitHub.
 - License: Apache-2.0 with the Commons Clause — free to use, modify and share, not to sell.
 - Built with a Rust core and a Tauri 2 + React desktop shell. A companion CLI, `opencue-cli`, shares the data folder.
 - Approvals: in "Ask first" mode (default) sending email, commands or file writes on the host/WSL, deleting memories and data-changing tools wait for the user. "Fully autonomous" runs everything.
@@ -13,7 +13,8 @@ Key facts:
 - Docker/Podman computers: one per agent or one shared VM, stopped when idle, with a setup checklist in Settings → Computers.
 - Built-in browser: a Browser tab in the Computer panel (next to the VM, terminal below) that an agent with the switch on can open pages in, read, click and type, with its own cookies and an ask-first rule for new sites.
 - Artifacts: agents hand over web pages, SVG, Markdown, Mermaid diagrams, code and real .xlsx, .docx, .pptx and .pdf files with `create_artifact`; they open in a side panel with versions and are kept in the agent's Files.
-- Dashboard: the home screen (Esc in a chat returns to it) shows running agents, plans, automations, recent chats and usage; `/dashboard` lets the agent chosen in Settings → General rewrite it as HTML.
+- Dashboard: the home screen (Esc in a chat returns to it) shows running agents, plans, automations, recent chats and usage; **Customize** (or `/dashboard`) lets the agent in charge rebuild it as HTML, including data it extracts from connected apps (`update_dashboard_data` → `data.custom`).
+- brain folders: with brain connected (Settings → Apps → WorkStudio), each agent, group and all agents get a folder in the brain vault with an index, profile, memory and saved insights (`brain_save`, `brain_read`).
 - `/plan` makes an agent plan then execute with a live status card; `/canvas` opens a document edited by the user and the agent together; `/artifact` makes a file. The chat's + menu lists system skills and the user's skills separately.
 - Voice on the computer: Settings → Models → On this computer downloads Parakeet, Canary, Whisper and SenseVoice (speech to text) and Kokoro (text to speech), run by the sherpa-onnx runtime; NVIDIA PersonaPlex gives real-time voice calls, also from a phone on the same network.
 - Terminals: the sidebar's + starts Claude Code, Codex, Grok Build, Gemini CLI, Antigravity, Mistral Vibe, Muse Code or a shell in a real terminal inside the app.

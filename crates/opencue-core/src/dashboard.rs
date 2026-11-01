@@ -20,7 +20,11 @@ parent.postMessage({type:'opencue:open', agent_id}, '*') opens an agent's chat. 
 agents {total, running, list[{id,name,model,busy,avatar{color,shape,face}}]}; running[{thread_id,name,kind}]; \
 automations {total, enabled, upcoming[], list[{id,name,agent_id,agent_name,enabled,trigger,cron,next_run_at,last_run_at,last_status}]}; \
 tasks[{agent_id,agent_name,done,total,items[{text,status}]}]; usage {messages,input_tokens,output_tokens,by_agent[{agent_id,name,messages,tokens}]}; \
-recent[{thread_id,name,kind,last_message,last_at}]. Set text with textContent, never innerHTML, since names and messages are data.";
+recent[{thread_id,name,kind,last_message,last_at}]; apps[{id,name,kind:'mcp'|'catalog'}] (the apps and tools connected to the agents); \
+custom {key: {title, source, value, updated_at}}: data the agent saved with update_dashboard_data from connected apps, the web or files (value is any JSON). \
+Set text with textContent, never innerHTML, since names and messages are data.";
+/// The most custom data the dashboard keeps.
+const MAX_DATA_BYTES: usize = 256 * 1024;
 
 fn plan_items(plan: &str) -> Vec<(String, &'static str)> {
     plan.lines()
@@ -54,6 +58,63 @@ impl Core {
     /// The dashboard page: the user's own, or the built-in one.
     pub fn dashboard_html(&self) -> String {
         std::fs::read_to_string(self.dashboard_file()).unwrap_or_else(|_| DEFAULT_HTML.to_string())
+    }
+
+    fn dashboard_data_file(&self) -> std::path::PathBuf {
+        self.paths().root().join("dashboard").join("data.json")
+    }
+
+    /// What agents saved for the page with `update_dashboard_data`.
+    fn dashboard_custom(&self) -> serde_json::Map<String, Value> {
+        std::fs::read_to_string(self.dashboard_data_file())
+            .ok()
+            .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default()
+    }
+
+    /// Save (or with a null value, remove) one block of custom data.
+    pub fn set_dashboard_custom(
+        &self,
+        key: &str,
+        title: Option<&str>,
+        source: Option<&str>,
+        value: Value,
+    ) -> anyhow::Result<()> {
+        let key = key.trim();
+        anyhow::ensure!(
+            !key.is_empty()
+                && key.len() <= 60
+                && key
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-'),
+            "`key` must be a short id made of letters, digits, _ or -"
+        );
+        let mut all = self.dashboard_custom();
+        if value.is_null() {
+            all.remove(key);
+        } else {
+            all.insert(
+                key.to_string(),
+                json!({
+                    "title": title.unwrap_or(key),
+                    "source": source.unwrap_or_default(),
+                    "value": value,
+                    "updated_at": chrono::Utc::now().to_rfc3339(),
+                }),
+            );
+        }
+        let text = Value::Object(all).to_string();
+        anyhow::ensure!(
+            text.len() <= MAX_DATA_BYTES,
+            "too much data for the dashboard (limit 256 KB): save summaries, not raw dumps"
+        );
+        let file = self.dashboard_data_file();
+        if let Some(dir) = file.parent() {
+            std::fs::create_dir_all(dir)?;
+        }
+        std::fs::write(file, text)?;
+        Ok(())
     }
 
     /// Whether the page is the built-in one.
@@ -178,6 +239,23 @@ impl Core {
             .collect();
         by_agent.sort_by_key(|v| std::cmp::Reverse(v["tokens"].as_i64().unwrap_or(0)));
 
+        let mut apps: Vec<Value> = self
+            .store
+            .list_mcp_servers()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|m| m.enabled)
+            .map(|m| json!({ "id": m.id, "name": m.name, "kind": "mcp" }))
+            .collect();
+        apps.extend(
+            self.catalog_status()
+                .await
+                .into_iter()
+                .filter(|c| c.state == "connected")
+                .map(|c| json!({ "id": c.slug, "name": c.name, "kind": "catalog" })),
+        );
+
         let mut recent: Vec<&ThreadSummary> =
             threads.iter().filter(|t| t.last_at.is_some()).collect();
         recent.sort_by(|a, b| b.last_at.cmp(&a.last_at));
@@ -213,6 +291,8 @@ impl Core {
                 "last_message": t.last_message.as_deref().map(|m| short(m, 90)),
                 "last_at": t.last_at,
             })).collect::<Vec<_>>(),
+            "apps": apps,
+            "custom": Value::Object(self.dashboard_custom()),
         }))
     }
 
@@ -228,15 +308,53 @@ impl Core {
             "you are not the agent in charge of the dashboard (Settings → General)"
         );
         match name {
-            crate::tools::READ_DASHBOARD => Ok(format!(
-                "{CONTRACT}\n\nCurrent page ({}):\n\n{}",
-                if self.dashboard_is_default() {
-                    "the built-in one"
+            crate::tools::READ_DASHBOARD => {
+                let custom = self.dashboard_custom();
+                let saved = if custom.is_empty() {
+                    "none yet".to_string()
                 } else {
-                    "written by you or another agent"
-                },
-                self.dashboard_html()
-            )),
+                    custom
+                        .iter()
+                        .map(|(k, v)| {
+                            format!(
+                                "{k} ({}, from {}, saved {})",
+                                v["title"].as_str().unwrap_or(k),
+                                v["source"]
+                                    .as_str()
+                                    .filter(|s| !s.is_empty())
+                                    .unwrap_or("?"),
+                                v["updated_at"].as_str().unwrap_or("?")
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                };
+                Ok(format!(
+                    "{CONTRACT}\n\nCustom data saved so far: {saved}.\n\nCurrent page ({}):\n\n{}",
+                    if self.dashboard_is_default() {
+                        "the built-in one"
+                    } else {
+                        "written by you or another agent"
+                    },
+                    self.dashboard_html()
+                ))
+            }
+            crate::tools::UPDATE_DASHBOARD_DATA => {
+                let key = crate::tools::arg_str(args, "key")
+                    .ok_or_else(|| anyhow::anyhow!("`key` is required"))?;
+                let value = args.get("value").cloned().unwrap_or(Value::Null);
+                self.set_dashboard_custom(
+                    key,
+                    crate::tools::arg_str(args, "title"),
+                    crate::tools::arg_str(args, "source"),
+                    value.clone(),
+                )?;
+                Ok(if value.is_null() {
+                    format!("Removed `{key}` from the dashboard data.")
+                } else {
+                    format!("Saved `{key}`: the page gets it as data.custom.{key} on its next refresh (a few seconds).")
+                })
+            }
             _ => {
                 let html = crate::tools::arg_str(args, "html")
                     .ok_or_else(|| anyhow::anyhow!("`html` is required"))?;
@@ -262,6 +380,23 @@ mod tests {
                 ("three".to_string(), "todo")
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn custom_data_is_saved_and_removed() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = crate::Core::open(crate::paths::Paths::at(dir.path()).unwrap())
+            .await
+            .unwrap();
+        core.set_dashboard_custom("inbox", Some("Unread"), Some("Gmail"), json!(12))
+            .unwrap();
+        assert_eq!(core.dashboard_custom()["inbox"]["value"], 12);
+        assert!(core
+            .set_dashboard_custom("bad key!", None, None, json!(1))
+            .is_err());
+        core.set_dashboard_custom("inbox", None, None, Value::Null)
+            .unwrap();
+        assert!(core.dashboard_custom().is_empty());
     }
 
     #[test]

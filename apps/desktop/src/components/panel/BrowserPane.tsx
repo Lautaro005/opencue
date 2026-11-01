@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, ArrowRight, Globe, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Globe, Maximize2, Minimize2, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import { api } from "../../lib/api";
 import { useStore } from "../../lib/store";
 import type { Agent, BrowserTab } from "../../lib/types";
@@ -22,7 +22,24 @@ export function BrowserPane({ agent }: { agent: Agent }) {
   const [typing, setTyping] = useState(false);
   const [title, setTitle] = useState("");
   const [tabs, setTabs] = useState<BrowserTab[]>([]);
+  // Bigger view: the whole browser over the app, until the user shrinks it again.
+  const [big, setBig] = useState(false);
+  // Set to place the page again on the next frame even if the box did not move (a new or
+  // different tab is a new native view that has to be put in the box).
+  const replace = useRef(false);
+  const activeTab = tabs.find((x) => x.active)?.id;
   const native = "__TAURI_INTERNALS__" in window;
+
+  useEffect(() => {
+    replace.current = true;
+  }, [activeTab, tabs.length, big]);
+
+  useEffect(() => {
+    if (!big) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setBig(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [big]);
 
   useEffect(() => {
     const el = box.current;
@@ -38,15 +55,16 @@ export function BrowserPane({ agent }: { agent: Agent }) {
     const follow = () => {
       const r = el.getBoundingClientRect();
       const key = `${Math.round(r.left)}|${Math.round(r.top)}|${Math.round(r.width)}|${Math.round(r.height)}`;
-      if (key !== last && r.width > 0 && r.height > 0) {
+      if ((key !== last || replace.current) && r.width > 0 && r.height > 0) {
         last = key;
+        replace.current = false;
         void api.browserPlace(agent.id, r.left, r.top, r.width, r.height);
       }
       raf = requestAnimationFrame(follow);
     };
     follow();
     return () => cancelAnimationFrame(raf);
-  }, [covered, native, agent.id]);
+  }, [covered, native, agent.id, big]);
   useEffect(() => () => void api.browserHide(), []);
 
   useEffect(() => {
@@ -70,7 +88,13 @@ export function BrowserPane({ agent }: { agent: Agent }) {
     };
   }, [native, typing, agent.id]);
 
-  const tabAct = (p: Promise<unknown>) => void p.then(() => refresh.current()).catch((e) => showToast(String(e)));
+  const tabAct = (p: Promise<unknown>) =>
+    void p
+      .then(() => {
+        replace.current = true;
+        refresh.current();
+      })
+      .catch((e) => showToast(String(e)));
   const newTab = () => {
     setUrl("");
     tabAct(api.browserTabNew(agent.id));
@@ -78,8 +102,8 @@ export function BrowserPane({ agent }: { agent: Agent }) {
 
   const act = (action: string, to?: string) => void api.browserControl(agent.id, action, to).catch((e) => showToast(String(e)));
 
-  return (
-    <div className="flex min-h-0 flex-1 flex-col px-4 pb-2">
+  const body = (
+    <div className={cx("flex min-h-0 flex-1 flex-col", big ? "surface h-full rounded-2xl p-3 shadow-2xl" : "px-4 pb-2")}>
       {native && (
         <div role="tablist" aria-label={t("computer.browser.tabs")} className="mb-1.5 flex items-center gap-1 overflow-x-auto">
           {tabs.map((tab) => {
@@ -141,6 +165,9 @@ export function BrowserPane({ agent }: { agent: Agent }) {
         <IconButton label={t("computer.browser.clear")} onClick={() => void api.browserClear(agent.id).then(() => showToast(t("computer.browser.cleared")))} className="size-7">
           <Trash2 size={13} />
         </IconButton>
+        <IconButton label={big ? t("computer.browser.shrink") : t("computer.browser.expand")} onClick={() => setBig((v) => !v)} active={big} className="size-7">
+          {big ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+        </IconButton>
       </div>
       <div ref={box} aria-label={title || agent.name} className="relative min-h-0 flex-1 overflow-hidden rounded-xl border border-line bg-bg">
         <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-[12.5px] text-muted">
@@ -149,5 +176,16 @@ export function BrowserPane({ agent }: { agent: Agent }) {
         </div>
       </div>
     </div>
+  );
+
+  if (!big) return body;
+  // Expanded: the same browser over the whole app (the native page follows the box there).
+  return (
+    <>
+      <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-2 text-[12.5px] text-muted">{t("computer.browser.expanded")}</div>
+      <div role="dialog" aria-label={title || agent.name} className="animate-fade fixed inset-0 z-40 flex bg-black/35 p-6 backdrop-blur-sm" onClick={(e) => e.target === e.currentTarget && setBig(false)}>
+        {body}
+      </div>
+    </>
   );
 }

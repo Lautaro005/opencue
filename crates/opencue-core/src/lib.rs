@@ -2,6 +2,7 @@
 
 pub mod artifacts;
 pub mod automations;
+pub mod brain;
 pub mod bridge;
 pub mod browser;
 pub mod catalog;
@@ -178,6 +179,7 @@ impl Core {
         self.forget_composio();
         self.start_idle_monitor();
         self.start_automations();
+        self.warm_volumes();
         let core = self.clone();
         tokio::spawn(async move {
             if let Ok(servers) = core.store.list_mcp_servers().await {
@@ -192,6 +194,27 @@ impl Core {
                         core.emit(CoreEvent::McpChanged);
                     });
                 }
+            }
+        });
+    }
+
+    /// Ask for every external drive the agents, coding groups and terminals work on, one at a
+    /// time, before anything else reaches for them (see [`paths::volume_access`]).
+    fn warm_volumes(self: &Arc<Self>) {
+        let core = self.clone();
+        tokio::spawn(async move {
+            let mut dirs: Vec<String> = Vec::new();
+            for a in core.store.list_agents().await.unwrap_or_default() {
+                dirs.extend(a.settings.working_dir);
+            }
+            for g in core.store.list_groups().await.unwrap_or_default() {
+                if let Some(d) = g.config.get("repo_dir").and_then(|v| v.as_str()) {
+                    dirs.push(d.to_string());
+                }
+            }
+            dirs.extend(core.term_saved().await.into_iter().map(|t| t.cwd));
+            for d in dirs.iter().filter(|d| !d.trim().is_empty()) {
+                paths::volume_access(std::path::Path::new(d.trim())).await;
             }
         });
     }
