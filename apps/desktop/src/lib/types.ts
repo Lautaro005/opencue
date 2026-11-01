@@ -23,6 +23,10 @@ export interface AgentSettings {
   /** Folder the agent works in; empty/null means its own folder in OpenCue's data. */
   working_dir: string | null;
   vm: VmOptions;
+  /** Keep this agent's folder in brain up to date (when brain is connected). */
+  brain_sync: boolean;
+  /** Its folder inside the brain vault; chosen on the first sync when empty. */
+  brain_folder?: string | null;
 }
 
 export interface VmOptions {
@@ -87,7 +91,7 @@ export interface Group {
   created_at: string;
   kind: GroupKind;
   /** A coding group's `repo_dir` and `isolate`. */
-  config: { repo_dir?: string; isolate?: boolean; [key: string]: unknown };
+  config: { repo_dir?: string; isolate?: boolean; brain_sync?: boolean; brain_folder?: string; [key: string]: unknown };
 }
 
 export interface RepoStatus {
@@ -270,6 +274,10 @@ export interface DashboardData {
   tasks: { agent_id: string; agent_name: string; done: number; total: number; items: { text: string; status: "todo" | "doing" | "done" }[] }[];
   usage: { messages: number; input_tokens: number; output_tokens: number; by_agent: { agent_id: string; name: string; messages: number; tokens: number }[] };
   recent: { thread_id: string; name: string; kind: "agent" | "group"; last_message: string | null; last_at: string | null }[];
+  /** Apps and tools connected to the agents. */
+  apps?: { id: string; name: string; kind: "mcp" | "catalog" }[];
+  /** What the dashboard agent saved from those apps with `update_dashboard_data`. */
+  custom?: Record<string, { title: string; source: string; value: unknown; updated_at: string }>;
 }
 
 /** A file the user is about to send (base64 bytes). */
@@ -476,6 +484,7 @@ export type CoreEvent =
   | { type: "threads_changed" }
   | { type: "mcp_changed" }
   | { type: "profile_changed"; agent_id: string }
+  | { type: "memory_changed"; agent_id: string | null }
   | { type: "automations_changed" }
   | { type: "dashboard_changed" }
   | { type: "computer_output"; agent_id: string; text: string; stderr: boolean }
@@ -695,4 +704,15 @@ export interface SpaceStatus {
   dir: string;
   managed: boolean;
   api_up: boolean;
+}
+
+/** brain as the agents' notebook (Settings → Apps → WorkStudio). */
+export interface BrainInfo {
+  installed: boolean;
+  vault: string | null;
+  enabled: boolean;
+  root: string;
+  shared: boolean;
+  /** Empty: `<root>/shared`. */
+  shared_folder: string;
 }

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next";
 import { AudioLines, Box, Brain, ChevronLeft, ChevronRight, Cpu, FileText, FolderOpen, Ghost, Plus, Shield, Sparkles, Trash2, X } from "lucide-react";
 import { useStore } from "../../lib/store";
+import { BrainFolder, brainSlug } from "./BrainFolder";
 import { api, pickFolder } from "../../lib/api";
 import type { Agent, AgentSettings, EmailAccount, McpServerConfig, McpServerStatus, MemoryEntry, ProviderInfo } from "../../lib/types";
 import { cx } from "../../lib/format";
@@ -434,9 +435,19 @@ function MemorySection({ agent, onChange }: { agent: Agent; onChange: (s: Partia
   const [raw, setRaw] = useState<string | null>(null);
   const messages = useStore((s) => s.messages[agent.id]);
 
-  const load = useCallback(() => void api.listMemory("agent", agent.id).then(setEntries), [agent.id]);
-  // Reload when the conversation changes: the agent may have remembered something.
+  const load = useCallback(() => void api.listMemory("agent", agent.id).then(setEntries).catch(() => {}), [agent.id]);
+  // Reload when the conversation changes or the agent remembers something (it learns in the
+  // background, a moment after replying).
   useEffect(load, [load, messages?.length]);
+  useEffect(() => {
+    const on = (e: Event) => (e as CustomEvent).detail === agent.id && load();
+    window.addEventListener("opencue:memory-changed", on);
+    const timer = window.setInterval(load, 6000);
+    return () => {
+      window.removeEventListener("opencue:memory-changed", on);
+      window.clearInterval(timer);
+    };
+  }, [agent.id, load]);
 
   const add = async () => {
     if (!draft.trim()) return;
@@ -485,6 +496,12 @@ function MemorySection({ agent, onChange }: { agent: Agent; onChange: (s: Partia
           <Toggle checked={agent.settings.auto_memory} onChange={(v) => onChange({ auto_memory: v })} label={t("profile.autoMemory")} />
         </Row>
       </div>
+      <BrainFolder
+        on={agent.settings.brain_sync !== false}
+        folder={agent.settings.brain_folder ?? ""}
+        fallback={(root) => `${root}/${brainSlug(agent.name)}`}
+        onChange={(on, folder) => onChange({ brain_sync: on, brain_folder: folder || null })}
+      />
 
       <Modal open={raw !== null} onClose={() => setRaw(null)} className="w-[560px]" label={t("profile.memoryRaw")}>
         <DialogHeader title={`${t("profile.memory")} · ${agent.name}`} subtitle="MEMORY.md" onClose={() => setRaw(null)} />

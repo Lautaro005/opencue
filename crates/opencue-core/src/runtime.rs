@@ -36,6 +36,8 @@ const BASE_PROMPT: &str = "You are an AI agent inside OpenCue, a personal agents
     Your role is to help the user by taking actions and completing tasks, not only by answering questions. Use tools when they are useful. Break complex requests into steps. \
     Ask for confirmation before irreversible or sensitive actions (sending emails, deleting data, modifying files on the host, etc.).\n\n\
     Be clear, concise and proactive. Explain what you are doing when it matters. Respect the permissions and preferences set for this agent.\n\n\
+    Work in the user's real interest, based on their goals and what is true, not only on what they just said: if a request, a plan or your own output conflicts \
+    with their goals, the facts or something they told you before, say so clearly and briefly, then help. Don't just agree.\n\n\
     You are this specific agent, not a generic chatbot.";
 const HISTORY_LIMIT: i64 = 80;
 const MAX_TOOL_OUTPUT: usize = 30_000;
@@ -244,7 +246,10 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
         ),
         "dashboard" => format!(
             "The user ran /dashboard. You are in charge of their dashboard (the home screen). Read the current page with `read_dashboard`, then rewrite it with `update_dashboard` \
-             (the complete HTML page) the way they ask: layout, colors, which numbers and lists to show, anything. If they asked for nothing specific, ask what they would like to see. \
+             (the complete HTML page) the way they ask: layout, colors, which numbers and lists to show, anything. \
+             When they want data OpenCue does not send by itself (their email, calendar, CRM, Notion, GitHub, brain notes, meetings, the web…), get it now with the tools \
+             you have for those apps, save the summary with `update_dashboard_data`, and draw it from data.custom; if they want it kept fresh, offer an automation that \
+             refreshes it on a schedule. Show what helps them decide, not decoration. If they asked for nothing specific, ask what they would like to see. \
              Keep what already works. When it is saved, say in one sentence what changed.\n\nRequest: {request}"
         ),
         name => match skill(name) {
@@ -1302,9 +1307,13 @@ impl Core {
             }
         }
 
-        if agent.settings.auto_memory
-            && supports_tools
+        // After the reply, one short call keeps the agent's memory and profile up to date from
+        // what the user said (every kind of agent, CLI ones included). Small talk is skipped.
+        let want_memory = agent.settings.auto_memory;
+        let want_profile = agent.settings.auto_profile && !profile_touched && group.is_none();
+        if (want_memory || want_profile)
             && !outcome.text.is_empty()
+            && (last_user.split_whitespace().count() >= 3 || last_user.trim().chars().count() >= 12)
             && !crate::messenger::is_wa_thread(thread_id)
         {
             let core = self.clone();
@@ -1317,37 +1326,18 @@ impl Core {
             );
             tokio::spawn(async move {
                 if let Err(e) = core
-                    .extract_memories(&agent, provider, model, &user, &reply)
+                    .reflect(
+                        &agent,
+                        provider,
+                        model,
+                        &user,
+                        &reply,
+                        want_memory,
+                        want_profile,
+                    )
                     .await
                 {
-                    tracing::debug!("memory extraction failed: {e:#}");
-                }
-            });
-        }
-        // Models without tools (or that skipped them) still get their profile written.
-        if agent.settings.auto_profile
-            && !profile_touched
-            && !outcome.text.is_empty()
-            && group.is_none()
-            && !crate::messenger::is_wa_thread(thread_id)
-            && (!(supports_tools || cli_tools)
-                || self.store.instructions(&agent.id).trim().is_empty()
-                || self.store.soul(&agent.id).trim().is_empty())
-        {
-            let core = self.clone();
-            let (agent, provider, model, reply, user) = (
-                agent.clone(),
-                provider.clone(),
-                model.clone(),
-                outcome.text.clone(),
-                last_user.clone(),
-            );
-            tokio::spawn(async move {
-                if let Err(e) = core
-                    .extract_profile(&agent, provider, model, &user, &reply)
-                    .await
-                {
-                    tracing::debug!("profile update failed: {e:#}");
+                    tracing::debug!("memory/profile update failed: {e:#}");
                 }
             });
         }
@@ -1446,7 +1436,7 @@ impl Core {
         if tools {
             s.push_str(
                 "\n\n## Tools\n\
-                 - Build your memory as you go: when you learn a durable fact or preference about the user, their projects or people, save it with `remember` right away, without being asked. Keep entries short and don't duplicate what you already remember.\n\
+                 - Build your memory as you go: when you learn a durable fact or preference about the user, their projects or people, save it with `remember` right away, without being asked. Keep insights, not raw data: one short self-contained line per fact, no duplicates, and when a fact replaces an older one, `forget` the old one.\n\
                  - Recurring or event-driven requests can become an automation with `create_automation`.\n\
                  - For work with several steps, keep a short plan with `update_plan` and update it as you go; it is shown back to you at the end of every step.\n\
                  - For anything that needs many searches or long pages, hand it to `research`: a helper with a clean context returns a short report and your own context stays small.\n\
@@ -1463,6 +1453,9 @@ impl Core {
         }
         if tools {
             s.push_str(&self.capabilities_prompt(agent, caps).await);
+            if caps.brain {
+                s.push_str(&self.brain_prompt(agent, group).await);
+            }
             if !vmpal_chosen(agent).is_empty() {
                 let machines = vmpal_chosen(agent)
                     .iter()
@@ -1725,6 +1718,8 @@ impl Core {
                     (self.store.agent_memory(&agent.id), "memory")
                 };
                 let e = file.add(text)?;
+                self.memory_changed((label == "memory").then(|| agent.id.clone()))
+                    .await;
                 Ok(format!("Saved to {label} as #{}: {}", e.id, e.text))
             }
             tools::RECALL => {
@@ -1759,7 +1754,10 @@ impl Core {
                 } else {
                     self.store.agent_memory(&agent.id)
                 };
-                Ok(format!("Forgot: {}", file.remove(id)?))
+                let gone = file.remove(id)?;
+                self.memory_changed((!(scope_global && global_allowed)).then(|| agent.id.clone()))
+                    .await;
+                Ok(format!("Forgot: {gone}"))
             }
             tools::WEB_SEARCH => {
                 let q =
@@ -1873,9 +1871,11 @@ impl Core {
             }
             tools::CREATE_ARTIFACT => self.artifact_tool(thread_id, agent, args).await,
             tools::READ_ARTIFACT => self.read_artifact_tool(agent, args),
-            tools::READ_DASHBOARD | tools::UPDATE_DASHBOARD => {
+            tools::READ_DASHBOARD | tools::UPDATE_DASHBOARD | tools::UPDATE_DASHBOARD_DATA => {
                 self.dashboard_tool(agent, call.name.as_str(), args).await
             }
+            tools::BRAIN_SAVE => self.brain_save_tool(agent, group, args).await,
+            tools::BRAIN_READ => self.brain_read_tool(agent, group, args).await,
             tools::RESEARCH => {
                 let task =
                     arg_str(args, "task").ok_or_else(|| anyhow::anyhow!("`task` is required"))?;
@@ -2035,34 +2035,70 @@ impl Core {
         }
     }
 
-    /// Learn from the exchange without the user having to: durable facts go to memory (about the
-    /// user, for every agent, to the shared one), and a long memory gets merged into a tidy one.
-    async fn extract_memories(
+    /// Update the agent's memory (and the shared one) and its profile from one exchange, in one
+    /// call: new durable facts, facts they replace, and the full new instructions or soul when the
+    /// user changed them.
+    #[allow(clippy::too_many_arguments)]
+    async fn reflect(
         &self,
         agent: &Agent,
         provider: Arc<dyn LlmProvider>,
         model: String,
         user: &str,
         reply: &str,
+        want_memory: bool,
+        want_profile: bool,
     ) -> anyhow::Result<()> {
         let memory = self.store.agent_memory(&agent.id);
         let shared_allowed = self.global_memory_enabled().await && agent.settings.use_global_memory;
-        let existing = memory
-            .entries()
-            .into_iter()
-            .map(|e| format!("- {}", e.text))
-            .collect::<Vec<_>>()
-            .join("\n");
+        let mine = memory.entries();
+        let shared = if shared_allowed {
+            self.store.global_memory().entries()
+        } else {
+            vec![]
+        };
+        let instructions = self.store.instructions(&agent.id);
+        let soul = self.store.soul(&agent.id);
+        let mut system = String::from(
+            "You keep an AI agent's long-term knowledge up to date from one exchange with the user. Reply with only a JSON object.\n",
+        );
+        let mut context = String::new();
+        if want_memory {
+            system.push_str(
+                "\"memories\": new durable facts or preferences about the user, their work, projects, people or routines that will matter later: \
+                 insights, not raw data; short self-contained strings; skip one-off requests and anything already known. Start one with \"global: \" \
+                 only when every agent should know it (the user's name, language, job, location, general preferences). [] when there is nothing.\n\
+                 \"forget\": numbers (#n) of the agent's memories that a new fact replaces or that the user said are wrong. [] when none.\n",
+            );
+            context.push_str("Agent's memory:\n");
+            for e in &mine {
+                context.push_str(&format!("#{} {}\n", e.id, e.text));
+            }
+            if !shared.is_empty() {
+                context.push_str("\nShared memory (all agents):\n");
+                for e in &shared {
+                    context.push_str(&format!("- {}\n", e.text));
+                }
+            }
+        }
+        if want_profile {
+            system.push_str(
+                "\"instructions\" / \"soul\": the agent's profile in two Markdown documents. INSTRUCTIONS is its job (what it does, responsibilities, \
+                 rules, workflows, how it treats the user); SOUL is who it is (personality, tone, values, style). When the USER said something that \
+                 changes one (a role or task for the agent, a rule, how to talk or behave), give the FULL updated document (merged with the current \
+                 one, short Markdown, under 300 words, never secrets); otherwise null. Don't invent what the user didn't say.\n",
+            );
+            context.push_str(&format!(
+                "\nAgent name: {}\nCurrent INSTRUCTIONS:\n{instructions}\n\nCurrent SOUL:\n{soul}\n",
+                agent.name
+            ));
+        }
         let req = ChatRequest {
             model: model.clone(),
-            system: "You maintain an assistant's long-term memory. From the exchange, extract only new, durable facts or preferences \
-                     about the user (or their projects, people and routines) that will matter in future conversations. Skip one-off requests \
-                     and anything already remembered. Return a JSON array of short self-contained strings, or [] if there is nothing worth \
-                     keeping. Start a string with \"global: \" only when every agent should know it (the user's name, language, job, location, \
-                     general preferences)."
-                .into(),
+            system,
             messages: vec![ChatMessage::user(format!(
-                "Already remembered:\n{existing}\n\nUser: {user}\nAssistant: {reply}"
+                "{context}\nUser: {user}\nAgent: {}",
+                truncate(reply.to_string(), 6000)
             ))],
             tools: vec![],
             temperature: Some(0.0),
@@ -2073,24 +2109,96 @@ impl Core {
             permission: None,
         };
         let resp = provider.chat(req, &|_| {}).await?;
-        for fact in extract_json_array(&resp.text)
-            .unwrap_or_default()
-            .into_iter()
-            .take(5)
-        {
-            match fact.strip_prefix("global:") {
-                Some(shared) if shared_allowed && !shared.trim().is_empty() => {
-                    self.store.global_memory().add(shared.trim())?;
-                }
-                Some(shared) => {
-                    memory.add(shared.trim())?;
-                }
-                None => {
-                    memory.add(&fact)?;
+        let (Some(a), Some(b)) = (resp.text.find('{'), resp.text.rfind('}')) else {
+            return Ok(());
+        };
+        let Ok(v) = serde_json::from_str::<Value>(&resp.text[a..=b]) else {
+            return Ok(());
+        };
+
+        if want_memory {
+            let (mut mine_changed, mut shared_changed) = (false, false);
+            // Highest number first: removing an entry renumbers the ones after it.
+            let mut gone: Vec<usize> = v["forget"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|n| {
+                    n.as_u64()
+                        .or_else(|| n.as_str()?.trim_start_matches('#').parse().ok())
+                })
+                .map(|n| n as usize)
+                .filter(|n| (1..=mine.len()).contains(n))
+                .collect();
+            gone.sort_unstable_by(|x, y| y.cmp(x));
+            gone.dedup();
+            for n in gone {
+                if memory.remove(n).is_ok() {
+                    mine_changed = true;
                 }
             }
+            let known = |t: &str, list: &[crate::memory::MemoryEntry]| {
+                list.iter().any(|e| e.text.eq_ignore_ascii_case(t))
+            };
+            for fact in v["memories"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(str::trim)
+                .filter(|f| !f.is_empty())
+                .take(5)
+            {
+                match fact.strip_prefix("global:").map(str::trim) {
+                    Some(t) if shared_allowed && !t.is_empty() => {
+                        if !known(t, &self.store.global_memory().entries()) {
+                            self.store.global_memory().add(t)?;
+                            shared_changed = true;
+                        }
+                    }
+                    other => {
+                        let t = other.unwrap_or(fact);
+                        if !t.is_empty() && !known(t, &memory.entries()) {
+                            memory.add(t)?;
+                            mine_changed = true;
+                        }
+                    }
+                }
+            }
+            if mine_changed {
+                self.tidy_memory(&memory, provider.clone(), model.clone())
+                    .await?;
+                self.memory_changed(Some(agent.id.clone())).await;
+            }
+            if shared_changed {
+                self.tidy_memory(&self.store.global_memory(), provider.clone(), model.clone())
+                    .await?;
+                self.memory_changed(None).await;
+            }
         }
-        self.tidy_memory(&memory, provider, model).await
+
+        if want_profile {
+            let take = |k: &str| {
+                v.get(k)
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|t| !t.is_empty() && t.chars().count() <= 8000)
+                    .map(str::to_string)
+            };
+            let mut changed = false;
+            if let Some(t) = take("instructions").filter(|t| *t != instructions.trim()) {
+                self.store.set_instructions(&agent.id, &t)?;
+                changed = true;
+            }
+            if let Some(t) = take("soul").filter(|t| *t != soul.trim()) {
+                self.store.set_soul(&agent.id, &t)?;
+                changed = true;
+            }
+            if changed {
+                self.profile_changed(&agent.id).await;
+            }
+        }
+        Ok(())
     }
 
     /// The saved summary of a thread: the time it covers up to, and the text.
@@ -2365,70 +2473,6 @@ impl Core {
             },
             8_000,
         ))
-    }
-
-    /// Keep the agent's instructions and soul in step with what the user says, for models that
-    /// can't (or didn't) call `update_instructions` / `update_soul` themselves.
-    async fn extract_profile(
-        &self,
-        agent: &Agent,
-        provider: Arc<dyn LlmProvider>,
-        model: String,
-        user: &str,
-        reply: &str,
-    ) -> anyhow::Result<()> {
-        let instructions = self.store.instructions(&agent.id);
-        let soul = self.store.soul(&agent.id);
-        let req = ChatRequest {
-            model,
-            system: "You keep an AI agent's profile in two Markdown documents. INSTRUCTIONS: its job (what it does, responsibilities, rules, \
-                     workflows, how it treats the user). SOUL: who it is (personality, tone, values, style). From the exchange, decide whether the \
-                     USER said something that changes either one: a role or task given to the agent, a rule, a way to talk or behave. \
-                     Reply with only a JSON object {\"instructions\": string|null, \"soul\": string|null}. A string is the FULL updated document \
-                     (merge it with the current one, short Markdown, under 300 words, never secrets); null means unchanged. Don't invent anything \
-                     the user didn't say, and ignore one-off requests."
-                .into(),
-            messages: vec![ChatMessage::user(format!(
-                "Agent name: {}\n\nCurrent INSTRUCTIONS:\n{instructions}\n\nCurrent SOUL:\n{soul}\n\nUser: {user}\nAgent: {reply}",
-                agent.name
-            ))],
-            tools: vec![],
-            temperature: Some(0.0),
-            agent_id: None,
-            mcp_extra: vec![],
-            on_tool: None,
-            cwd: None,
-            permission: None,
-        };
-        let resp = provider.chat(req, &|_| {}).await?;
-        let (Some(a), Some(b)) = (resp.text.find('{'), resp.text.rfind('}')) else {
-            return Ok(());
-        };
-        let Ok(v) = serde_json::from_str::<Value>(&resp.text[a..=b]) else {
-            return Ok(());
-        };
-        let take = |k: &str| {
-            v.get(k)
-                .and_then(Value::as_str)
-                .map(str::trim)
-                .filter(|t| !t.is_empty() && t.chars().count() <= 8000)
-                .map(str::to_string)
-        };
-        let mut changed = false;
-        if let Some(t) = take("instructions").filter(|t| *t != instructions.trim()) {
-            self.store.set_instructions(&agent.id, &t)?;
-            changed = true;
-        }
-        if let Some(t) = take("soul").filter(|t| *t != soul.trim()) {
-            self.store.set_soul(&agent.id, &t)?;
-            changed = true;
-        }
-        if changed {
-            self.emit(CoreEvent::ProfileChanged {
-                agent_id: agent.id.clone(),
-            });
-        }
-        Ok(())
     }
 
     /// A first message from a freshly created agent, asking what its job will be. Only posts into

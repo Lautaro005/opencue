@@ -157,6 +157,12 @@ pub struct AgentSettings {
     /// Options for the agent's Docker computer (the local VM).
     #[serde(default)]
     pub vm: crate::computer::VmOptions,
+    /// Keep this agent's folder in brain up to date (when brain is connected).
+    #[serde(default = "yes")]
+    pub brain_sync: bool,
+    /// Its folder inside the brain vault; chosen on the first sync when empty.
+    #[serde(default)]
+    pub brain_folder: Option<String>,
 }
 
 impl Default for AgentSettings {

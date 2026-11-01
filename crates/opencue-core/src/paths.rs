@@ -56,6 +56,48 @@ pub fn fix_path_env() {
     }
 }
 
+/// The external drive (`/Volumes/<name>` on macOS) a path lives on, if it lives on one.
+fn external_volume(path: &Path) -> Option<PathBuf> {
+    if !cfg!(target_os = "macos") {
+        return None;
+    }
+    let mut parts = path.components();
+    let (Some(std::path::Component::RootDir), Some(first), Some(name)) =
+        (parts.next(), parts.next(), parts.next())
+    else {
+        return None;
+    };
+    (first.as_os_str() == "Volumes").then(|| Path::new("/Volumes").join(name.as_os_str()))
+}
+
+/// macOS asks before an app touches a removable or network drive, and it asks once per request
+/// that is waiting: when several parts of the app open a folder on a USB drive at the same time
+/// (git, the terminal, an agent), the user gets a stack of identical prompts. Everything that is
+/// about to work in a folder calls this first: the first caller for a drive reads it once, so the
+/// system asks once, and the others wait for that answer instead of asking again. Once the drive
+/// answered, later calls return at once.
+pub async fn volume_access(path: &Path) {
+    use std::collections::HashSet;
+    use std::sync::OnceLock;
+    static SEEN: OnceLock<tokio::sync::Mutex<HashSet<PathBuf>>> = OnceLock::new();
+    let Some(volume) = external_volume(path) else {
+        return;
+    };
+    let mut seen = SEEN.get_or_init(Default::default).lock().await;
+    if seen.contains(&volume) {
+        return;
+    }
+    let probe = if path.is_dir() {
+        path.to_path_buf()
+    } else {
+        volume.clone()
+    };
+    let _ = tokio::task::spawn_blocking(move || std::fs::read_dir(probe).map(|_| ())).await;
+    // Allowed or not, the system has answered for this drive (it remembers the answer): the
+    // others go ahead without asking again.
+    seen.insert(volume);
+}
+
 #[derive(Debug, Clone)]
 pub struct Paths {
     root: PathBuf,
@@ -153,5 +195,22 @@ impl Paths {
 
     pub fn secrets_fallback_file(&self) -> PathBuf {
         self.root.join("secrets.json")
+    }
+}
+
+#[cfg(test)]
+mod volume_tests {
+    use super::*;
+
+    #[test]
+    fn finds_the_drive_of_a_path() {
+        let got = external_volume(Path::new("/Volumes/USB/work/repo"));
+        if cfg!(target_os = "macos") {
+            assert_eq!(got, Some(PathBuf::from("/Volumes/USB")));
+        } else {
+            assert_eq!(got, None);
+        }
+        assert_eq!(external_volume(Path::new("/Users/me/work")), None);
+        assert_eq!(external_volume(Path::new("/Volumes")), None);
     }
 }

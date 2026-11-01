@@ -33,6 +33,9 @@ pub const CREATE_ARTIFACT: &str = "create_artifact";
 pub const READ_ARTIFACT: &str = "read_artifact";
 pub const READ_DASHBOARD: &str = "read_dashboard";
 pub const UPDATE_DASHBOARD: &str = "update_dashboard";
+pub const UPDATE_DASHBOARD_DATA: &str = "update_dashboard_data";
+pub const BRAIN_SAVE: &str = "brain_save";
+pub const BRAIN_READ: &str = "brain_read";
 pub const BROWSER_OPEN: &str = "browser_open";
 pub const BROWSER_SNAPSHOT: &str = "browser_snapshot";
 pub const BROWSER_CLICK: &str = "browser_click";
@@ -67,6 +70,8 @@ pub struct Capabilities {
     pub browser: bool,
     /// This agent was given the dashboard page to edit.
     pub dashboard: bool,
+    /// brain is connected and this agent has a folder in it.
+    pub brain: bool,
 }
 
 /// Everything an agent may call in one turn.
@@ -383,6 +388,44 @@ impl Toolbox {
                     "type": "object",
                     "properties": { "html": { "type": "string", "description": "The complete HTML document." } },
                     "required": ["html"]
+                }),
+            ));
+            specs.push(spec(
+                UPDATE_DASHBOARD_DATA,
+                "Save data for the dashboard that OpenCue does not have by itself: numbers and lists you extracted from the user's connected apps (email, calendar, CRM, Notion, GitHub, brain, meetings…), the web or files. It reaches the page as data.custom[key] on every refresh. Save the summary the page shows, not raw dumps. Pass a null value to remove a key.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "key": { "type": "string", "description": "Short id, e.g. inbox, pipeline, calendar_today" },
+                        "title": { "type": "string", "description": "What it is, for people reading the data" },
+                        "source": { "type": "string", "description": "Where it came from, e.g. Gmail, Notion" },
+                        "value": { "description": "Any JSON: a number, a list of rows, an object" }
+                    },
+                    "required": ["key", "value"]
+                }),
+            ));
+        }
+        if caps.brain {
+            specs.push(spec(
+                BRAIN_SAVE,
+                "Save an insight to the user's brain (their second brain): decisions, conclusions, takeaways, how something works, what was learned. One note per topic: saving the same title again updates it. Save insights, never raw data or long dumps. Your memory and profile are copied there by OpenCue, don't save those.",
+                json!({
+                    "type": "object",
+                    "properties": {
+                        "title": { "type": "string" },
+                        "content": { "type": "string", "description": "Short Markdown" },
+                        "description": { "type": "string", "description": "One sentence on what the note is about (shown in the folder index)" },
+                        "scope": { "type": "string", "enum": ["agent", "group", "shared"], "description": "Your folder (default), this group's, or the one shared by every agent" }
+                    },
+                    "required": ["title", "content"]
+                }),
+            ));
+            specs.push(spec(
+                BRAIN_READ,
+                "Read from the user's brain. Without a path: your folders and the notes in each, one line each. With a path (relative to the vault, e.g. projects/x/notes.md or a folder for its index): that note. Read the index first and open only what the task needs.",
+                json!({
+                    "type": "object",
+                    "properties": { "path": { "type": "string" } }
                 }),
             ));
         }

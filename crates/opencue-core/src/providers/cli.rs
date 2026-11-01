@@ -287,6 +287,7 @@ impl LlmProvider for CliProvider {
             .clone()
             .filter(|p| p.is_dir())
             .unwrap_or_else(|| scratch.clone());
+        crate::paths::volume_access(&workdir).await;
         let last_message_file = scratch.join(format!("codex-{}.txt", crate::db::new_id()));
 
         let mut prompt_file: Option<std::path::PathBuf> = None;

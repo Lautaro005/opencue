@@ -122,11 +122,12 @@
 
         <h2 id="memory">Instructions &amp; memory</h2>
         <p><strong>Instructions</strong> are the agent's job description, added to every conversation. They are saved as <code>agents/&lt;id&gt;/INSTRUCTIONS.md</code>. The <strong>soul</strong> (<code>agents/&lt;id&gt;/SOUL.md</code>) says who the agent is: personality, tone and values. Every agent also gets a short built-in prompt that tells it it is an agent inside OpenCue; you never see or edit it.</p>
-        <p>A new agent opens the chat by asking what its job will be. It writes its own instructions and soul from what you tell it, and keeps them up to date as you talk (models without tools get the same result from a small pass after each reply). Edit either in the agent's profile, or turn <strong>Let the agent write its own profile</strong> off.</p>
+        <p>A new agent opens the chat by asking what its job will be. It writes its own instructions and soul from what you tell it, and keeps them up to date as you talk: after each reply a short pass (skipped for small talk) rewrites them when you changed what the agent does or how it sounds, for every kind of agent, Claude Code and Codex included. Edit either in the agent's profile, or turn <strong>Let the agent write its own profile</strong> off.</p>
         <p><strong>Memory</strong> is a list of facts the agent keeps about you and its work, in <code>agents/&lt;id&gt;/MEMORY.md</code>. Agents save facts with the <code>remember</code> tool, look them up with <code>recall</code> and delete with <code>forget</code> (which asks first). You can add, delete or edit the Markdown directly.</p>
         <ul>
           <li><strong>Shared memory</strong> (<code>memory/GLOBAL.md</code>) is visible to every agent that has “Use shared memory” on.</li>
-          <li><strong>Learn from conversations automatically</strong> is on by default: after each reply the model decides whether anything is worth remembering, sends facts every agent should know to the shared memory, skips duplicates and merges the list when it passes 40 entries. Turn it off per agent in its Memory page.</li>
+          <li><strong>Learn from conversations automatically</strong> is on by default: after each reply the model decides whether anything is worth remembering (insights, not raw data), sends facts every agent should know to the shared memory, removes the facts a new one replaces, skips duplicates and merges the list when it passes 40 entries. The Memory page and Settings → General follow it as it happens. Turn it off per agent in its Memory page.</li>
+          <li><strong>Folders in brain</strong>: with <a href="https://github.com/Lautaro005/brain">brain</a> connected (Settings → Apps → WorkStudio), turn on <em>Folders for the agents in brain</em>. Each agent, each group and all of them together get a folder in the vault (by default <code>projects/opencue-agents/&lt;name&gt;</code>, <code>group-&lt;name&gt;</code> and <code>shared</code>) with an <code>index.md</code>, the agent's <code>profile.md</code> and <code>memory.md</code>, and the notes it saves with <code>brain_save</code>. Agents read them with <code>brain_read</code>, index first. Change or turn off a folder in the agent's Memory page or the group's details.</li>
         </ul>
         <p><strong>About me</strong> (<strong>Settings → Account</strong>) is a description of yourself that every agent reads as background, together with your name. It stays on your computer and goes only to the model provider you chose.</p>
 
@@ -168,7 +169,7 @@
 
         <h2 id="dashboard">Dashboard</h2>
         <p>The home screen shows what is going on: the agents working right now, plans in progress, automations with their next run, recent chats and usage. Click the <strong>Dashboard</strong> entry at the top of the sidebar, or press <kbd>Esc</kbd> inside a chat, to come back to it (a half-written message keeps its first <kbd>Esc</kbd> for itself).</p>
-        <p>The page is plain HTML. To make it yours, go to <strong>Settings → General → Dashboard</strong> and pick the agent in charge; then run <code>/dashboard</code> in that agent's chat and say what you want (“big numbers on top, my automations as a list, dark colors”). The agent reads the current page with <code>read_dashboard</code> and rewrites it with <code>update_dashboard</code>; OpenCue sends the page live data as a window message. <em>Reset</em> goes back to the built-in page. The page runs in a sandbox with no network access.</p>
+        <p>The page is plain HTML. To make it yours, press <strong>Customize</strong> at the top of the dashboard: pick the agent in charge, what to show, which connected apps to bring data from (email, calendar, Notion, GitHub, brain, Lumina…), the layout, the style and how often that data refreshes, and add anything in your own words. Or run <code>/dashboard</code> in that agent's chat and say what you want (“big numbers on top, my automations as a list, dark colors”). Data from your apps is extracted by the agent with their tools and saved with <code>update_dashboard_data</code>; the page reads it as <code>data.custom</code>. The agent reads the current page with <code>read_dashboard</code> and rewrites it with <code>update_dashboard</code>; OpenCue sends the page live data as a window message. <em>Reset</em> goes back to the built-in page. The page runs in a sandbox with no network access.</p>
 
         <h2 id="plan">/plan, /canvas and the chat's + menu</h2>
         <p>The <strong>+</strong> in the message box lists <strong>Skills</strong> in two groups: the <em>system</em> commands and, under their own label, <em>your skills</em>.</p>
@@ -226,6 +227,8 @@
   }
 }</code></pre>
         <p>In an agent's <strong>Apps</strong> page choose all servers or only some.</p>
+        <h3>WorkStudio</h3>
+        <p><strong>Settings → Apps → WorkStudio</strong> finds brain (memory), Lumina (meetings) and AI WorkStudio on this computer, starts them and gives their tools to every agent with one switch. With brain's tools on, <em>Folders for the agents in brain</em> keeps a folder per agent, per group and one shared (see <a href="#memory">Instructions &amp; memory</a>).</p>
         <h3>Catalog</h3>
         <p><strong>Settings → Apps → Catalog</strong> has cards for Composio (first), Gmail, Google Drive, Notion, Trello, GitHub, Supabase, Vercel and Outlook. The border shows the state: <strong>red</strong> not connected, <strong>yellow</strong> connect again (the sign-in expired or failed), <strong>green</strong> connected.</p>
         <ol>
