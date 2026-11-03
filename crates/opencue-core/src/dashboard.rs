@@ -20,9 +20,69 @@ parent.postMessage({type:'opencue:open', agent_id}, '*') opens an agent's chat. 
 agents {total, running, list[{id,name,model,busy,avatar{color,shape,face}}]}; running[{thread_id,name,kind}]; \
 automations {total, enabled, upcoming[], list[{id,name,agent_id,agent_name,enabled,trigger,cron,next_run_at,last_run_at,last_status}]}; \
 tasks[{agent_id,agent_name,done,total,items[{text,status}]}]; usage {messages,input_tokens,output_tokens,by_agent[{agent_id,name,messages,tokens}]}; \
-recent[{thread_id,name,kind,last_message,last_at}]; apps[{id,name,kind:'mcp'|'catalog'}] (the apps and tools connected to the agents); \
+recent[{thread_id,name,kind,last_message,last_at}]; activity[{day,sent,replies,tokens}] (the last 28 days, oldest first, days without messages included); apps[{id,name,kind:'mcp'|'catalog'}] (the apps and tools connected to the agents); \
 custom {key: {title, source, value, updated_at}}: data the agent saved with update_dashboard_data from connected apps, the web or files (value is any JSON). \
 Set text with textContent, never innerHTML, since names and messages are data.";
+/// How to build a good dashboard: the agent gets it with `read_dashboard`.
+pub const DESIGN_KIT: &str = "## Dashboard design kit\n\
+Purpose: a dashboard helps the user decide what to do next. Lead with what needs them (failed automations, tasks waiting, mail to answer, today's meetings), \
+then what is moving, then history. Every block answers a question; drop decoration that answers none.\n\
+Layout: a greeting line with the one-sentence state of things; a row of 3-5 stat cards (big number, short label, a delta or sparkline when there is history); \
+then a responsive grid of cards (CSS grid, repeat(auto-fit, minmax(300px, 1fr))). It must work from 700 px wide up, with no horizontal scroll.\n\
+Style profiles (pick the one the user asked for, or keep the current one): \
+brand (OpenCue blue #4f6bed accent, soft cards, radius 14, hairline borders); calm (neutral greys, one accent, generous spacing, thin type); \
+bold (saturated chart colors, larger numbers, colored card headers); glass (translucent cards with backdrop-filter blur over a soft gradient); \
+editorial (serif headings, rules between sections, no card shadows); terminal (monospace, dark, green/amber accents). \
+Always define colors as CSS variables for light and dark and switch on data.theme; text contrast at least 4.5:1.\n\
+Components you can draw with plain HTML/CSS/SVG (no libraries needed): stat card; sparkline (an inline SVG polyline over activity); \
+bar list (rank by tokens or messages with a proportional bar); activity heatmap (28 squares from activity, opacity by count); \
+progress list (plan steps with done/total and a bar); timeline (upcoming automations by next_run_at); status pills (live/on/off/failed); \
+table (sortable on click) for custom rows; donut (SVG circles with stroke-dasharray) for shares. Charts from data.custom go through the same components.\n\
+States: every block needs an empty state that says what fills it (\"No automations yet: ask an agent with /create-automation\"), \
+and custom data shows its source and how old it is (updated_at). Times are relative (\"5 min ago\") and in the user's locale.\n\
+Interaction: rows that belong to an agent open its chat with parent.postMessage({type:'opencue:open', agent_id}, '*'). \
+Keep animations subtle (fade-in, a pulse on live items) and respect prefers-reduced-motion.\n\
+Checklist before update_dashboard: the page listens for opencue:data and posts opencue:ready; text set with textContent; \
+no fetch, XMLHttpRequest, WebSocket or external images (there is no network; scripts only from cdnjs, jsDelivr or unpkg if you really need a library); \
+works in light and dark; under 512 KB. OpenCue checks the page and keeps the previous version, so the user can undo.";
+
+/// The most previous versions of the page kept for undo.
+const KEEP_VERSIONS: usize = 12;
+
+/// Problems that make a page unusable (`Err`) and ones worth fixing (the warnings returned).
+pub fn check_page(html: &str) -> Result<Vec<String>, String> {
+    let lower = html.to_lowercase();
+    if !lower.contains("<html") && !lower.contains("<body") && !lower.contains("<div") {
+        return Err("this is not an HTML page: pass the complete document".into());
+    }
+    if !html.contains("opencue:data") {
+        return Err("the page never reads its data: add window.addEventListener('message', e => { if (e.data?.type === 'opencue:data') render(e.data.data) })".into());
+    }
+    let mut warnings = vec![];
+    if !html.contains("opencue:ready") {
+        warnings.push("it does not post {type:'opencue:ready'} on load, so the first data arrives a few seconds late".to_string());
+    }
+    for (needle, what) in [
+        ("fetch(", "fetch"),
+        ("xmlhttprequest", "XMLHttpRequest"),
+        ("websocket", "WebSocket"),
+        ("eventsource", "EventSource"),
+    ] {
+        if lower.contains(needle) {
+            warnings.push(format!("it uses {what}, but the page has no network: bring that data with update_dashboard_data instead"));
+        }
+    }
+    if lower.contains(".innerhtml") {
+        warnings.push("it sets innerHTML: use textContent for names, messages and custom data (they are data, not markup)".into());
+    }
+    if !lower.contains("theme") {
+        warnings.push(
+            "it ignores data.theme, so it will not follow the app's light or dark mode".into(),
+        );
+    }
+    Ok(warnings)
+}
+
 /// The most custom data the dashboard keeps.
 const MAX_DATA_BYTES: usize = 256 * 1024;
 
@@ -132,13 +192,84 @@ impl Core {
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir)?;
         }
+        self.keep_dashboard_version()?;
         std::fs::write(file, html)?;
         self.emit(crate::CoreEvent::DashboardChanged);
         Ok(())
     }
 
+    fn dashboard_history_dir(&self) -> std::path::PathBuf {
+        self.paths().root().join("dashboard").join("history")
+    }
+
+    /// Put the current page (if it is the user's own) among the previous versions.
+    fn keep_dashboard_version(&self) -> anyhow::Result<()> {
+        let Ok(current) = std::fs::read_to_string(self.dashboard_file()) else {
+            return Ok(());
+        };
+        let dir = self.dashboard_history_dir();
+        std::fs::create_dir_all(&dir)?;
+        let id = chrono::Utc::now().format("%Y%m%dT%H%M%S%3f").to_string();
+        std::fs::write(dir.join(format!("{id}.html")), current)?;
+        let mut all = self.dashboard_versions();
+        while all.len() > KEEP_VERSIONS {
+            if let Some(old) = all.pop() {
+                let _ = std::fs::remove_file(dir.join(format!("{}.html", old.0)));
+            }
+        }
+        Ok(())
+    }
+
+    /// Previous versions of the page, newest first: (id, saved at as RFC 3339).
+    pub fn dashboard_versions(&self) -> Vec<(String, String)> {
+        let mut ids: Vec<String> = std::fs::read_dir(self.dashboard_history_dir())
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter_map(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .strip_suffix(".html")
+                    .map(str::to_string)
+            })
+            .collect();
+        ids.sort_unstable_by(|a, b| b.cmp(a));
+        ids.into_iter()
+            .map(|id| {
+                let at = chrono::NaiveDateTime::parse_from_str(&id, "%Y%m%dT%H%M%S%3f")
+                    .map(|t| t.and_utc().to_rfc3339())
+                    .unwrap_or_default();
+                (id, at)
+            })
+            .collect()
+    }
+
+    /// Go back to a previous version (the newest one when `id` is None). The page being replaced
+    /// is kept too, so undo can be undone.
+    pub fn restore_dashboard(&self, id: Option<&str>) -> anyhow::Result<()> {
+        let id = match id {
+            Some(i) => i.to_string(),
+            None => self
+                .dashboard_versions()
+                .into_iter()
+                .next()
+                .map(|v| v.0)
+                .ok_or_else(|| anyhow::anyhow!("there is no earlier version of the dashboard"))?,
+        };
+        anyhow::ensure!(
+            id.chars().all(|c| c.is_ascii_alphanumeric()),
+            "unknown version"
+        );
+        let path = self.dashboard_history_dir().join(format!("{id}.html"));
+        let html =
+            std::fs::read_to_string(&path).map_err(|_| anyhow::anyhow!("that version is gone"))?;
+        let _ = std::fs::remove_file(&path);
+        self.set_dashboard_html(&html)
+    }
+
     /// Back to the built-in page.
     pub fn reset_dashboard(&self) -> anyhow::Result<()> {
+        self.keep_dashboard_version()?;
         let _ = std::fs::remove_file(self.dashboard_file());
         self.emit(crate::CoreEvent::DashboardChanged);
         Ok(())
@@ -256,6 +387,29 @@ impl Core {
                 .map(|c| json!({ "id": c.slug, "name": c.name, "kind": "catalog" })),
         );
 
+        // The last 28 days, each day present even when nothing happened.
+        let today = chrono::Utc::now().date_naive();
+        let start = today - chrono::Duration::days(27);
+        let rows = self
+            .store
+            .activity(&start.format("%Y-%m-%d").to_string())
+            .await
+            .unwrap_or_default();
+        let activity: Vec<Value> = (0..28)
+            .map(|i| {
+                let day = (start + chrono::Duration::days(i))
+                    .format("%Y-%m-%d")
+                    .to_string();
+                let r = rows.iter().find(|r| r.0 == day);
+                json!({
+                    "day": day,
+                    "sent": r.map_or(0, |r| r.1),
+                    "replies": r.map_or(0, |r| r.2),
+                    "tokens": r.map_or(0, |r| r.3),
+                })
+            })
+            .collect();
+
         let mut recent: Vec<&ThreadSummary> =
             threads.iter().filter(|t| t.last_at.is_some()).collect();
         recent.sort_by(|a, b| b.last_at.cmp(&a.last_at));
@@ -291,6 +445,7 @@ impl Core {
                 "last_message": t.last_message.as_deref().map(|m| short(m, 90)),
                 "last_at": t.last_at,
             })).collect::<Vec<_>>(),
+            "activity": activity,
             "apps": apps,
             "custom": Value::Object(self.dashboard_custom()),
         }))
@@ -330,7 +485,7 @@ impl Core {
                         .join(", ")
                 };
                 Ok(format!(
-                    "{CONTRACT}\n\nCustom data saved so far: {saved}.\n\nCurrent page ({}):\n\n{}",
+                    "{CONTRACT}\n\n{DESIGN_KIT}\n\nCustom data saved so far: {saved}.\n\nCurrent page ({}):\n\n{}",
                     if self.dashboard_is_default() {
                         "the built-in one"
                     } else {
@@ -358,8 +513,18 @@ impl Core {
             _ => {
                 let html = crate::tools::arg_str(args, "html")
                     .ok_or_else(|| anyhow::anyhow!("`html` is required"))?;
+                let warnings = check_page(html).map_err(|e| {
+                    anyhow::anyhow!("Not saved: {e}. Fix it and call update_dashboard again.")
+                })?;
                 self.set_dashboard_html(html)?;
-                Ok("Dashboard updated: it is shown on the user's home screen now.".into())
+                Ok(if warnings.is_empty() {
+                    "Dashboard updated: it is shown on the user's home screen now (the previous version is kept, so the user can undo).".into()
+                } else {
+                    format!(
+                        "Dashboard updated and shown now, but fix these and save again:\n- {}",
+                        warnings.join("\n- ")
+                    )
+                })
             }
         }
     }
@@ -397,6 +562,40 @@ mod tests {
         core.set_dashboard_custom("inbox", None, None, Value::Null)
             .unwrap();
         assert!(core.dashboard_custom().is_empty());
+    }
+
+    #[test]
+    fn pages_are_checked_before_saving() {
+        assert!(check_page("hello").is_err());
+        assert!(check_page("<div>no data</div>").is_err());
+        assert!(
+            check_page(DEFAULT_HTML).unwrap().is_empty(),
+            "{:?}",
+            check_page(DEFAULT_HTML)
+        );
+        let w = check_page("<body><script>addEventListener('message',e=>{if(e.data.type==='opencue:data'){x.innerHTML=1;fetch('/a')}})</script></body>").unwrap();
+        assert_eq!(w.len(), 4, "{w:?}");
+    }
+
+    #[tokio::test]
+    async fn earlier_versions_can_be_restored() {
+        let dir = tempfile::tempdir().unwrap();
+        let core = crate::Core::open(crate::paths::Paths::at(dir.path()).unwrap())
+            .await
+            .unwrap();
+        assert!(core.restore_dashboard(None).is_err());
+        core.set_dashboard_html("<div>one opencue:data</div>")
+            .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        core.set_dashboard_html("<div>two opencue:data</div>")
+            .unwrap();
+        assert_eq!(core.dashboard_versions().len(), 1);
+        core.restore_dashboard(None).unwrap();
+        assert!(core.dashboard_html().contains("one"));
+        // The page it replaced is kept, so undo can be undone.
+        assert!(core.dashboard_versions().len() == 1);
+        let data = core.dashboard_data().await.unwrap();
+        assert_eq!(data["activity"].as_array().unwrap().len(), 28);
     }
 
     #[test]

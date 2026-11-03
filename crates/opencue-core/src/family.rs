@@ -1,9 +1,10 @@
-//! The rest of the family: brain (memory), Lumina (meetings) and AI WorkStudio (the workspace that
-//! ties them together). OpenCue does not embed them: it finds them on this computer, starts them,
+//! The rest of the family: brain (memory), Lumina (meetings), OpenBlocks (notes) and AI WorkStudio
+//! (the workspace that ties them together). OpenCue does not embed them: it finds them on this computer, starts them,
 //! and hands their MCP servers to its agents with one switch, the same way WorkStudio does.
 //!
 //! * brain: a Python MCP server in `~/.brain`, dashboard on 127.0.0.1:8765.
 //! * Lumina: `lumina mcp`, app on 127.0.0.1:47770.
+//! * OpenBlocks: `openblocks mcp`, app on 127.0.0.1:47880 (a Markdown vault edited like Notion).
 //! * WorkStudio: `workstudio mcp`, one server with the tools of the others. When it is connected
 //!   the direct brain/Lumina entries are paused so no tool shows up twice.
 
@@ -17,7 +18,9 @@ use serde::Serialize;
 use crate::models::{McpServerConfig, McpTransport};
 use crate::Core;
 
-pub const IDS: [&str; 3] = ["brain", "lumina", "workstudio"];
+pub const IDS: [&str; 4] = ["brain", "lumina", "openblocks", "workstudio"];
+/// The apps WorkStudio's hub can serve in one MCP server.
+const HUB_APPS: [&str; 3] = ["brain", "lumina", "openblocks"];
 const PAUSED: &str = "family_paused";
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -46,6 +49,7 @@ pub(crate) fn app_home(id: &str) -> Option<PathBuf> {
     let (var, folder) = match id {
         "brain" => ("BRAIN_HOME", ".brain"),
         "lumina" => ("LUMINA_HOME", ".lumina"),
+        "openblocks" => ("OPENBLOCKS_HOME", ".openblocks"),
         _ => return None,
     };
     std::env::var_os(var)
@@ -86,6 +90,14 @@ fn installed(id: &str) -> bool {
             command("lumina").is_some()
                 || app_home("lumina").is_some_and(|h| h.join("lumina.sh").is_file())
         }
+        "openblocks" => {
+            command("openblocks").is_some()
+                || ["/Applications/OpenBlocks.app"]
+                    .iter()
+                    .map(PathBuf::from)
+                    .chain(home_dir().map(|h| h.join("Applications").join("OpenBlocks.app")))
+                    .any(|p| p.exists())
+        }
         _ => workstudio_installed(),
     }
 }
@@ -109,10 +121,23 @@ async fn answers(url: &str, needle: &str) -> bool {
     }
 }
 
+/// The `version` a running app reports on its status endpoint.
+async fn reported_version(url: &str) -> Option<String> {
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_millis(900))
+        .build()
+        .ok()?;
+    let v: serde_json::Value = client.get(url).send().await.ok()?.json().await.ok()?;
+    v.get("version")
+        .and_then(|v| v.as_str())
+        .map(|v| v.trim_start_matches('v').to_string())
+}
+
 fn url_of(id: &str) -> Option<&'static str> {
     match id {
         "brain" => Some("http://127.0.0.1:8765"),
         "lumina" => Some("http://127.0.0.1:47770"),
+        "openblocks" => Some("http://127.0.0.1:47880"),
         _ => None,
     }
 }
@@ -132,9 +157,10 @@ pub fn mcp_config(id: &str) -> Option<McpServerConfig> {
             ],
         ),
         "lumina" => ("Lumina", command("lumina")?, vec!["mcp".into()]),
+        "openblocks" => ("OpenBlocks", command("openblocks")?, vec!["mcp".into()]),
         "workstudio" => {
             // Its own tools (the ones for OpenCue) would loop back here, so only the others.
-            let only: Vec<&str> = ["brain", "lumina"]
+            let only: Vec<&str> = HUB_APPS
                 .into_iter()
                 .filter(|a| installed(a))
                 .chain(["web"])
@@ -164,6 +190,7 @@ fn install_command(id: &str) -> &'static str {
     match id {
         "brain" => "curl -fsSL https://raw.githubusercontent.com/Lautaro005/brain/main/install.sh | bash",
         "lumina" => "curl -fsSL https://raw.githubusercontent.com/Lautaro005/lumina/main/install.sh | sh",
+        "openblocks" => "curl -fsSL https://raw.githubusercontent.com/Lautaro005/openblocks/main/install.sh | sh",
         _ => "curl -fsSL https://raw.githubusercontent.com/Lautaro005/workstudio/main/install.sh | sh -s -- --all",
     }
 }
@@ -172,6 +199,7 @@ fn repo_url(id: &str) -> &'static str {
     match id {
         "brain" => "https://github.com/Lautaro005/brain",
         "lumina" => "https://github.com/Lautaro005/lumina",
+        "openblocks" => "https://github.com/Lautaro005/openblocks",
         _ => "https://github.com/Lautaro005/workstudio",
     }
 }
@@ -180,6 +208,7 @@ fn display_name(id: &str) -> &'static str {
     match id {
         "brain" => "brain",
         "lumina" => "Lumina",
+        "openblocks" => "OpenBlocks",
         _ => "AI WorkStudio",
     }
 }
@@ -200,10 +229,16 @@ impl Core {
             .ok()
             .flatten()
             .unwrap_or_default();
-        let (brain_up, lumina_up) = tokio::join!(
+        let (brain_up, lumina_up, blocks_up) = tokio::join!(
             answers("http://127.0.0.1:8765/api/version", "current"),
-            answers("http://127.0.0.1:47770/api/status", "stt_engine")
+            answers("http://127.0.0.1:47770/api/status", "stt_engine"),
+            answers("http://127.0.0.1:47880/api/status", "openblocks")
         );
+        let blocks_version = if blocks_up {
+            reported_version("http://127.0.0.1:47880/api/status").await
+        } else {
+            None
+        };
         IDS.iter()
             .map(|id| {
                 let is_installed = installed(id);
@@ -221,9 +256,14 @@ impl Core {
                     running: match *id {
                         "brain" => Some(brain_up),
                         "lumina" => Some(lumina_up),
+                        "openblocks" => Some(blocks_up),
                         _ => None,
                     },
-                    version: version(id),
+                    version: if *id == "openblocks" {
+                        blocks_version.clone()
+                    } else {
+                        version(id)
+                    },
                     home: app_home(id).map(|h| h.display().to_string()),
                     url: url_of(id).map(str::to_string),
                     mcp: mcp.into(),
@@ -265,7 +305,7 @@ impl Core {
             if id == "workstudio" {
                 // One server with everything: pause the direct ones so no tool shows up twice.
                 let mut paused = vec![];
-                for other in ["brain", "lumina"] {
+                for other in HUB_APPS {
                     if let Some(s) = servers
                         .iter()
                         .find(|s| s.id == format!("family-{other}") && s.enabled)
@@ -297,6 +337,69 @@ impl Core {
         Ok(self.family_status().await)
     }
 
+    /// How to use OpenBlocks, for agents that have its tools (directly or through WorkStudio).
+    pub(crate) async fn openblocks_prompt(&self, agent: &crate::models::Agent) -> String {
+        let servers = self.store.list_mcp_servers().await.unwrap_or_default();
+        let has = |id: &str| {
+            servers.iter().any(|s| {
+                s.id == id
+                    && s.enabled
+                    && (agent.settings.mcp_all || agent.settings.mcp_servers.contains(&s.id))
+            })
+        };
+        if !(has("family-openblocks") || (has("family-workstudio") && installed("openblocks"))) {
+            return String::new();
+        }
+        "\n\n## OpenBlocks (the user's notes)\n\
+         The user writes their notes in OpenBlocks, a vault of Markdown pages (tools `search_pages`, `read_page`, `list_pages`, `backlinks`, `create_page`, `edit_page`, `set_property`). \
+         When they mention their notes, a project, a client or a document, search it first (try two or three wordings) and read the pages that matter before answering; cite them as [[Title]]. \
+         When they ask you to write something down, or you produce a document they will keep (a plan, meeting notes, a summary, a checklist), put it in a page instead of pasting it: \
+         edit the page that already covers the topic with the smallest change that does the job (append, insert_after, replace_text), or create one in a fitting folder. \
+         Keep insights and decisions, not raw data, and keep the folder layout stable. Every change you make shows the user an Undo button in OpenBlocks."
+            .into()
+    }
+
+    /// Save a text as a new OpenBlocks page (in `OpenCue/<agent>`), through OpenBlocks' own MCP
+    /// server, which works whether or not the app is open. Returns the page's path in the vault.
+    pub async fn save_to_openblocks(
+        &self,
+        agent: Option<&str>,
+        text: &str,
+    ) -> anyhow::Result<String> {
+        let text = text.trim();
+        anyhow::ensure!(!text.is_empty(), "there is nothing to save");
+        let cfg = mcp_config("openblocks").ok_or_else(|| {
+            anyhow::anyhow!(
+                "OpenBlocks is not installed on this computer (Settings → Apps → WorkStudio)"
+            )
+        })?;
+        let tools = self.mcp.tools(std::slice::from_ref(&cfg)).await;
+        if tools.is_empty() {
+            self.mcp.connect(&cfg).await;
+        }
+        let (title, body) = page_from_text(text);
+        let who = agent.map(str::trim).filter(|a| !a.is_empty());
+        let folder = match who {
+            Some(a) => format!("OpenCue/{}", a.replace(['/', '\\'], "-")),
+            None => "OpenCue".into(),
+        };
+        let footer = format!(
+            "\n\n---\n*Saved from OpenCue{} · {}*",
+            who.map(|a| format!(" · {a}")).unwrap_or_default(),
+            chrono::Local::now().format("%Y-%m-%d %H:%M")
+        );
+        let (out, is_error) = self
+            .mcp
+            .call(
+                &cfg.id,
+                "create_page",
+                serde_json::json!({ "title": title, "folder": folder, "content": format!("{body}{footer}") }),
+            )
+            .await?;
+        anyhow::ensure!(!is_error, "OpenBlocks could not save it: {out}");
+        Ok(out)
+    }
+
     /// Start an app (its server, or the app itself) without waiting for it.
     pub async fn family_start(&self, id: &str) -> anyhow::Result<()> {
         anyhow::ensure!(installed(id), "{} is not installed", display_name(id));
@@ -311,6 +414,14 @@ impl Core {
                     .ok_or_else(|| anyhow::anyhow!("the `lumina` command was not found"))?,
                 vec!["serve".into(), "--port".into(), "47770".into()],
             ),
+            "openblocks" => match command("openblocks") {
+                Some(cli) => (cli, vec!["serve".into()]),
+                None if cfg!(target_os = "macos") => (
+                    PathBuf::from("open"),
+                    vec!["-a".into(), "OpenBlocks".into()],
+                ),
+                None => anyhow::bail!("the `openblocks` command was not found"),
+            },
             _ => {
                 if cfg!(target_os = "macos") && command("workstudio").is_none() {
                     (
@@ -348,9 +459,60 @@ impl Core {
     }
 }
 
+/// A page title (the first heading, or the start of the first line) and the body without it.
+fn page_from_text(text: &str) -> (String, String) {
+    let first = text
+        .lines()
+        .find(|l| !l.trim().is_empty())
+        .unwrap_or("")
+        .trim();
+    let heading = first.starts_with('#');
+    let clean: String = first
+        .trim_start_matches('#')
+        .replace(['*', '_', '`', '[', ']'], "")
+        .trim()
+        .to_string();
+    let mut title: String = clean.chars().take(60).collect();
+    if clean.chars().count() > 60 {
+        if let Some(cut) = title.rfind(' ') {
+            title.truncate(cut);
+        }
+        title.push('…');
+    }
+    let title = title.replace(['/', '\\', ':'], "-");
+    let title = if title.is_empty() {
+        "Note from OpenCue".to_string()
+    } else {
+        title
+    };
+    let body = if heading {
+        text.trim_start()
+            .split_once('\n')
+            .map_or("", |x| x.1)
+            .trim()
+            .to_string()
+    } else {
+        text.to_string()
+    };
+    (title, body)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pages_take_their_title_from_the_text() {
+        assert_eq!(
+            page_from_text("# Plan Q3\n\n- one"),
+            ("Plan Q3".into(), "- one".into())
+        );
+        let (t, b) = page_from_text("Short answer: yes.\nMore");
+        assert_eq!(t, "Short answer- yes.");
+        assert!(b.starts_with("Short answer"));
+        let long = "word ".repeat(30);
+        assert!(page_from_text(&long).0.ends_with('…'));
+    }
 
     #[test]
     fn every_app_has_names_and_install_commands() {

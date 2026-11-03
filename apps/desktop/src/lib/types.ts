@@ -274,6 +274,8 @@ export interface DashboardData {
   tasks: { agent_id: string; agent_name: string; done: number; total: number; items: { text: string; status: "todo" | "doing" | "done" }[] }[];
   usage: { messages: number; input_tokens: number; output_tokens: number; by_agent: { agent_id: string; name: string; messages: number; tokens: number }[] };
   recent: { thread_id: string; name: string; kind: "agent" | "group"; last_message: string | null; last_at: string | null }[];
+  /** The last 28 days, oldest first. */
+  activity?: { day: string; sent: number; replies: number; tokens: number }[];
   /** Apps and tools connected to the agents. */
   apps?: { id: string; name: string; kind: "mcp" | "catalog" }[];
   /** What the dashboard agent saved from those apps with `update_dashboard_data`. */

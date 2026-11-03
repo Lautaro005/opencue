@@ -70,6 +70,7 @@ const changes = {
 const familyApps = [
   { id: "brain", name: "brain", installed: true, running: true, version: "0.03.3.4", home: "~/.brain", url: "http://127.0.0.1:8765", mcp: "off", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/brain/main/install.sh | bash", repo_url: "https://github.com/Lautaro005/brain", can_start: true },
   { id: "lumina", name: "Lumina", installed: true, running: false, version: "0.1.6", home: "~/.lumina", url: "http://127.0.0.1:47770", mcp: "on", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/lumina/main/install.sh | sh", repo_url: "https://github.com/Lautaro005/lumina", can_start: true },
+  { id: "openblocks", name: "OpenBlocks", installed: true, running: true, version: "0.1.0", home: "~/.openblocks", url: "http://127.0.0.1:47880", mcp: "off", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/openblocks/main/install.sh | sh", repo_url: "https://github.com/Lautaro005/openblocks", can_start: true },
   { id: "workstudio", name: "AI WorkStudio", installed: false, running: null, version: null, home: null, url: null, mcp: "off", install_command: "curl -fsSL https://raw.githubusercontent.com/Lautaro005/workstudio/main/install.sh | sh -s -- --all", repo_url: "https://github.com/Lautaro005/workstudio", can_start: false },
 ];
 const storage = {
@@ -339,7 +340,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   storage_report: () => storage,
   storage_compact: () => ((storage.items.find((i) => i.id === "chats")!.bytes = 18_400_000), (storage.total = storage.items.reduce((n, i) => n + i.bytes, 0)), storage),
   open_data_dir: () => undefined,
-  app_info: () => ({ version: "0.5.5-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
+  app_info: () => ({ version: "0.5.6-preview", platform: "browser", data_dir: "(in-memory)", space_supported: false }),
   list_threads: threads,
   list_agents: () => agents,
   get_agent: ({ id }) => agents.find((a) => a.id === id),
@@ -391,6 +392,7 @@ const handlers: Record<string, (a: Args) => unknown> = {
   family_status: () => familyApps,
   family_set_mcp: ({ id, enabled }) => { const a = familyApps.find((x) => x.id === id)!; a.mcp = enabled ? "on" : "off"; if (id === "workstudio") for (const o of familyApps) if (o.id !== "workstudio" && o.mcp === "on" && enabled) o.mcp = "via_workstudio"; return familyApps; },
   family_start: () => undefined,
+  save_to_openblocks: ({ text }) => `Created page OpenCue/${String(text).slice(0, 20)}.md`,
   brain_info: () => ({ installed: true, vault: "~/.brain/vault", enabled: settings.brain_sync === "true", root: settings.brain_root || "projects/opencue-agents", shared: settings.brain_shared !== "false", shared_folder: settings.brain_shared_folder || "" }),
   brain_sync_all: () => agents.length,
   set_group_config: ({ id, config }) => void (groups.find((x) => x.id === id)!.config = config as Record<string, unknown>),
@@ -508,9 +510,12 @@ const handlers: Record<string, (a: Args) => unknown> = {
       { id: "github", name: "GitHub", kind: "mcp" },
     ],
     custom: {},
+    activity: Array.from({ length: 28 }, (_, i) => ({ day: new Date(Date.now() - (27 - i) * 864e5).toISOString().slice(0, 10), sent: (i * 7) % 11, replies: (i * 5) % 13, tokens: ((i * 9) % 17) * 1200 })),
   }),
   dashboard_info: () => ({ html: dashboardHtml, is_default: true }),
   reset_dashboard: () => undefined,
+  dashboard_versions: () => [["20261103T120000000", new Date(Date.now() - 3600e3).toISOString()]],
+  restore_dashboard: () => undefined,
   view_base: () => "",
   browser_tabs: () => [],
   browser_tab_new: () => 1,

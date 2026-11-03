@@ -2,6 +2,29 @@
 
 All notable changes to OpenCue. The website version is at <https://lautaro005.github.io/opencue/changelog/>.
 
+## 0.5.6 — 2026-11-03
+
+### New
+
+- **OpenBlocks joins the family.** OpenBlocks (notes you write like Notion, kept as Markdown like Obsidian) shows up
+  in Settings → Apps → WorkStudio with its logo: found on this computer, started with one button, and its tools given
+  to every agent with one switch (or through WorkStudio's hub, which now includes it). Agents that have it search and
+  read your pages before answering about your notes, cite them as `[[Title]]`, and write documents you will keep as
+  pages (editing the page that already covers the topic with the smallest change) instead of pasting them in the chat.
+- **Save to OpenBlocks** on every reply: one click keeps it as a page in `OpenCue/<agent>` in your vault, titled from
+  its first heading or line, through OpenBlocks' own MCP server (the app doesn't need to be open).
+- **A dashboard agent that designs better.** `read_dashboard` now hands the agent a design kit: what a dashboard is for
+  (what needs you first, then what is moving), the layout, six style profiles (OpenCue colors, calm, bold, glass,
+  editorial, terminal), components it can draw without libraries (stat cards, sparklines, bar lists, a 28-day
+  heatmap, progress lists, timelines, tables, donuts), empty states and a checklist. **Every page is checked before
+  it is saved**: one that never reads its data is refused, and network calls, `innerHTML` with data, a missing
+  `opencue:ready` or ignoring the theme come back as things to fix.
+- **Undo on the dashboard.** The last 12 versions of the page are kept; **Undo last change** in the dashboard header
+  goes back one (and can itself be undone). Resetting to the built-in page keeps the old one too.
+- **Activity of the last 28 days** in the dashboard data (`activity`: messages sent, replies and tokens per day), drawn
+  as a heatmap on the built-in page. Customize adds *Activity*, *Recent pages and tasks (OpenBlocks)* and the glass,
+  editorial and terminal styles.
+
 ## 0.5.5 — 2026-11-01
 
 ### New

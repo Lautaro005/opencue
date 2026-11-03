@@ -8,7 +8,7 @@ and handled privately.
 
 | Version | Supported |
 |---|---|
-| Latest release (`0.5.x`, currently `0.5.5`) | ✅ |
+| Latest release (`0.5.x`, currently `0.5.6`) | ✅ |
 | `0.2.x` | ⚠️ critical fixes only — 0.3 updates itself, please update |
 | Older | ❌ — please update first |
 
@@ -89,6 +89,10 @@ In scope:
 - **brain folders** — `brain_save` / `brain_read` or the sync writing or reading outside the brain vault (folders are
   relative, with no `..`), writing to an agent's folder from another agent outside a shared group or the shared folder,
   or overwriting brain's own `BRAIN.md`, `FORMAT.md` or `profile.md`
+- **OpenBlocks** — *Save to OpenBlocks* or the agents' OpenBlocks tools writing outside the vault OpenBlocks has open,
+  or OpenCue starting anything but the fixed `openblocks mcp` / `openblocks serve` commands for it
+- **Dashboard checks and versions** — a page that fails the check being saved anyway, or restoring a version reading
+  files outside `dashboard/history/` (version ids are timestamps made of letters and digits only)
 - **Dashboard data** — data an agent saves with `update_dashboard_data` reaching anything but the sandboxed dashboard
   frame, or another agent than the one in charge of the dashboard saving it
 - **Floating windows** — a floating window being given more commands or access than the main window

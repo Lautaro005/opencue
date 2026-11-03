@@ -9,9 +9,9 @@ import type { DashboardData } from "../../lib/types";
 import { Button, DialogHeader, Modal, Select, Textarea } from "../ui";
 
 /** What the dashboard can show: the first ones OpenCue has itself, the rest the agent brings from apps. */
-const BLOCKS = ["priorities", "agents", "automations", "usage", "recent", "inbox", "calendar", "tasks", "pipeline", "github", "decisions", "meetings"] as const;
+const BLOCKS = ["priorities", "agents", "automations", "usage", "activity", "recent", "inbox", "calendar", "tasks", "pipeline", "github", "decisions", "meetings", "notes"] as const;
 const LAYOUTS = ["cards", "focus", "compact"] as const;
-const STYLES = ["brand", "calm", "bold"] as const;
+const STYLES = ["brand", "calm", "bold", "glass", "editorial", "terminal"] as const;
 const REFRESH = ["live", "hourly", "morning"] as const;
 
 /** Tap-to-pick chips. */

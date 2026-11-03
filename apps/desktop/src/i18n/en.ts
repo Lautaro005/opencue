@@ -117,6 +117,7 @@ export const en = {
   },
   dashboard: {
     title: "Dashboard",
+    undo: "Undo last change",
     customize: {
       open: "Customize",
       title: "Customize your dashboard",
@@ -138,6 +139,8 @@ export const en = {
         automations: "Automations and what runs next",
         usage: "Usage and tokens",
         recent: "Recent chats",
+        activity: "Activity of the last 28 days",
+        notes: "Recent pages and tasks (OpenBlocks)",
         inbox: "Email that needs me",
         calendar: "Today's meetings with a short prep",
         tasks: "Tasks from my tools",
@@ -147,7 +150,7 @@ export const en = {
         meetings: "Latest meetings (Lumina)",
       },
       layouts: { cards: "Cards", focus: "One focus area", compact: "Compact list" },
-      styles: { brand: "OpenCue colors", calm: "Calm and minimal", bold: "Bold, colorful charts" },
+      styles: { brand: "OpenCue colors", calm: "Calm and minimal", bold: "Bold, colorful charts", glass: "Glass over a soft gradient", editorial: "Editorial, like a newspaper", terminal: "Terminal, monospace and dark" },
       refreshes: { live: "Only what OpenCue updates live", hourly: "Refresh app data every hour", morning: "Refresh app data every morning" },
     },
   },
@@ -161,6 +164,8 @@ export const en = {
     files: "Files",
     fileTooBig: "{{name}} is larger than 25 MB.",
     copyReply: "Copy reply",
+    saveToOpenBlocks: "Save to OpenBlocks",
+    savedToOpenBlocks: "Saved as a page in OpenBlocks (OpenCue folder)",
     copied: "Copied",
     edit: "Edit message",
     regenerate: "Regenerate reply",
@@ -731,7 +736,7 @@ export const en = {
       running: "Running",
       stopped: "Not running",
       tools: "Give my agents its tools",
-      toolsHub: "One connection with the tools of brain, Lumina and the web search, so nothing shows up twice.",
+      toolsHub: "One connection with the tools of brain, Lumina, OpenBlocks and the web search, so nothing shows up twice.",
       viaWorkstudio: "Covered by the WorkStudio connection (turn that one off to connect this one on its own).",
       tipWorkstudio: "Tip: AI WorkStudio gives you all of them through one connection.",
       open: "Open",
@@ -741,7 +746,8 @@ export const en = {
       note: "Each agent can still limit which tools it uses in its profile → Apps.",
       brain: { what: "Memory: your notes, profile and what you have learned, with search and fact check.", tools: "Agents can read and write your vault, search your sources and check facts." },
       lumina: { what: "Meetings: live transcription, notes and a knowledge base you can ask.", tools: "Agents can search your meetings, notes and sources." },
-      workstudio: { what: "The workspace that ties brain, Lumina and OpenCue together." },
+      openblocks: { what: "Notes: a Markdown vault you write like Notion, with databases, files and a graph.", tools: "Agents can search, read, create and edit your pages (each change can be undone in OpenBlocks)." },
+      workstudio: { what: "The workspace that ties brain, Lumina, OpenBlocks and OpenCue together." },
       notebook: {
         title: "Folders for the agents in brain",
         hint: "Each agent, each group and all of them together get a folder in brain with their profile, memory and the insights they save. Kept up to date as they work.",
@@ -971,7 +977,7 @@ export const en = {
     apps: {
       title: "Apps",
       hint: {
-        workstudio: "brain, Lumina and AI WorkStudio, found on this computer. Turn on an app's tools and every agent can use them; nothing is embedded or copied.",
+        workstudio: "brain, Lumina, OpenBlocks and AI WorkStudio, found on this computer. Turn on an app's tools and every agent can use them; nothing is embedded or copied.",
         servers: "Give agents tools through MCP servers — local programs or remote URLs.",
         catalog: "Popular apps your agents can use once you sign in.",
       },

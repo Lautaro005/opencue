@@ -119,6 +119,7 @@ export const es: Dict = {
   },
   dashboard: {
     title: "Panel",
+    undo: "Deshacer el último cambio",
     customize: {
       open: "Personalizar",
       title: "Personalizá tu panel",
@@ -140,6 +141,8 @@ export const es: Dict = {
         automations: "Automatizaciones y lo próximo que corre",
         usage: "Uso y tokens",
         recent: "Chats recientes",
+        activity: "Actividad de los últimos 28 días",
+        notes: "Páginas y tareas recientes (OpenBlocks)",
         inbox: "Mails que me necesitan",
         calendar: "Reuniones de hoy con una preparación corta",
         tasks: "Tareas de mis herramientas",
@@ -149,7 +152,7 @@ export const es: Dict = {
         meetings: "Últimas reuniones (Lumina)",
       },
       layouts: { cards: "Tarjetas", focus: "Un área destacada", compact: "Lista compacta" },
-      styles: { brand: "Colores de OpenCue", calm: "Tranquilo y minimalista", bold: "Gráficos con mucho color" },
+      styles: { brand: "Colores de OpenCue", calm: "Tranquilo y minimalista", bold: "Gráficos con mucho color", glass: "Vidrio sobre un degradé suave", editorial: "Editorial, como un diario", terminal: "Terminal, monoespaciado y oscuro" },
       refreshes: { live: "Solo lo que OpenCue actualiza en vivo", hourly: "Actualizar datos de apps cada hora", morning: "Actualizar datos de apps cada mañana" },
     },
   },
@@ -163,6 +166,8 @@ export const es: Dict = {
     files: "Archivos",
     fileTooBig: "{{name}} pesa más de 25 MB.",
     copyReply: "Copiar respuesta",
+    saveToOpenBlocks: "Guardar en OpenBlocks",
+    savedToOpenBlocks: "Guardado como página en OpenBlocks (carpeta OpenCue)",
     copied: "Copiado",
     edit: "Editar mensaje",
     regenerate: "Regenerar respuesta",
@@ -733,7 +738,7 @@ export const es: Dict = {
       running: "Corriendo",
       stopped: "Apagada",
       tools: "Darle sus herramientas a mis agentes",
-      toolsHub: "Una sola conexión con las herramientas de brain, Lumina y la búsqueda web, así nada aparece dos veces.",
+      toolsHub: "Una sola conexión con las herramientas de brain, Lumina, OpenBlocks y la búsqueda web, así nada aparece dos veces.",
       viaWorkstudio: "Cubierta por la conexión de WorkStudio (apagá esa para conectar esta por separado).",
       tipWorkstudio: "Tip: AI WorkStudio te da todas con una sola conexión.",
       open: "Abrir",
@@ -743,7 +748,8 @@ export const es: Dict = {
       note: "Cada agente puede limitar qué herramientas usa en su perfil → Apps.",
       brain: { what: "Memoria: tus notas, tu perfil y lo que fuiste aprendiendo, con búsqueda y fact check.", tools: "Los agentes pueden leer y escribir tu vault, buscar en tus fuentes y verificar datos." },
       lumina: { what: "Reuniones: transcripción en vivo, notas y una base de conocimiento a la que le podés preguntar.", tools: "Los agentes pueden buscar en tus reuniones, notas y fuentes." },
-      workstudio: { what: "El workspace que une brain, Lumina y OpenCue." },
+      openblocks: { what: "Notas: un vault de Markdown que escribís como en Notion, con bases de datos, archivos y grafo.", tools: "Los agentes pueden buscar, leer, crear y editar tus páginas (cada cambio se deshace en OpenBlocks)." },
+      workstudio: { what: "El workspace que une brain, Lumina, OpenBlocks y OpenCue." },
       notebook: {
         title: "Carpetas de los agentes en brain",
         hint: "Cada agente, cada grupo y todos juntos tienen una carpeta en brain con su perfil, su memoria y lo que aprenden. Se actualiza sola mientras trabajan.",
@@ -973,7 +979,7 @@ export const es: Dict = {
     apps: {
       title: "Apps",
       hint: {
-        workstudio: "brain, Lumina y AI WorkStudio, encontradas en esta compu. Prendé las herramientas de una app y todos los agentes pueden usarlas; no se embebe ni se copia nada.",
+        workstudio: "brain, Lumina, OpenBlocks y AI WorkStudio, encontradas en esta compu. Prendé las herramientas de una app y todos los agentes pueden usarlas; no se embebe ni se copia nada.",
         servers: "Dales herramientas a los agentes con servidores MCP: programas locales o URLs remotas.",
         catalog: "Apps populares que tus agentes pueden usar una vez que iniciás sesión.",
       },
