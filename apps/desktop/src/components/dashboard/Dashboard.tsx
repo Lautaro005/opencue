@@ -5,7 +5,7 @@ import { useStore } from "../../lib/store";
 import type { DashboardData } from "../../lib/types";
 import { Logo } from "../Sidebar";
 import { frameBase } from "../panel/ArtifactPanel";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, Undo2 } from "lucide-react";
 import { Button } from "../ui";
 import { CustomizeDashboard } from "./CustomizeDashboard";
 
@@ -27,6 +27,14 @@ export function Dashboard() {
   const [srcDoc, setSrcDoc] = useState("");
   const [nonce, setNonce] = useState(0);
   const [customizing, setCustomizing] = useState(false);
+  // Earlier versions of the page: the last change can be undone from the header.
+  const [canUndo, setCanUndo] = useState(false);
+  const checkVersions = useCallback(() => void api.dashboardVersions().then((v) => setCanUndo(v.length > 0)).catch(() => {}), []);
+  useEffect(() => {
+    checkVersions();
+    window.addEventListener("opencue:dashboard-changed", checkVersions);
+    return () => window.removeEventListener("opencue:dashboard-changed", checkVersions);
+  }, [checkVersions]);
 
   useEffect(() => void frameBase().then(setBase), []);
 
@@ -105,6 +113,11 @@ export function Dashboard() {
         <h1 className="flex-1 text-[14px] font-semibold" data-tauri-drag-region>
           {t("dashboard.title")}
         </h1>
+        {canUndo && (
+          <Button size="sm" variant="ghost" onClick={() => void api.restoreDashboard().catch(() => {})}>
+            <Undo2 size={13} /> {t("dashboard.undo")}
+          </Button>
+        )}
         <Button size="sm" onClick={() => setCustomizing(true)}>
           <SlidersHorizontal size={13} /> {t("dashboard.customize.open")}
         </Button>

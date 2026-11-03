@@ -245,7 +245,8 @@ fn expand_command(text: &str, skill: impl Fn(&str) -> Option<crate::skills::Skil
              If that tool is not available, tell them to turn Skills on in your profile. Confirm the skill's name when it is saved.\n\nRequest: {request}"
         ),
         "dashboard" => format!(
-            "The user ran /dashboard. You are in charge of their dashboard (the home screen). Read the current page with `read_dashboard`, then rewrite it with `update_dashboard` \
+            "The user ran /dashboard. You are in charge of their dashboard (the home screen). Read the current page with `read_dashboard` (it also gives you the design kit: \
+             style profiles, components and a checklist; follow it), then rewrite it with `update_dashboard` \
              (the complete HTML page) the way they ask: layout, colors, which numbers and lists to show, anything. \
              When they want data OpenCue does not send by itself (their email, calendar, CRM, Notion, GitHub, brain notes, meetings, the web…), get it now with the tools \
              you have for those apps, save the summary with `update_dashboard_data`, and draw it from data.custom; if they want it kept fresh, offer an automation that \
@@ -1456,6 +1457,7 @@ impl Core {
             if caps.brain {
                 s.push_str(&self.brain_prompt(agent, group).await);
             }
+            s.push_str(&self.openblocks_prompt(agent).await);
             if !vmpal_chosen(agent).is_empty() {
                 let machines = vmpal_chosen(agent)
                     .iter()

@@ -701,6 +701,32 @@ impl Store {
         })
     }
 
+    /// Messages and tokens per day (UTC) since `since` (an RFC 3339 date), oldest first:
+    /// (day, your messages, replies, tokens).
+    pub async fn activity(&self, since: &str) -> anyhow::Result<Vec<(String, i64, i64, i64)>> {
+        let rows = sqlx::query(
+            "SELECT substr(created_at, 1, 10) AS d,
+                    SUM(CASE WHEN role = 'user' THEN 1 ELSE 0 END) AS u,
+                    SUM(CASE WHEN role = 'assistant' THEN 1 ELSE 0 END) AS a,
+                    SUM(input_tokens + output_tokens) AS t
+             FROM messages WHERE created_at >= ? GROUP BY d ORDER BY d",
+        )
+        .bind(since)
+        .fetch_all(&self.db)
+        .await?;
+        Ok(rows
+            .iter()
+            .map(|r| {
+                (
+                    r.get("d"),
+                    r.get::<Option<i64>, _>("u").unwrap_or(0),
+                    r.get::<Option<i64>, _>("a").unwrap_or(0),
+                    r.get::<Option<i64>, _>("t").unwrap_or(0),
+                )
+            })
+            .collect())
+    }
+
     pub async fn usage(&self) -> anyhow::Result<Vec<UsageRow>> {
         let rows = sqlx::query(
             "SELECT m.agent_id, a.name, COUNT(*) AS n, SUM(m.input_tokens) AS i, SUM(m.output_tokens) AS o

@@ -13,6 +13,8 @@ import { AttachmentList } from "./Attachments";
 import { QuestionCards } from "./AskCard";
 import { ArtifactProgress } from "./ArtifactProgress";
 import { chatMessages, PlanCard } from "./PlanCard";
+import { useFamilyInstalled } from "../../lib/family";
+import openblocksLogo from "../../assets/workstudio/openblocks.svg";
 
 const EMPTY: Message[] = [];
 
@@ -206,6 +208,7 @@ function AssistantText({ m }: { m: Message }) {
         <div className="ml-1 flex h-6 items-center opacity-0 transition-opacity group-hover/msg:opacity-100 focus-within:opacity-100">
           <ReplyButton m={m} text={text} />
           <CopyButton text={text} />
+          <SaveToOpenBlocks m={m} text={text} />
         </div>
       )}
     </div>
@@ -227,6 +230,32 @@ function ReplyButton({ m, text }: { m: Message; text: string }) {
       className="size-6"
     >
       <Reply size={13} />
+    </IconButton>
+  );
+}
+
+/** Keeps a reply as a page in OpenBlocks (`OpenCue/<agent>`), when OpenBlocks is installed. */
+function SaveToOpenBlocks({ m, text }: { m: Message; text: string }) {
+  const { t } = useTranslation();
+  const installed = useFamilyInstalled("openblocks");
+  const showToast = useStore((s) => s.showToast);
+  const [state, setState] = useState<"idle" | "saving" | "done">("idle");
+  if (!installed) return null;
+  const save = async () => {
+    setState("saving");
+    try {
+      await api.saveToOpenBlocks(text, m.agent_id);
+      setState("done");
+      showToast(t("chat.savedToOpenBlocks"));
+      window.setTimeout(() => setState("idle"), 2000);
+    } catch (e) {
+      setState("idle");
+      showToast(String(e));
+    }
+  };
+  return (
+    <IconButton label={t("chat.saveToOpenBlocks")} onClick={() => void save()} disabled={state === "saving"} className="size-6">
+      {state === "done" ? <Check size={13} className="text-success" /> : <img src={openblocksLogo} alt="" className={cx("size-3.5 rounded-[4px]", state === "saving" && "animate-pulse")} />}
     </IconButton>
   );
 }

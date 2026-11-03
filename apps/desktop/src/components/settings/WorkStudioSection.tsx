@@ -7,9 +7,10 @@ import type { BrainInfo, FamilyApp } from "../../lib/types";
 import { Badge, Button, Input, Toggle } from "../ui";
 import brainLogo from "../../assets/workstudio/brain.png";
 import luminaLogo from "../../assets/workstudio/lumina.svg";
+import openblocksLogo from "../../assets/workstudio/openblocks.svg";
 import workstudioLogo from "../../assets/workstudio/workstudio.svg";
 
-const LOGO: Record<string, string> = { brain: brainLogo, lumina: luminaLogo, workstudio: workstudioLogo };
+const LOGO: Record<string, string> = { brain: brainLogo, lumina: luminaLogo, openblocks: openblocksLogo, workstudio: workstudioLogo };
 
 /** An app of the family, by its own logo. */
 export function FamilyLogo({ id, size = 40 }: { id: string; size?: number }) {

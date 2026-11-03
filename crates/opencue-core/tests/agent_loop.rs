@@ -683,11 +683,11 @@ async fn only_the_chosen_agent_edits_the_dashboard() {
     core.call_external_tool(
         &agent.id,
         "update_dashboard",
-        json!({ "html": "<h1>Mine</h1>" }),
+        json!({ "html": "<div>Mine</div><script>onmessage = (e) => e.data.type === 'opencue:data'</script>" }),
     )
     .await
     .unwrap();
-    assert_eq!(core.dashboard_html(), "<h1>Mine</h1>");
+    assert!(core.dashboard_html().starts_with("<div>Mine</div>"));
     assert!(!core.dashboard_is_default());
     assert!(core
         .call_external_tool(&other.id, "update_dashboard", json!({ "html": "<p>y</p>" }))

@@ -413,6 +413,18 @@ pub fn reset_dashboard(state: State<'_, AppState>) -> R<()> {
     state.core.reset_dashboard().map_err(e)
 }
 
+/// Earlier versions of the dashboard page, newest first: (id, saved at).
+#[tauri::command]
+pub fn dashboard_versions(state: State<'_, AppState>) -> Vec<(String, String)> {
+    state.core.dashboard_versions()
+}
+
+/// Go back to an earlier version (the newest one without `id`).
+#[tauri::command]
+pub fn restore_dashboard(state: State<'_, AppState>, id: Option<String>) -> R<()> {
+    state.core.restore_dashboard(id.as_deref()).map_err(e)
+}
+
 /// Where sandboxed frames load artifacts and the dashboard from.
 #[tauri::command]
 pub fn view_base() -> String {
@@ -1328,6 +1340,24 @@ pub async fn family_set_mcp(
     enabled: bool,
 ) -> R<Vec<opencue_core::family::FamilyApp>> {
     state.core.family_set_mcp(&id, enabled).await.map_err(e)
+}
+
+/// Save a reply as an OpenBlocks page; returns what OpenBlocks said (the page's path).
+#[tauri::command]
+pub async fn save_to_openblocks(
+    state: State<'_, AppState>,
+    agent_id: Option<String>,
+    text: String,
+) -> R<String> {
+    let name = match agent_id {
+        Some(id) => state.core.store.get_agent(&id).await.ok().map(|a| a.name),
+        None => None,
+    };
+    state
+        .core
+        .save_to_openblocks(name.as_deref(), &text)
+        .await
+        .map_err(e)
 }
 
 #[tauri::command]
